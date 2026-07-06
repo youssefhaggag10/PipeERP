@@ -1,0 +1,1 @@
+"""PipeERP application package."""
