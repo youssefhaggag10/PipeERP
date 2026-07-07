@@ -15,8 +15,8 @@ class DashboardPage(QWidget):
         self.grid.setSpacing(14)
         layout = QVBoxLayout()
         layout.setContentsMargins(24, 24, 24, 24)
-        layout.addWidget(QLabel("Dashboard"))
-        layout.addWidget(QLabel("Inventory KPIs"))
+        layout.addWidget(QLabel("\u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629"))
+        layout.addWidget(QLabel("\u0645\u0624\u0634\u0631\u0627\u062a \u0627\u0644\u0645\u062e\u0632\u0648\u0646"))
         layout.addLayout(self.grid)
         layout.addStretch()
         self.setLayout(layout)
@@ -25,13 +25,13 @@ class DashboardPage(QWidget):
     def reload(self) -> None:
         summary = self.product_repository.count_by_type()
         cards = [
-            ("All Items", str(summary["total"])),
-            ("Items With Stock", str(self.inventory_repository.count_products_with_stock())),
-            ("Raw Stock", str(round(self.inventory_repository.total_quantity_by_type("raw_material"), 2))),
-            ("Finished Stock", str(round(self.inventory_repository.total_quantity_by_type("finished_good"), 2))),
-            ("Scrap Stock", str(round(self.inventory_repository.total_quantity_by_type("waste"), 2))),
-            ("Total Stock", str(round(self.inventory_repository.total_quantity(), 2))),
-            ("Low Stock", str(self.inventory_repository.count_low_stock())),
+            ("\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0623\u0635\u0646\u0627\u0641", str(summary["total"])),
+            ("\u0623\u0635\u0646\u0627\u0641 \u0644\u0647\u0627 \u0631\u0635\u064a\u062f", str(self.inventory_repository.count_products_with_stock())),
+            ("\u0631\u0635\u064a\u062f \u0627\u0644\u062e\u0627\u0645\u0627\u062a", str(round(self.inventory_repository.total_quantity_by_type("raw_material"), 2))),
+            ("\u0631\u0635\u064a\u062f \u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a", str(round(self.inventory_repository.total_quantity_by_type("finished_good"), 2))),
+            ("\u0631\u0635\u064a\u062f \u0627\u0644\u0647\u0627\u0644\u0643", str(round(self.inventory_repository.total_quantity_by_type("waste"), 2))),
+            ("\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0631\u0635\u064a\u062f", str(round(self.inventory_repository.total_quantity(), 2))),
+            ("\u0646\u0642\u0635 \u0627\u0644\u0645\u062e\u0632\u0648\u0646", str(self.inventory_repository.count_low_stock())),
         ]
         for index, card in enumerate(cards):
             self.grid.addWidget(self._card(card[0], card[1]), index // 2, index % 2)
