@@ -8,8 +8,15 @@ class WarehouseRepository:
 
     def ensure_defaults(self) -> None:
         with self.database.session() as connection:
-            for code, name in [("MAIN", "Main Warehouse"), ("RAW", "Raw Materials"), ("FG", "Finished Goods"), ("SCRAP", "Scrap")]:
+            defaults = [
+                ("MAIN", "المخزن الرئيسي"),
+                ("RAW", "مخزن الخامات"),
+                ("FG", "مخزن المنتج التام"),
+                ("SCRAP", "مخزن الهالك"),
+            ]
+            for code, name in defaults:
                 connection.execute("INSERT OR IGNORE INTO warehouses(code, name) VALUES (?, ?)", (code, name))
+                connection.execute("UPDATE warehouses SET name = ? WHERE code = ?", (name, code))
 
     def list_warehouses(self) -> list[dict]:
         rows = self.database.fetch_all(
