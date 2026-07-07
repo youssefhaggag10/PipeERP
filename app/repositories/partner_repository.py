@@ -31,3 +31,17 @@ class PartnerRepository:
     def delete_partner(self, partner_id: int) -> None:
         with self.database.session() as connection:
             connection.execute("UPDATE partners SET is_active = 0 WHERE id = ?", (partner_id,))
+
+    def list_partner_moves(self, partner_id: int) -> list[dict]:
+        rows = self.database.fetch_all(
+            """
+            SELECT m.move_date, p.code, p.name, m.quantity_in, m.quantity_out,
+                   m.unit_cost, m.reference_type, m.reference_id, COALESCE(m.notes, '') AS notes
+            FROM inventory_moves m
+            JOIN products p ON p.id = m.product_id
+            WHERE m.partner_id = ?
+            ORDER BY m.id DESC
+            """,
+            (partner_id,),
+        )
+        return [dict(row) for row in rows]
