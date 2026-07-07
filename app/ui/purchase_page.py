@@ -12,9 +12,9 @@ class PurchasePage(QWidget):
         self.purchase_repository = purchase_repository
         self.partner_repository = partner_repository
         self.product_repository = product_repository
-        self.orders: list[dict] = []
-        self.suppliers: list[dict] = []
-        self.products: list[dict] = []
+        self.orders = []
+        self.suppliers = []
+        self.products = []
         self.setLayoutDirection(Qt.RightToLeft)
 
         title = QLabel("المشتريات")
@@ -30,14 +30,14 @@ class PurchasePage(QWidget):
         form = QFormLayout()
         form.addRow("المورد", self.supplier_input)
         form.addRow("الصنف", self.product_input)
-        form.addRow("LOT / Batch", self.lot_input)
+        form.addRow("رقم الدفعة", self.lot_input)
         form.addRow("الكمية", self.qty_input)
         form.addRow("الوحدة", self.unit_input)
         form.addRow("سعر الوحدة", self.price_input)
 
-        create_button = QPushButton("حفظ أمر شراء Draft")
+        create_button = QPushButton("حفظ أمر شراء كمسودة")
         create_button.clicked.connect(self.create_order)
-        receive_button = QPushButton("استلام أمر الشراء المحدد")
+        receive_button = QPushButton("استلام أمر الشراء")
         receive_button.clicked.connect(self.receive_selected)
 
         actions = QHBoxLayout()
@@ -45,8 +45,8 @@ class PurchasePage(QWidget):
         actions.addWidget(receive_button)
         actions.addStretch()
 
-        self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["رقم الأمر", "المورد", "التاريخ", "الحالة", "الإجمالي"])
+        self.table = QTableWidget(0, 6)
+        self.table.setHorizontalHeaderLabels(["رقم الأمر", "المورد", "المخزن", "التاريخ", "الحالة", "الإجمالي"])
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
 
@@ -58,6 +58,9 @@ class PurchasePage(QWidget):
         layout.addWidget(self.table)
         self.setLayout(layout)
         self.reload()
+
+    def status_label(self, status: str) -> str:
+        return {"draft": "مسودة", "received": "تم الاستلام"}.get(status, status)
 
     def reload(self) -> None:
         self.suppliers = self.partner_repository.list_partners("supplier")
@@ -71,13 +74,20 @@ class PurchasePage(QWidget):
         self.orders = self.purchase_repository.list_orders()
         self.table.setRowCount(len(self.orders))
         for row_index, order in enumerate(self.orders):
-            values = [order["order_number"], order["supplier_name"], order["order_date"], order["status"], str(order["total"])]
+            values = [
+                order["order_number"],
+                order["supplier_name"],
+                order.get("warehouse_name", ""),
+                order["order_date"],
+                self.status_label(order["status"]),
+                str(order["total"]),
+            ]
             for col_index, value in enumerate(values):
                 self.table.setItem(row_index, col_index, QTableWidgetItem(str(value)))
 
     def create_order(self) -> None:
         if self.supplier_input.currentData() is None or self.product_input.currentData() is None:
-            QMessageBox.warning(self, "تنبيه", "لازم تضيف مورد وصنف خامة الأول")
+            QMessageBox.warning(self, "تنبيه", "أضف مورد وصنف أولا")
             return
         try:
             quantity = float(self.qty_input.text().strip())
@@ -89,7 +99,7 @@ class PurchasePage(QWidget):
             QMessageBox.warning(self, "تنبيه", "الكمية لازم تكون أكبر من صفر")
             return
         if not self.lot_input.text().strip():
-            QMessageBox.warning(self, "تنبيه", "رقم LOT مطلوب")
+            QMessageBox.warning(self, "تنبيه", "رقم الدفعة مطلوب")
             return
         self.purchase_repository.create_order(
             int(self.supplier_input.currentData()),
