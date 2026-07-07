@@ -32,3 +32,7 @@ class ProductRepository:
                 ),
             )
             return int(cursor.lastrowid)
+
+    def delete_product(self, product_id: int) -> None:
+        with self.database.session() as connection:
+            connection.execute("DELETE FROM products WHERE id = ?", (product_id,))
