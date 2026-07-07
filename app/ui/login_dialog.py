@@ -1,6 +1,7 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout
 
+from app.core.config import AppConfig
 from app.models.user import User
 from app.services.auth_service import AuthService
 
@@ -11,11 +12,11 @@ class LoginDialog(QDialog):
         self.auth_service = auth_service
         self.current_user: User | None = None
 
-        self.setWindowTitle("تسجيل الدخول - PipeERP")
+        self.setWindowTitle(f"تسجيل الدخول - {AppConfig.COMPANY_NAME}")
         self.setMinimumWidth(420)
         self.setLayoutDirection(Qt.RightToLeft)
 
-        title = QLabel("بايب ERP")
+        title = QLabel(AppConfig.COMPANY_NAME)
         title.setObjectName("titleLabel")
         title.setAlignment(Qt.AlignCenter)
 
