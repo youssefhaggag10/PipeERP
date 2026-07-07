@@ -9,18 +9,20 @@ class PurchaseRepository:
         rows = self.database.fetch_all(
             """
             SELECT po.id, po.order_number, po.order_date, po.status, p.name AS supplier_name,
+                   w.name AS warehouse_name,
                    COALESCE(SUM(pol.line_total), 0) AS total
             FROM purchase_orders po
             JOIN partners p ON p.id = po.supplier_id
+            JOIN warehouses w ON w.id = po.warehouse_id
             LEFT JOIN purchase_order_lines pol ON pol.purchase_order_id = po.id
-            GROUP BY po.id, po.order_number, po.order_date, po.status, p.name
+            GROUP BY po.id, po.order_number, po.order_date, po.status, p.name, w.name
             ORDER BY po.id DESC
             """
         )
         return [dict(row) for row in rows]
 
     def create_order(self, supplier_id: int, product_id: int, lot_number: str, quantity: float, unit: str, unit_price: float) -> int:
-        warehouse = self.database.fetch_one("SELECT id FROM warehouses ORDER BY id LIMIT 1")
+        warehouse = self.database.fetch_one("SELECT id FROM warehouses WHERE is_active = 1 ORDER BY id LIMIT 1")
         if warehouse is None:
             raise ValueError("لا يوجد مخزن افتراضي")
         with self.database.session() as connection:
