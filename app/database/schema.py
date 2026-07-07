@@ -105,14 +105,9 @@ def initialize_database(database: Database) -> None:
             connection.execute("ALTER TABLE inventory_moves ADD COLUMN partner_id INTEGER")
         except Exception:
             pass
-        connection.execute(
-            "INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)",
-            ("db_version", "0.2.0"),
-        )
-        connection.execute(
-            "INSERT OR IGNORE INTO warehouses(code, name) VALUES (?, ?)",
-            ("MAIN", "المخزن الرئيسي"),
-        )
+        connection.execute("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)", ("db_version", "0.2.1"))
+        connection.execute("INSERT OR IGNORE INTO warehouses(code, name) VALUES (?, ?)", ("MAIN", "المصنع"))
+        connection.execute("UPDATE warehouses SET name = ? WHERE code = ?", ("المصنع", "MAIN"))
         connection.execute(
             """
             INSERT OR IGNORE INTO users(username, password_hash, full_name, role)
