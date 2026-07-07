@@ -6,19 +6,19 @@ from app.models.user import User
 from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.partner_repository import PartnerRepository
 from app.repositories.product_repository import ProductRepository
+from app.repositories.purchase_repository import PurchaseRepository
 from app.ui.dashboard import DashboardPage
 from app.ui.inventory_page import InventoryPage
 from app.ui.partners_page import PartnersPage
 from app.ui.placeholder_page import PlaceholderPage
 from app.ui.products_page import ProductsPage
+from app.ui.purchase_page import PurchasePage
 from app.ui.transactions_list_page import TransactionsListPage
 
 
 class MainWindow(QMainWindow):
     def __init__(self, current_user: User, database: Database) -> None:
         super().__init__()
-        self.current_user = current_user
-        self.database = database
         self.setWindowTitle("3A PIPE - PipeERP")
         self.resize(1200, 760)
         self.setLayoutDirection(Qt.RightToLeft)
@@ -30,30 +30,26 @@ class MainWindow(QMainWindow):
         product_repository = ProductRepository(database)
         inventory_repository = InventoryRepository(database)
         partner_repository = PartnerRepository(database)
+        purchase_repository = PurchaseRepository(database)
 
         self.pages = QStackedWidget()
-        self.add_page("الرئيسية", DashboardPage(product_repository, inventory_repository))
-        self.add_page("الأصناف", ProductsPage(product_repository))
-        self.add_page("الموردين", PartnersPage("الموردين", "supplier", partner_repository))
-        self.add_page("العملاء", PartnersPage("العملاء", "customer", partner_repository))
-        self.add_page("المخازن", InventoryPage(inventory_repository))
-        self.add_page("المشتريات", TransactionsListPage("المشتريات", "أوامر الشراء", ["رقم الأمر", "المورد", "التاريخ", "الحالة"]))
-        self.add_page("التصنيع", TransactionsListPage("التصنيع", "أوامر التصنيع", ["رقم الأمر", "المنتج", "الكمية", "الحالة"]))
-        self.add_page("المبيعات", TransactionsListPage("المبيعات", "أوامر البيع", ["رقم الأمر", "العميل", "التاريخ", "الحالة"]))
-        self.add_page("التقارير", PlaceholderPage("التقارير", "تقارير الإنتاج والمخزون والتكلفة"))
-        self.add_page("الإعدادات", PlaceholderPage("الإعدادات", "المستخدمين والإعدادات العامة"))
+        self.add_page("Home", DashboardPage(product_repository, inventory_repository))
+        self.add_page("Items", ProductsPage(product_repository))
+        self.add_page("Suppliers", PartnersPage("Suppliers", "supplier", partner_repository))
+        self.add_page("Customers", PartnersPage("Customers", "customer", partner_repository))
+        self.add_page("Inventory", InventoryPage(inventory_repository))
+        self.add_page("Purchases", PurchasePage(purchase_repository, partner_repository, product_repository))
+        self.add_page("Manufacturing", TransactionsListPage("Manufacturing", "MO list", ["No", "Product", "Qty", "Status"]))
+        self.add_page("Sales", TransactionsListPage("Sales", "SO list", ["No", "Customer", "Date", "Status"]))
+        self.add_page("Reports", PlaceholderPage("Reports", "Reports"))
+        self.add_page("Settings", PlaceholderPage("Settings", "Settings"))
 
-        header = QLabel(f"3A PIPE - مرحبًا، {current_user.display_name}")
-        header.setObjectName("subtitleLabel")
-        header.setAlignment(Qt.AlignLeft)
-
+        header = QLabel(f"3A PIPE - {current_user.display_name}")
         content_layout = QVBoxLayout()
-        content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.addWidget(header)
         content_layout.addWidget(self.pages)
 
         layout = QHBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
         layout.addLayout(content_layout)
         layout.addWidget(self.navigation)
 
