@@ -4,14 +4,23 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPush
 from app.repositories.inventory_repository import InventoryRepository
 
 
+PRODUCT_TYPE_LABELS = {
+    "raw_material": "خامة",
+    "finished_good": "منتج نهائي",
+    "waste": "هالك",
+    "service": "خدمة",
+    "spare_part": "قطعة غيار",
+}
+
+
 class InventoryPage(QWidget):
     def __init__(self, repository: InventoryRepository) -> None:
         super().__init__()
         self.repository = repository
-        self.rows: list[dict] = []
+        self.rows = []
         self.setLayoutDirection(Qt.RightToLeft)
 
-        title = QLabel("المخازن")
+        title = QLabel("رصيد المخزون")
         title.setObjectName("titleLabel")
         subtitle = QLabel("الرصيد ناتج من حركات المخزون فقط. استخدم التسوية للرصيد الافتتاحي أو الجرد.")
         subtitle.setObjectName("subtitleLabel")
@@ -68,9 +77,9 @@ class InventoryPage(QWidget):
             values = [
                 item["code"],
                 item["name"],
-                item["product_type"],
+                PRODUCT_TYPE_LABELS.get(item["product_type"], item["product_type"]),
                 item["unit"],
                 str(item["quantity"]),
             ]
             for col_index, value in enumerate(values):
-                self.table.setItem(row_index, col_index, QTableWidgetItem(value))
+                self.table.setItem(row_index, col_index, QTableWidgetItem(str(value)))
