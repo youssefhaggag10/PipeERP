@@ -22,7 +22,7 @@ class InventoryRepository:
     def list_stock_card(self) -> list[dict]:
         rows = self.database.fetch_all(
             """
-            SELECT m.move_date, p.code, p.name, w.name AS warehouse_name,
+            SELECT m.move_date, p.code, p.name, p.product_type, w.name AS warehouse_name,
                    COALESCE(l.lot_number, '') AS lot_number,
                    m.quantity_in, m.quantity_out,
                    m.unit_cost, m.reference_type, m.reference_id,
@@ -72,7 +72,7 @@ class InventoryRepository:
             """
             SELECT COUNT(*) AS count
             FROM (
-                SELECT p.id, p.min_stock, COALESCE(SUM(m.quantity_in - m.quantity_out), 0) AS qty
+                SELECT p.id, p.min_stock, COALESCE(SUM(m.quantity_in - quantity_out), 0) AS qty
                 FROM products p
                 LEFT JOIN inventory_moves m ON m.product_id = p.id
                 WHERE p.is_active = 1 AND p.min_stock > 0
@@ -83,19 +83,25 @@ class InventoryRepository:
         )
         return int(row["count"] if row is not None else 0)
 
+    def get_default_warehouse_id(self) -> int:
+        warehouse_row = self.database.fetch_one("SELECT id FROM warehouses WHERE is_active = 1 ORDER BY id LIMIT 1")
+        if warehouse_row is None:
+            warehouse_row = self.database.fetch_one("SELECT id FROM warehouses ORDER BY id LIMIT 1")
+        if warehouse_row is None:
+            raise ValueError("لا يوجد مخزن افتراضي")
+        return int(warehouse_row["id"])
+
     def post_adjustment(self, product_id: int, quantity: float, notes: str = "") -> None:
         if quantity == 0:
             return
         quantity_in = quantity if quantity > 0 else 0
         quantity_out = abs(quantity) if quantity < 0 else 0
-        warehouse_row = self.database.fetch_one("SELECT id FROM warehouses ORDER BY id LIMIT 1")
-        if warehouse_row is None:
-            raise ValueError("No default warehouse")
+        warehouse_id = self.get_default_warehouse_id()
         with self.database.session() as connection:
             connection.execute(
                 """
                 INSERT INTO inventory_moves(product_id, warehouse_id, quantity_in, quantity_out, unit_cost, reference_type, notes)
                 VALUES (?, ?, ?, ?, 0, 'adjustment', ?)
                 """,
-                (product_id, warehouse_row["id"], quantity_in, quantity_out, notes),
+                (product_id, warehouse_id, quantity_in, quantity_out, notes),
             )
