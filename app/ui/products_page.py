@@ -11,13 +11,14 @@ PRODUCT_TYPES = {
     "خدمة": "service",
     "قطعة غيار": "spare_part",
 }
+PRODUCT_TYPE_LABELS = {value: key for key, value in PRODUCT_TYPES.items()}
 
 
 class ProductsPage(QWidget):
     def __init__(self, repository: ProductRepository) -> None:
         super().__init__()
         self.repository = repository
-        self.products: list[dict] = []
+        self.products = []
         self.setLayoutDirection(Qt.RightToLeft)
 
         title = QLabel("الأصناف")
@@ -86,11 +87,7 @@ class ProductsPage(QWidget):
             QMessageBox.warning(self, "تنبيه", "اختار صنف من الجدول أولًا")
             return
         product = self.products[row]
-        confirm = QMessageBox.question(
-            self,
-            "تأكيد الحذف",
-            f"هل تريد حذف الصنف: {product['name']}؟",
-        )
+        confirm = QMessageBox.question(self, "تأكيد الحذف", f"هل تريد حذف الصنف: {product['name']}؟")
         if confirm != QMessageBox.Yes:
             return
         self.repository.delete_product(int(product["id"]))
@@ -103,9 +100,9 @@ class ProductsPage(QWidget):
             values = [
                 product["code"],
                 product["name"],
-                product["product_type"],
+                PRODUCT_TYPE_LABELS.get(product["product_type"], product["product_type"]),
                 product["unit"],
                 str(product["min_stock"]),
             ]
             for col_index, value in enumerate(values):
-                self.table.setItem(row_index, col_index, QTableWidgetItem(value))
+                self.table.setItem(row_index, col_index, QTableWidgetItem(str(value)))
