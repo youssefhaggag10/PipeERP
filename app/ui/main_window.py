@@ -29,7 +29,7 @@ class MainWindow(QMainWindow):
         inventory_repository = InventoryRepository(database)
 
         self.pages = QStackedWidget()
-        self.add_page("الرئيسية", DashboardPage(product_repository))
+        self.add_page("الرئيسية", DashboardPage(product_repository, inventory_repository))
         self.add_page("الأصناف", ProductsPage(product_repository))
         self.add_page("المخازن", InventoryPage(inventory_repository))
         self.add_page(
