@@ -9,9 +9,9 @@ class StockCardPage(QWidget):
         super().__init__()
         self.repository = repository
         self.setLayoutDirection(Qt.RightToLeft)
-        title = QLabel("Stock Card")
+        title = QLabel("كارت الصنف")
         self.table = QTableWidget(0, 10)
-        self.table.setHorizontalHeaderLabels(["Date", "Code", "Item", "Warehouse", "Lot", "In", "Out", "Cost", "Ref", "Partner"])
+        self.table.setHorizontalHeaderLabels(["التاريخ", "الكود", "الصنف", "المخزن", "اللوط", "داخل", "خارج", "التكلفة", "المرجع", "الطرف"])
         layout = QVBoxLayout()
         layout.setContentsMargins(24, 24, 24, 24)
         layout.addWidget(title)
