@@ -1,38 +1,42 @@
-# Sprint 1 Acceptance Tests
+# اختبارات قبول Sprint 1
 
-## Master Data
-1. Create a supplier.
-2. Create a customer.
-3. Create a raw material item with min stock.
-4. Create a finished product item.
-5. Create or review warehouses.
+## البيانات الأساسية
+1. إضافة مورد.
+2. إضافة عميل.
+3. إضافة خامة وحد تنبيه.
+4. إضافة منتج نهائي.
+5. فتح إعداد المخزن والتأكد أن المخزن الحالي هو المصنع.
 
-## Inventory Adjustment
-1. Open Inventory.
-2. Select an item.
-3. Enter a positive quantity.
-4. Click the adjustment button.
-5. Confirm the Inventory balance changes.
-6. Open Dashboard and confirm stock KPIs changed.
-7. Open Stock Card and confirm an adjustment movement exists.
+## حركة تسوية مخزون
+1. فتح رصيد المخزون.
+2. اختيار صنف.
+3. إدخال كمية موجبة أو سالبة.
+4. تسجيل التسوية.
+5. التأكد أن رصيد الصنف تغير.
+6. فتح الرئيسية والتأكد أن مؤشرات المخزون اتحدثت.
+7. فتح كارت الصنف والتأكد أن حركة التسوية ظهرت.
 
-## Purchase Flow
-1. Open Purchases.
-2. Select supplier, raw item, lot, quantity, unit and price.
-3. Save draft purchase order.
-4. Select it and click Receive.
-5. Confirm Inventory increased.
-6. Confirm Dashboard changed.
-7. Confirm Stock Card contains a purchase movement with supplier and lot.
+## دورة الشراء
+1. فتح المشتريات.
+2. اختيار المورد والصنف ورقم الدفعة والكمية والوحدة وسعر الوحدة.
+3. حفظ أمر شراء كمسودة.
+4. استلام أمر الشراء.
+5. التأكد أن الحالة ظهرت بالعربي: تم الاستلام.
+6. التأكد أن المخزن ظاهر في أمر الشراء.
+7. التأكد أن الرصيد زاد.
+8. التأكد أن كارت الصنف ظهر فيه شراء والطرف هو المورد.
+9. فتح المورد والتأكد أن الحركة ظهرت في حركاته.
 
-## Sales Flow
-1. Open Sales.
-2. Select customer and finished product.
-3. Enter quantity and price.
-4. Save draft sales order.
-5. Select it and click Deliver.
-6. Confirm Inventory decreased.
-7. Confirm Stock Card contains a sale movement with customer.
+## دورة البيع
+1. فتح المبيعات.
+2. اختيار العميل والمنتج النهائي.
+3. إدخال الكمية والسعر.
+4. حفظ أمر بيع كمسودة.
+5. تسليم أمر البيع.
+6. لو الرصيد غير كافي، يجب أن يمنع البرنامج التسليم ويظهر رسالة تنبيه.
+7. لو الرصيد كافي، يجب أن ينقص المخزون.
+8. التأكد أن كارت الصنف ظهر فيه بيع والطرف هو العميل.
+9. فتح العميل والتأكد أن الحركة ظهرت في حركاته.
 
-## Done Criteria
-Sprint 1 is accepted when product master data, partners, warehouses, purchases, sales, inventory, dashboard and stock card work together on the same SQLite database without re-entering data manually.
+## شروط إغلاق Sprint 1
+Sprint 1 يعتبر مقفول عندما تعمل الأصناف، الموردين، العملاء، المصنع، التسويات، المشتريات، المبيعات، كارت الصنف، وربط الحركات بالأطراف على نفس قاعدة البيانات بدون إدخال يدوي مكرر.
