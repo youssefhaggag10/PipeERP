@@ -3,8 +3,8 @@ from pathlib import Path
 
 class AppConfig:
     APP_NAME = "PipeERP"
-    APP_DISPLAY_NAME_AR = "بايب ERP"
-    COMPANY_NAME = "PipeERP"
+    APP_DISPLAY_NAME_AR = "3A PIPE"
+    COMPANY_NAME = "3A PIPE"
     DATA_DIR_NAME = "data"
     DATABASE_FILE_NAME = "pipeerp.sqlite3"
 
