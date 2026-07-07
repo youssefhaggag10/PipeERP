@@ -15,24 +15,24 @@ class SalesPage(QWidget):
         self.orders = []
         self.setLayoutDirection(Qt.RightToLeft)
 
-        title = QLabel("Sales")
+        title = QLabel("المبيعات")
         title.setObjectName("titleLabel")
         self.customer_input = QComboBox()
         self.product_input = QComboBox()
         self.qty_input = QLineEdit()
-        self.unit_input = QLineEdit("PCS")
+        self.unit_input = QLineEdit("قطعة")
         self.price_input = QLineEdit("0")
 
         form = QFormLayout()
-        form.addRow("Customer", self.customer_input)
-        form.addRow("Product", self.product_input)
-        form.addRow("Quantity", self.qty_input)
-        form.addRow("Unit", self.unit_input)
-        form.addRow("Unit Price", self.price_input)
+        form.addRow("العميل", self.customer_input)
+        form.addRow("المنتج", self.product_input)
+        form.addRow("الكمية", self.qty_input)
+        form.addRow("الوحدة", self.unit_input)
+        form.addRow("سعر الوحدة", self.price_input)
 
-        create_button = QPushButton("Save Draft")
+        create_button = QPushButton("حفظ كمسودة")
         create_button.clicked.connect(self.create_order)
-        deliver_button = QPushButton("Deliver Selected")
+        deliver_button = QPushButton("تسليم المحدد")
         deliver_button.clicked.connect(self.deliver_selected)
 
         actions = QHBoxLayout()
@@ -41,7 +41,7 @@ class SalesPage(QWidget):
         actions.addStretch()
 
         self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["Order", "Customer", "Date", "Status", "Total"])
+        self.table.setHorizontalHeaderLabels(["رقم الأمر", "العميل", "التاريخ", "الحالة", "الإجمالي"])
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
 
@@ -72,18 +72,18 @@ class SalesPage(QWidget):
 
     def create_order(self) -> None:
         if self.customer_input.currentData() is None or self.product_input.currentData() is None:
-            QMessageBox.warning(self, "Warning", "Add customer and finished product first")
+            QMessageBox.warning(self, "تنبيه", "أضف عميل ومنتج نهائي الأول")
             return
         try:
             quantity = float(self.qty_input.text().strip())
             unit_price = float(self.price_input.text().strip() or 0)
         except ValueError:
-            QMessageBox.warning(self, "Warning", "Quantity and price must be numbers")
+            QMessageBox.warning(self, "تنبيه", "الكمية والسعر لازم يكونوا أرقام")
             return
         if quantity <= 0:
-            QMessageBox.warning(self, "Warning", "Quantity must be positive")
+            QMessageBox.warning(self, "تنبيه", "الكمية لازم تكون أكبر من صفر")
             return
-        self.sales_repository.create_order(int(self.customer_input.currentData()), int(self.product_input.currentData()), quantity, self.unit_input.text().strip() or "PCS", unit_price)
+        self.sales_repository.create_order(int(self.customer_input.currentData()), int(self.product_input.currentData()), quantity, self.unit_input.text().strip() or "قطعة", unit_price)
         self.qty_input.clear()
         self.price_input.setText("0")
         self.reload()
@@ -91,8 +91,8 @@ class SalesPage(QWidget):
     def deliver_selected(self) -> None:
         row = self.table.currentRow()
         if row < 0 or row >= len(self.orders):
-            QMessageBox.warning(self, "Warning", "Select order")
+            QMessageBox.warning(self, "تنبيه", "اختار أمر بيع")
             return
         self.sales_repository.deliver_order(int(self.orders[row]["id"]))
         self.reload()
-        QMessageBox.information(self, "Done", "Delivery posted to inventory")
+        QMessageBox.information(self, "تم", "تم التسليم وتحديث المخزون")
