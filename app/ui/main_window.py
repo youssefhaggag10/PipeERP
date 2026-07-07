@@ -5,7 +5,9 @@ from app.database.connection import Database
 from app.models.user import User
 from app.repositories.product_repository import ProductRepository
 from app.ui.dashboard import DashboardPage
+from app.ui.inventory_page import InventoryPage
 from app.ui.placeholder_page import PlaceholderPage
+from app.ui.product_picker_page import ProductPickerPage
 from app.ui.products_page import ProductsPage
 
 
@@ -14,7 +16,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.current_user = current_user
         self.database = database
-        self.setWindowTitle("PipeERP")
+        self.setWindowTitle("3A PIPE - PipeERP")
         self.resize(1200, 760)
         self.setLayoutDirection(Qt.RightToLeft)
 
@@ -24,16 +26,16 @@ class MainWindow(QMainWindow):
 
         product_repository = ProductRepository(database)
         self.pages = QStackedWidget()
-        self.add_page("الرئيسية", DashboardPage())
+        self.add_page("الرئيسية", DashboardPage(product_repository))
         self.add_page("الأصناف", ProductsPage(product_repository))
-        self.add_page("المخازن", PlaceholderPage("المخازن", "حركات وأرصدة المخزون"))
-        self.add_page("المشتريات", PlaceholderPage("المشتريات", "الموردين واللوتات وتكلفة الشراء"))
-        self.add_page("التصنيع", PlaceholderPage("التصنيع", "أوامر التصنيع بالوزن والهالك"))
-        self.add_page("المبيعات", PlaceholderPage("المبيعات", "فواتير العملاء والتسليم"))
+        self.add_page("المخازن", InventoryPage(product_repository))
+        self.add_page("المشتريات", ProductPickerPage("المشتريات", "اختيار الخامات عند تسجيل الشراء", product_repository, {"raw_material", "waste"}))
+        self.add_page("التصنيع", ProductPickerPage("التصنيع", "الخامات والمنتجات الجاهزة للتصنيع", product_repository, None))
+        self.add_page("المبيعات", ProductPickerPage("المبيعات", "المنتجات النهائية المتاحة للبيع", product_repository, {"finished_good"}))
         self.add_page("التقارير", PlaceholderPage("التقارير", "تقارير الإنتاج والمخزون والتكلفة"))
         self.add_page("الإعدادات", PlaceholderPage("الإعدادات", "المستخدمين والإعدادات العامة"))
 
-        header = QLabel(f"مرحبًا، {current_user.display_name}")
+        header = QLabel(f"3A PIPE - مرحبًا، {current_user.display_name}")
         header.setObjectName("subtitleLabel")
         header.setAlignment(Qt.AlignLeft)
 
@@ -58,4 +60,7 @@ class MainWindow(QMainWindow):
 
     def pages_changed(self, index: int) -> None:
         if index >= 0:
+            page = self.pages.widget(index)
+            if hasattr(page, "reload"):
+                page.reload()
             self.pages.setCurrentIndex(index)
