@@ -7,13 +7,18 @@ from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.partner_repository import PartnerRepository
 from app.repositories.product_repository import ProductRepository
 from app.repositories.purchase_repository import PurchaseRepository
+from app.repositories.sales_repository import SalesRepository
+from app.repositories.warehouse_repository import WarehouseRepository
 from app.ui.dashboard import DashboardPage
 from app.ui.inventory_page import InventoryPage
 from app.ui.partners_page import PartnersPage
 from app.ui.placeholder_page import PlaceholderPage
 from app.ui.products_page import ProductsPage
 from app.ui.purchase_page import PurchasePage
+from app.ui.sales_page import SalesPage
+from app.ui.stock_card_page import StockCardPage
 from app.ui.transactions_list_page import TransactionsListPage
+from app.ui.warehouse_page import WarehousePage
 
 
 class MainWindow(QMainWindow):
@@ -31,16 +36,20 @@ class MainWindow(QMainWindow):
         inventory_repository = InventoryRepository(database)
         partner_repository = PartnerRepository(database)
         purchase_repository = PurchaseRepository(database)
+        sales_repository = SalesRepository(database)
+        warehouse_repository = WarehouseRepository(database)
 
         self.pages = QStackedWidget()
         self.add_page("Home", DashboardPage(product_repository, inventory_repository))
         self.add_page("Items", ProductsPage(product_repository))
         self.add_page("Suppliers", PartnersPage("Suppliers", "supplier", partner_repository))
         self.add_page("Customers", PartnersPage("Customers", "customer", partner_repository))
+        self.add_page("Warehouses", WarehousePage(warehouse_repository))
         self.add_page("Inventory", InventoryPage(inventory_repository))
         self.add_page("Purchases", PurchasePage(purchase_repository, partner_repository, product_repository))
+        self.add_page("Sales", SalesPage(sales_repository, partner_repository, product_repository))
+        self.add_page("Stock Card", StockCardPage(inventory_repository))
         self.add_page("Manufacturing", TransactionsListPage("Manufacturing", "MO list", ["No", "Product", "Qty", "Status"]))
-        self.add_page("Sales", TransactionsListPage("Sales", "SO list", ["No", "Customer", "Date", "Status"]))
         self.add_page("Reports", PlaceholderPage("Reports", "Reports"))
         self.add_page("Settings", PlaceholderPage("Settings", "Settings"))
 
