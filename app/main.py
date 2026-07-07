@@ -25,7 +25,9 @@ def main() -> int:
     login_dialog = LoginDialog(auth_service)
     if login_dialog.exec() != LoginDialog.Accepted:
         return 0
+    if login_dialog.current_user is None:
+        return 0
 
-    window = MainWindow(current_user=login_dialog.current_user)
+    window = MainWindow(login_dialog.current_user, database)
     window.show()
     return app.exec()
