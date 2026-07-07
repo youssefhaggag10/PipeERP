@@ -1,18 +1,18 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
-from app.repositories.product_repository import ProductRepository
+from app.repositories.inventory_repository import InventoryRepository
 
 
 class InventoryPage(QWidget):
-    def __init__(self, repository: ProductRepository) -> None:
+    def __init__(self, repository: InventoryRepository) -> None:
         super().__init__()
         self.repository = repository
         self.setLayoutDirection(Qt.RightToLeft)
 
         title = QLabel("المخازن")
         title.setObjectName("titleLabel")
-        subtitle = QLabel("كل الأصناف المسجلة تظهر هنا حتى قبل وجود رصيد")
+        subtitle = QLabel("الرصيد هنا ناتج من حركات المخزون فقط: شراء، تصنيع، بيع، تسوية")
         subtitle.setObjectName("subtitleLabel")
 
         self.table = QTableWidget(0, 5)
@@ -27,15 +27,15 @@ class InventoryPage(QWidget):
         self.reload()
 
     def reload(self) -> None:
-        products = self.repository.list_products()
-        self.table.setRowCount(len(products))
-        for row_index, product in enumerate(products):
+        rows = self.repository.list_stock_on_hand()
+        self.table.setRowCount(len(rows))
+        for row_index, item in enumerate(rows):
             values = [
-                product["code"],
-                product["name"],
-                product["product_type"],
-                product["unit"],
-                "0",
+                item["code"],
+                item["name"],
+                item["product_type"],
+                item["unit"],
+                str(item["quantity"]),
             ]
             for col_index, value in enumerate(values):
                 self.table.setItem(row_index, col_index, QTableWidgetItem(value))
