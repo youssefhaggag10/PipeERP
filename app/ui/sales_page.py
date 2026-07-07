@@ -30,9 +30,9 @@ class SalesPage(QWidget):
         form.addRow("الوحدة", self.unit_input)
         form.addRow("سعر الوحدة", self.price_input)
 
-        create_button = QPushButton("حفظ كمسودة")
+        create_button = QPushButton("حفظ أمر بيع كمسودة")
         create_button.clicked.connect(self.create_order)
-        deliver_button = QPushButton("تسليم المحدد")
+        deliver_button = QPushButton("تسليم أمر البيع")
         deliver_button.clicked.connect(self.deliver_selected)
 
         actions = QHBoxLayout()
@@ -40,8 +40,8 @@ class SalesPage(QWidget):
         actions.addWidget(deliver_button)
         actions.addStretch()
 
-        self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["رقم الأمر", "العميل", "التاريخ", "الحالة", "الإجمالي"])
+        self.table = QTableWidget(0, 6)
+        self.table.setHorizontalHeaderLabels(["رقم الأمر", "العميل", "المخزن", "التاريخ", "الحالة", "الإجمالي"])
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
 
@@ -53,6 +53,9 @@ class SalesPage(QWidget):
         layout.addWidget(self.table)
         self.setLayout(layout)
         self.reload()
+
+    def status_label(self, status: str) -> str:
+        return {"draft": "مسودة", "delivered": "تم التسليم"}.get(status, status)
 
     def reload(self) -> None:
         customers = self.partner_repository.list_partners("customer")
@@ -66,7 +69,7 @@ class SalesPage(QWidget):
         self.orders = self.sales_repository.list_orders()
         self.table.setRowCount(len(self.orders))
         for row_index, order in enumerate(self.orders):
-            values = [order["order_number"], order["customer_name"], order["order_date"], order["status"], order["total"]]
+            values = [order["order_number"], order["customer_name"], order.get("warehouse_name", ""), order["order_date"], self.status_label(order["status"]), order["total"]]
             for col_index, value in enumerate(values):
                 self.table.setItem(row_index, col_index, QTableWidgetItem(str(value)))
 
@@ -93,6 +96,10 @@ class SalesPage(QWidget):
         if row < 0 or row >= len(self.orders):
             QMessageBox.warning(self, "تنبيه", "اختار أمر بيع")
             return
-        self.sales_repository.deliver_order(int(self.orders[row]["id"]))
+        try:
+            self.sales_repository.deliver_order(int(self.orders[row]["id"]))
+        except ValueError as error:
+            QMessageBox.warning(self, "تنبيه", str(error))
+            return
         self.reload()
         QMessageBox.information(self, "تم", "تم التسليم وتحديث المخزون")
