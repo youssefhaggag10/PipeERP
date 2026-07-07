@@ -36,3 +36,24 @@ class ProductRepository:
     def delete_product(self, product_id: int) -> None:
         with self.database.session() as connection:
             connection.execute("DELETE FROM products WHERE id = ?", (product_id,))
+
+    def count_by_type(self) -> dict:
+        rows = self.database.fetch_all(
+            """
+            SELECT product_type, COUNT(*) AS count
+            FROM products
+            WHERE is_active = 1
+            GROUP BY product_type
+            """
+        )
+        result = {
+            "raw_material": 0,
+            "finished_good": 0,
+            "waste": 0,
+            "service": 0,
+            "spare_part": 0,
+        }
+        for row in rows:
+            result[row["product_type"]] = row["count"]
+        result["total"] = sum(result.values())
+        return result
