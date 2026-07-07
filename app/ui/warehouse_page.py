@@ -29,7 +29,8 @@ class WarehousePage(QWidget):
 
     def reload(self) -> None:
         self.repository.ensure_defaults()
-        self.rows = self.repository.list_warehouses()
+        warehouse_rows = self.repository.list_warehouses()
+        self.rows = [row for row in warehouse_rows if str(row.get("code", "")) == "MAIN"]
         self.table.setRowCount(len(self.rows))
         for row_index, item in enumerate(self.rows):
             self.table.setItem(row_index, 0, QTableWidgetItem(str(item["code"])))
