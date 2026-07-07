@@ -4,9 +4,11 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QListWidget, QMainWindow, QSt
 from app.database.connection import Database
 from app.models.user import User
 from app.repositories.inventory_repository import InventoryRepository
+from app.repositories.partner_repository import PartnerRepository
 from app.repositories.product_repository import ProductRepository
 from app.ui.dashboard import DashboardPage
 from app.ui.inventory_page import InventoryPage
+from app.ui.partners_page import PartnersPage
 from app.ui.placeholder_page import PlaceholderPage
 from app.ui.products_page import ProductsPage
 from app.ui.transactions_list_page import TransactionsListPage
@@ -27,23 +29,17 @@ class MainWindow(QMainWindow):
 
         product_repository = ProductRepository(database)
         inventory_repository = InventoryRepository(database)
+        partner_repository = PartnerRepository(database)
 
         self.pages = QStackedWidget()
         self.add_page("الرئيسية", DashboardPage(product_repository, inventory_repository))
         self.add_page("الأصناف", ProductsPage(product_repository))
+        self.add_page("الموردين", PartnersPage("الموردين", "supplier", partner_repository))
+        self.add_page("العملاء", PartnersPage("العملاء", "customer", partner_repository))
         self.add_page("المخازن", InventoryPage(inventory_repository))
-        self.add_page(
-            "المشتريات",
-            TransactionsListPage("المشتريات", "أوامر الشراء تظهر هنا بعد إنشائها", ["رقم الأمر", "المورد", "التاريخ", "الحالة"]),
-        )
-        self.add_page(
-            "التصنيع",
-            TransactionsListPage("التصنيع", "أوامر التصنيع تظهر هنا بعد إنشائها", ["رقم الأمر", "المنتج", "الكمية", "الحالة"]),
-        )
-        self.add_page(
-            "المبيعات",
-            TransactionsListPage("المبيعات", "أوامر البيع تظهر هنا بعد إنشائها", ["رقم الأمر", "العميل", "التاريخ", "الحالة"]),
-        )
+        self.add_page("المشتريات", TransactionsListPage("المشتريات", "أوامر الشراء", ["رقم الأمر", "المورد", "التاريخ", "الحالة"]))
+        self.add_page("التصنيع", TransactionsListPage("التصنيع", "أوامر التصنيع", ["رقم الأمر", "المنتج", "الكمية", "الحالة"]))
+        self.add_page("المبيعات", TransactionsListPage("المبيعات", "أوامر البيع", ["رقم الأمر", "العميل", "التاريخ", "الحالة"]))
         self.add_page("التقارير", PlaceholderPage("التقارير", "تقارير الإنتاج والمخزون والتكلفة"))
         self.add_page("الإعدادات", PlaceholderPage("الإعدادات", "المستخدمين والإعدادات العامة"))
 
