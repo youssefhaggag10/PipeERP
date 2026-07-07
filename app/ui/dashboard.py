@@ -15,8 +15,8 @@ class DashboardPage(QWidget):
         self.grid.setSpacing(14)
         layout = QVBoxLayout()
         layout.setContentsMargins(24, 24, 24, 24)
-        layout.addWidget(QLabel("الرئيسية"))
-        layout.addWidget(QLabel("مؤشرات المخزون"))
+        layout.addWidget(QLabel("Dashboard"))
+        layout.addWidget(QLabel("Inventory KPIs"))
         layout.addLayout(self.grid)
         layout.addStretch()
         self.setLayout(layout)
@@ -25,12 +25,13 @@ class DashboardPage(QWidget):
     def reload(self) -> None:
         summary = self.product_repository.count_by_type()
         cards = [
-            ("إجمالي الأصناف", str(summary["total"])),
-            ("أصناف لها رصيد", str(self.inventory_repository.count_products_with_stock())),
-            ("رصيد الخامات", str(round(self.inventory_repository.total_quantity_by_type("raw_material"), 2))),
-            ("رصيد المنتجات", str(round(self.inventory_repository.total_quantity_by_type("finished_good"), 2))),
-            ("رصيد الهالك", str(round(self.inventory_repository.total_quantity_by_type("waste"), 2))),
-            ("إجمالي الرصيد", str(round(self.inventory_repository.total_quantity(), 2))),
+            ("All Items", str(summary["total"])),
+            ("Items With Stock", str(self.inventory_repository.count_products_with_stock())),
+            ("Raw Stock", str(round(self.inventory_repository.total_quantity_by_type("raw_material"), 2))),
+            ("Finished Stock", str(round(self.inventory_repository.total_quantity_by_type("finished_good"), 2))),
+            ("Scrap Stock", str(round(self.inventory_repository.total_quantity_by_type("waste"), 2))),
+            ("Total Stock", str(round(self.inventory_repository.total_quantity(), 2))),
+            ("Low Stock", str(self.inventory_repository.count_low_stock())),
         ]
         for index, card in enumerate(cards):
             self.grid.addWidget(self._card(card[0], card[1]), index // 2, index % 2)
