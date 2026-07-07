@@ -1,5 +1,5 @@
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QComboBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
 from app.repositories.product_repository import ProductRepository
 
@@ -17,6 +17,7 @@ class ProductsPage(QWidget):
     def __init__(self, repository: ProductRepository) -> None:
         super().__init__()
         self.repository = repository
+        self.products: list[dict] = []
         self.setLayoutDirection(Qt.RightToLeft)
 
         title = QLabel("الأصناف")
@@ -38,12 +39,18 @@ class ProductsPage(QWidget):
 
         save_button = QPushButton("حفظ الصنف")
         save_button.clicked.connect(self.save_product)
+        delete_button = QPushButton("حذف الصنف المحدد")
+        delete_button.setObjectName("dangerButton")
+        delete_button.clicked.connect(self.delete_selected_product)
 
         self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels(["الكود", "الاسم", "النوع", "الوحدة", "حد التنبيه"])
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setSelectionMode(QTableWidget.SingleSelection)
 
         actions = QHBoxLayout()
         actions.addWidget(save_button)
+        actions.addWidget(delete_button)
         actions.addStretch()
 
         layout = QVBoxLayout()
@@ -65,6 +72,7 @@ class ProductsPage(QWidget):
             "track_lots": True,
         }
         if not data["code"] or not data["name"]:
+            QMessageBox.warning(self, "تنبيه", "الكود والاسم مطلوبان")
             return
         self.repository.create_product(data)
         self.code_input.clear()
@@ -72,10 +80,26 @@ class ProductsPage(QWidget):
         self.min_stock_input.setText("0")
         self.reload()
 
+    def delete_selected_product(self) -> None:
+        row = self.table.currentRow()
+        if row < 0 or row >= len(self.products):
+            QMessageBox.warning(self, "تنبيه", "اختار صنف من الجدول أولًا")
+            return
+        product = self.products[row]
+        confirm = QMessageBox.question(
+            self,
+            "تأكيد الحذف",
+            f"هل تريد حذف الصنف: {product['name']}؟",
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        self.repository.delete_product(int(product["id"]))
+        self.reload()
+
     def reload(self) -> None:
-        products = self.repository.list_products()
-        self.table.setRowCount(len(products))
-        for row_index, product in enumerate(products):
+        self.products = self.repository.list_products()
+        self.table.setRowCount(len(self.products))
+        for row_index, product in enumerate(self.products):
             values = [
                 product["code"],
                 product["name"],
