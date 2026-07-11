@@ -18,7 +18,9 @@ from PySide6.QtWidgets import (
 )
 
 from app.repositories.accounting_repository import AccountingRepository
+from app.repositories.invoice_repository import InvoiceRepository
 from app.repositories.partner_repository import PartnerRepository
+from app.ui.invoices_tab import InvoicesTab
 
 
 class AccountsPage(QWidget):
@@ -26,15 +28,17 @@ class AccountsPage(QWidget):
         self,
         accounting_repository: AccountingRepository,
         partner_repository: PartnerRepository,
+        invoice_repository: InvoiceRepository,
     ) -> None:
         super().__init__()
         self.accounting_repository = accounting_repository
         self.partner_repository = partner_repository
+        self.invoice_repository = invoice_repository
         self.setLayoutDirection(Qt.RightToLeft)
 
         title = QLabel("الحسابات")
         title.setObjectName("titleLabel")
-        subtitle = QLabel("متابعة أرصدة العملاء والموردين، التحصيلات، السداد، والمديونيات")
+        subtitle = QLabel("متابعة الأرصدة والفواتير والتحصيلات والسداد والمديونيات")
         subtitle.setObjectName("subtitleLabel")
 
         self.sales_card = self._metric_card("إجمالي المبيعات")
@@ -54,19 +58,20 @@ class AccountsPage(QWidget):
 
         self.customer_table = self._balance_table("العميل")
         self.supplier_table = self._balance_table("المورد")
-        balances = QTabWidget()
-        balances.addTab(self.customer_table, "أرصدة العملاء")
-        balances.addTab(self.supplier_table, "أرصدة الموردين")
 
         overview = QWidget()
         overview_layout = QVBoxLayout(overview)
         overview_layout.addLayout(cards)
-        overview_layout.addWidget(balances)
 
-        transactions = self._build_transactions_tab()
         tabs = QTabWidget()
-        tabs.addTab(overview, "الملخص والأرصدة")
-        tabs.addTab(transactions, "التحصيل والسداد")
+        tabs.addTab(overview, "الملخص")
+        tabs.addTab(self.customer_table, "أرصدة العملاء")
+        tabs.addTab(self.supplier_table, "أرصدة الموردين")
+        self.sales_invoices_tab = InvoicesTab(invoice_repository, "sales")
+        self.purchase_invoices_tab = InvoicesTab(invoice_repository, "purchase")
+        tabs.addTab(self.sales_invoices_tab, "فواتير المبيعات")
+        tabs.addTab(self.purchase_invoices_tab, "فواتير المشتريات")
+        tabs.addTab(self._build_transactions_tab(), "التحصيل والسداد")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
@@ -153,6 +158,8 @@ class AccountsPage(QWidget):
         self._fill_balances(self.supplier_table, self.accounting_repository.list_partner_balances("supplier"))
         self._reload_payment_partners()
         self._fill_transactions()
+        self.sales_invoices_tab.reload()
+        self.purchase_invoices_tab.reload()
 
     def _fill_balances(self, table: QTableWidget, rows: list[dict]) -> None:
         table.setRowCount(len(rows))
