@@ -10,4 +10,20 @@ def initialize_database(database: Database) -> None:
         run_migrations(connection)
         connection.execute(
             "INSERT OR IGNORE INTO warehouses(code, name) VALUES (?, ?)",
-            ("MAIN", "المصنع"
+            ("MAIN", "المصنع"),
+        )
+        connection.execute(
+            "UPDATE warehouses SET name = ? WHERE code = ?",
+            ("المصنع", "MAIN"),
+        )
+
+        user_count = int(connection.execute("SELECT COUNT(*) FROM users").fetchone()[0])
+        initial_password = os.environ.get("PIPEERP_ADMIN_PASSWORD", "").strip()
+        if user_count == 0 and initial_password:
+            connection.execute(
+                """
+                INSERT INTO users(username, password_hash, full_name, role)
+                VALUES (?, ?, ?, ?)
+                """,
+                ("admin", hash_password(initial_password), "مدير النظام", "admin"),
+            )
