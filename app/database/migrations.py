@@ -1,8 +1,8 @@
 from collections.abc import Callable
 from sqlite3 import Connection
 
-DATABASE_VERSION = "0.4.0"
-LATEST_SCHEMA_VERSION = 4
+DATABASE_VERSION = "0.5.0"
+LATEST_SCHEMA_VERSION = 5
 
 
 INITIAL_SCHEMA_SQL = """
@@ -162,6 +162,34 @@ ON inventory_moves(product_id, warehouse_id, move_date, id);
 """
 
 
+ACCOUNTING_SQL = """
+CREATE TABLE IF NOT EXISTS payment_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    transaction_number TEXT NOT NULL UNIQUE,
+    transaction_date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    transaction_type TEXT NOT NULL CHECK(
+        transaction_type IN ('customer_receipt', 'supplier_payment')
+    ),
+    partner_id INTEGER NOT NULL REFERENCES partners(id),
+    amount REAL NOT NULL CHECK(amount > 0),
+    payment_method TEXT NOT NULL DEFAULT 'cash',
+    reference_type TEXT CHECK(reference_type IN ('sale', 'purchase') OR reference_type IS NULL),
+    reference_id INTEGER,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_payments_partner
+ON payment_transactions(partner_id, transaction_date, id);
+
+CREATE INDEX IF NOT EXISTS idx_payments_reference
+ON payment_transactions(reference_type, reference_id);
+
+CREATE INDEX IF NOT EXISTS idx_payments_type
+ON payment_transactions(transaction_type, transaction_date);
+"""
+
+
 def _column_exists(connection: Connection, table_name: str, column_name: str) -> bool:
     rows = connection.execute(f"PRAGMA table_info({table_name})").fetchall()
     return any(row[1] == column_name for row in rows)
@@ -247,11 +275,31 @@ def _migration_004_fifo_cost_allocations(connection: Connection) -> None:
             )
 
 
+def _migration_005_accounting_and_single_warehouse(connection: Connection) -> None:
+    connection.executescript(ACCOUNTING_SQL)
+    connection.execute(
+        "INSERT OR IGNORE INTO warehouses(code, name, is_active) VALUES ('MAIN', 'المصنع', 1)"
+    )
+    main_row = connection.execute(
+        "SELECT id FROM warehouses WHERE code = 'MAIN'"
+    ).fetchone()
+    main_id = int(main_row[0])
+    connection.execute(
+        "UPDATE warehouses SET name = 'المصنع', is_active = 1 WHERE id = ?",
+        (main_id,),
+    )
+    connection.execute("UPDATE purchase_orders SET warehouse_id = ?", (main_id,))
+    connection.execute("UPDATE sales_orders SET warehouse_id = ?", (main_id,))
+    connection.execute("UPDATE inventory_moves SET warehouse_id = ?", (main_id,))
+    connection.execute("UPDATE warehouses SET is_active = 0 WHERE id <> ?", (main_id,))
+
+
 MIGRATIONS: tuple[tuple[int, Callable[[Connection], None]], ...] = (
     (1, _migration_001_initial_schema),
     (2, _migration_002_inventory_partner_link),
     (3, _migration_003_indexes),
     (4, _migration_004_fifo_cost_allocations),
+    (5, _migration_005_accounting_and_single_warehouse),
 )
 
 
