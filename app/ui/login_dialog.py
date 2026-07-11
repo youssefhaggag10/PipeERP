@@ -31,7 +31,6 @@ class LoginDialog(QDialog):
         self.password_input = QLineEdit()
         self.password_input.setPlaceholderText("كلمة المرور")
         self.password_input.setEchoMode(QLineEdit.Password)
-        self.password_input.setText("admin123")
         self.password_input.returnPressed.connect(self._login)
 
         login_button = QPushButton("دخول")
