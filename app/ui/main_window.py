@@ -1,5 +1,13 @@
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QListWidget, QMainWindow, QStackedWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QMainWindow,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 from app.database.connection import Database
 from app.models.user import User
@@ -11,6 +19,7 @@ from app.repositories.sales_repository import SalesRepository
 from app.repositories.warehouse_repository import WarehouseRepository
 from app.ui.dashboard import DashboardPage
 from app.ui.inventory_page import InventoryPage
+from app.ui.lot_balances_page import LotBalancesPage
 from app.ui.partners_page import PartnersPage
 from app.ui.placeholder_page import PlaceholderPage
 from app.ui.products_page import ProductsPage
@@ -46,10 +55,20 @@ class MainWindow(QMainWindow):
         self.add_page("العملاء", PartnersPage("العملاء", "customer", partner_repository))
         self.add_page("إعداد المخزن", WarehousePage(warehouse_repository))
         self.add_page("رصيد المخزون", InventoryPage(inventory_repository))
-        self.add_page("المشتريات", PurchasePage(purchase_repository, partner_repository, product_repository))
-        self.add_page("المبيعات", SalesPage(sales_repository, partner_repository, product_repository))
+        self.add_page("أرصدة الدفعات", LotBalancesPage(inventory_repository))
+        self.add_page(
+            "المشتريات", PurchasePage(purchase_repository, partner_repository, product_repository)
+        )
+        self.add_page(
+            "المبيعات", SalesPage(sales_repository, partner_repository, product_repository)
+        )
         self.add_page("كارت الصنف", StockCardPage(inventory_repository))
-        self.add_page("التصنيع", TransactionsListPage("التصنيع", "أوامر التصنيع", ["رقم الأمر", "المنتج", "الكمية", "الحالة"]))
+        self.add_page(
+            "التصنيع",
+            TransactionsListPage(
+                "التصنيع", "أوامر التصنيع", ["رقم الأمر", "المنتج", "الكمية", "الحالة"]
+            ),
+        )
         self.add_page("التقارير", PlaceholderPage("التقارير", "تقارير الإنتاج والمخزون والتكلفة"))
         self.add_page("الإعدادات", PlaceholderPage("الإعدادات", "المستخدمين والإعدادات العامة"))
 

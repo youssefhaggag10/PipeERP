@@ -6,7 +6,9 @@ from app.repositories.product_repository import ProductRepository
 
 
 class DashboardPage(QWidget):
-    def __init__(self, product_repository: ProductRepository, inventory_repository: InventoryRepository) -> None:
+    def __init__(
+        self, product_repository: ProductRepository, inventory_repository: InventoryRepository
+    ) -> None:
         super().__init__()
         self.product_repository = product_repository
         self.inventory_repository = inventory_repository
@@ -28,10 +30,19 @@ class DashboardPage(QWidget):
         cards = [
             ("إجمالي الأصناف", str(summary["total"])),
             ("أصناف لها رصيد", str(self.inventory_repository.count_products_with_stock())),
-            ("رصيد الخامات", str(round(self.inventory_repository.total_quantity_by_type("raw_material"), 2))),
-            ("رصيد المنتجات", str(round(self.inventory_repository.total_quantity_by_type("finished_good"), 2))),
-            ("رصيد الهالك", str(round(self.inventory_repository.total_quantity_by_type("waste"), 2))),
-            ("إجمالي الرصيد", str(round(self.inventory_repository.total_quantity(), 2))),
+            (
+                "رصيد الخامات",
+                str(round(self.inventory_repository.total_quantity_by_type("raw_material"), 2)),
+            ),
+            (
+                "رصيد المنتجات",
+                str(round(self.inventory_repository.total_quantity_by_type("finished_good"), 2)),
+            ),
+            (
+                "رصيد الهالك",
+                str(round(self.inventory_repository.total_quantity_by_type("waste"), 2)),
+            ),
+            ("قيمة المخزون", f"{self.inventory_repository.total_inventory_value():,.2f}"),
             ("نقص المخزون", str(self.inventory_repository.count_low_stock())),
         ]
         for index, card in enumerate(cards):

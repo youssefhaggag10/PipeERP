@@ -1,8 +1,19 @@
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QComboBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 from app.repositories.product_repository import ProductRepository
-
 
 PRODUCT_TYPES = {
     "خامة": "raw_material",
@@ -87,7 +98,9 @@ class ProductsPage(QWidget):
             QMessageBox.warning(self, "تنبيه", "اختار صنف من الجدول أولًا")
             return
         product = self.products[row]
-        confirm = QMessageBox.question(self, "تأكيد الحذف", f"هل تريد حذف الصنف: {product['name']}؟")
+        confirm = QMessageBox.question(
+            self, "تأكيد الحذف", f"هل تريد حذف الصنف: {product['name']}؟"
+        )
         if confirm != QMessageBox.Yes:
             return
         self.repository.delete_product(int(product["id"]))

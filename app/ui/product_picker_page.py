@@ -5,7 +5,13 @@ from app.repositories.product_repository import ProductRepository
 
 
 class ProductPickerPage(QWidget):
-    def __init__(self, title: str, subtitle: str, repository: ProductRepository, allowed_types: set[str] | None = None) -> None:
+    def __init__(
+        self,
+        title: str,
+        subtitle: str,
+        repository: ProductRepository,
+        allowed_types: set[str] | None = None,
+    ) -> None:
         super().__init__()
         self.title = title
         self.subtitle = subtitle

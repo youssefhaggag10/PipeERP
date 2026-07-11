@@ -1,9 +1,8 @@
 from collections.abc import Callable
 from sqlite3 import Connection
 
-
-DATABASE_VERSION = "0.3.0"
-LATEST_SCHEMA_VERSION = 3
+DATABASE_VERSION = "0.4.0"
+LATEST_SCHEMA_VERSION = 4
 
 
 INITIAL_SCHEMA_SQL = """
@@ -141,6 +140,28 @@ ON lots(product_id);
 """
 
 
+FIFO_COSTING_SQL = """
+CREATE TABLE IF NOT EXISTS inventory_cost_allocations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    outbound_move_id INTEGER NOT NULL REFERENCES inventory_moves(id),
+    source_move_id INTEGER NOT NULL REFERENCES inventory_moves(id),
+    quantity REAL NOT NULL CHECK(quantity > 0),
+    unit_cost REAL NOT NULL CHECK(unit_cost >= 0),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(outbound_move_id, source_move_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cost_allocations_outbound
+ON inventory_cost_allocations(outbound_move_id);
+
+CREATE INDEX IF NOT EXISTS idx_cost_allocations_source
+ON inventory_cost_allocations(source_move_id);
+
+CREATE INDEX IF NOT EXISTS idx_inventory_moves_fifo
+ON inventory_moves(product_id, warehouse_id, move_date, id);
+"""
+
+
 def _column_exists(connection: Connection, table_name: str, column_name: str) -> bool:
     rows = connection.execute(f"PRAGMA table_info({table_name})").fetchall()
     return any(row[1] == column_name for row in rows)
@@ -161,19 +182,83 @@ def _migration_003_indexes(connection: Connection) -> None:
     connection.executescript(INDEXES_SQL)
 
 
+def _migration_004_fifo_cost_allocations(connection: Connection) -> None:
+    connection.executescript(FIFO_COSTING_SQL)
+
+    outbound_moves = connection.execute(
+        """
+        SELECT id, product_id, warehouse_id, quantity_out
+        FROM inventory_moves
+        WHERE quantity_out > 0
+          AND NOT EXISTS (
+              SELECT 1
+              FROM inventory_cost_allocations a
+              WHERE a.outbound_move_id = inventory_moves.id
+          )
+        ORDER BY move_date, id
+        """
+    ).fetchall()
+
+    for outbound in outbound_moves:
+        outbound_id = int(outbound[0])
+        product_id = int(outbound[1])
+        warehouse_id = int(outbound[2])
+        remaining_to_allocate = float(outbound[3])
+        allocated_value = 0.0
+        sources = connection.execute(
+            """
+            SELECT source.id, source.unit_cost,
+                   source.quantity_in - COALESCE(SUM(a.quantity), 0) AS remaining
+            FROM inventory_moves source
+            LEFT JOIN inventory_cost_allocations a ON a.source_move_id = source.id
+            WHERE source.product_id = ?
+              AND source.warehouse_id = ?
+              AND source.quantity_in > 0
+              AND source.id < ?
+            GROUP BY source.id, source.unit_cost, source.quantity_in, source.move_date
+            HAVING remaining > 0.0000001
+            ORDER BY source.move_date, source.id
+            """,
+            (product_id, warehouse_id, outbound_id),
+        ).fetchall()
+
+        for source in sources:
+            if remaining_to_allocate <= 0.0000001:
+                break
+            allocated_quantity = min(remaining_to_allocate, float(source[2]))
+            unit_cost = float(source[1])
+            connection.execute(
+                """
+                INSERT INTO inventory_cost_allocations(
+                    outbound_move_id, source_move_id, quantity, unit_cost
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                (outbound_id, source[0], allocated_quantity, unit_cost),
+            )
+            allocated_value += allocated_quantity * unit_cost
+            remaining_to_allocate -= allocated_quantity
+
+        original_quantity = float(outbound[3])
+        if remaining_to_allocate <= 0.0000001 and original_quantity > 0:
+            connection.execute(
+                "UPDATE inventory_moves SET unit_cost = ? WHERE id = ?",
+                (allocated_value / original_quantity, outbound_id),
+            )
+
+
 MIGRATIONS: tuple[tuple[int, Callable[[Connection], None]], ...] = (
     (1, _migration_001_initial_schema),
     (2, _migration_002_inventory_partner_link),
     (3, _migration_003_indexes),
+    (4, _migration_004_fifo_cost_allocations),
 )
 
 
 def run_migrations(connection: Connection) -> None:
     current_version = int(connection.execute("PRAGMA user_version").fetchone()[0])
     if current_version > LATEST_SCHEMA_VERSION:
-        raise RuntimeError(
-            "قاعدة البيانات أحدث من إصدار البرنامج الحالي. حدّث البرنامج قبل فتحها."
-        )
+        raise RuntimeError("قاعدة البيانات أحدث من إصدار البرنامج الحالي. حدّث البرنامج قبل فتحها.")
 
     for version, migration in MIGRATIONS:
         if version <= current_version:

@@ -17,7 +17,9 @@ class PartnerRepository:
         )
         return [dict(row) for row in rows]
 
-    def create_partner(self, partner_type: str, code: str, name: str, phone: str = "", address: str = "") -> int:
+    def create_partner(
+        self, partner_type: str, code: str, name: str, phone: str = "", address: str = ""
+    ) -> int:
         with self.database.session() as connection:
             cursor = connection.execute(
                 """

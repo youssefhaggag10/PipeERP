@@ -1,5 +1,17 @@
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QComboBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 from app.repositories.partner_repository import PartnerRepository
 from app.repositories.product_repository import ProductRepository
@@ -7,7 +19,12 @@ from app.repositories.sales_repository import SalesRepository
 
 
 class SalesPage(QWidget):
-    def __init__(self, sales_repository: SalesRepository, partner_repository: PartnerRepository, product_repository: ProductRepository) -> None:
+    def __init__(
+        self,
+        sales_repository: SalesRepository,
+        partner_repository: PartnerRepository,
+        product_repository: ProductRepository,
+    ) -> None:
         super().__init__()
         self.sales_repository = sales_repository
         self.partner_repository = partner_repository
@@ -41,7 +58,9 @@ class SalesPage(QWidget):
         actions.addStretch()
 
         self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(["رقم الأمر", "العميل", "المخزن", "التاريخ", "الحالة", "الإجمالي"])
+        self.table.setHorizontalHeaderLabels(
+            ["رقم الأمر", "العميل", "المخزن", "التاريخ", "الحالة", "الإجمالي"]
+        )
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
 
@@ -59,7 +78,11 @@ class SalesPage(QWidget):
 
     def reload(self) -> None:
         customers = self.partner_repository.list_partners("customer")
-        products = [item for item in self.product_repository.list_products() if item["product_type"] == "finished_good"]
+        products = [
+            item
+            for item in self.product_repository.list_products()
+            if item["product_type"] == "finished_good"
+        ]
         self.customer_input.clear()
         self.product_input.clear()
         for customer in customers:
@@ -69,7 +92,14 @@ class SalesPage(QWidget):
         self.orders = self.sales_repository.list_orders()
         self.table.setRowCount(len(self.orders))
         for row_index, order in enumerate(self.orders):
-            values = [order["order_number"], order["customer_name"], order.get("warehouse_name", ""), order["order_date"], self.status_label(order["status"]), order["total"]]
+            values = [
+                order["order_number"],
+                order["customer_name"],
+                order.get("warehouse_name", ""),
+                order["order_date"],
+                self.status_label(order["status"]),
+                order["total"],
+            ]
             for col_index, value in enumerate(values):
                 self.table.setItem(row_index, col_index, QTableWidgetItem(str(value)))
 
@@ -86,7 +116,20 @@ class SalesPage(QWidget):
         if quantity <= 0:
             QMessageBox.warning(self, "تنبيه", "الكمية لازم تكون أكبر من صفر")
             return
-        self.sales_repository.create_order(int(self.customer_input.currentData()), int(self.product_input.currentData()), quantity, self.unit_input.text().strip() or "قطعة", unit_price)
+        if unit_price < 0:
+            QMessageBox.warning(self, "تنبيه", "سعر الوحدة لا يمكن أن يكون سالبًا")
+            return
+        try:
+            self.sales_repository.create_order(
+                int(self.customer_input.currentData()),
+                int(self.product_input.currentData()),
+                quantity,
+                self.unit_input.text().strip() or "قطعة",
+                unit_price,
+            )
+        except ValueError as error:
+            QMessageBox.warning(self, "تنبيه", str(error))
+            return
         self.qty_input.clear()
         self.price_input.setText("0")
         self.reload()

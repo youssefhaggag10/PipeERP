@@ -1,5 +1,17 @@
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QComboBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 from app.repositories.partner_repository import PartnerRepository
 from app.repositories.product_repository import ProductRepository
@@ -7,7 +19,12 @@ from app.repositories.purchase_repository import PurchaseRepository
 
 
 class PurchasePage(QWidget):
-    def __init__(self, purchase_repository: PurchaseRepository, partner_repository: PartnerRepository, product_repository: ProductRepository) -> None:
+    def __init__(
+        self,
+        purchase_repository: PurchaseRepository,
+        partner_repository: PartnerRepository,
+        product_repository: ProductRepository,
+    ) -> None:
         super().__init__()
         self.purchase_repository = purchase_repository
         self.partner_repository = partner_repository
@@ -46,7 +63,9 @@ class PurchasePage(QWidget):
         actions.addStretch()
 
         self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(["رقم الأمر", "المورد", "المخزن", "التاريخ", "الحالة", "الإجمالي"])
+        self.table.setHorizontalHeaderLabels(
+            ["رقم الأمر", "المورد", "المخزن", "التاريخ", "الحالة", "الإجمالي"]
+        )
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
 
@@ -64,7 +83,11 @@ class PurchasePage(QWidget):
 
     def reload(self) -> None:
         self.suppliers = self.partner_repository.list_partners("supplier")
-        self.products = [item for item in self.product_repository.list_products() if item["product_type"] in ("raw_material", "waste", "spare_part")]
+        self.products = [
+            item
+            for item in self.product_repository.list_products()
+            if item["product_type"] in ("raw_material", "waste", "spare_part")
+        ]
         self.supplier_input.clear()
         self.product_input.clear()
         for supplier in self.suppliers:
@@ -98,17 +121,24 @@ class PurchasePage(QWidget):
         if quantity <= 0:
             QMessageBox.warning(self, "تنبيه", "الكمية لازم تكون أكبر من صفر")
             return
+        if unit_price < 0:
+            QMessageBox.warning(self, "تنبيه", "سعر الوحدة لا يمكن أن يكون سالبًا")
+            return
         if not self.lot_input.text().strip():
             QMessageBox.warning(self, "تنبيه", "رقم الدفعة مطلوب")
             return
-        self.purchase_repository.create_order(
-            int(self.supplier_input.currentData()),
-            int(self.product_input.currentData()),
-            self.lot_input.text(),
-            quantity,
-            self.unit_input.text().strip() or "كجم",
-            unit_price,
-        )
+        try:
+            self.purchase_repository.create_order(
+                int(self.supplier_input.currentData()),
+                int(self.product_input.currentData()),
+                self.lot_input.text(),
+                quantity,
+                self.unit_input.text().strip() or "كجم",
+                unit_price,
+            )
+        except ValueError as error:
+            QMessageBox.warning(self, "تنبيه", str(error))
+            return
         self.lot_input.clear()
         self.qty_input.clear()
         self.price_input.setText("0")

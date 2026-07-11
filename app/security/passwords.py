@@ -2,7 +2,6 @@ import hashlib
 import hmac
 import secrets
 
-
 PBKDF2_ITERATIONS = 260_000
 
 

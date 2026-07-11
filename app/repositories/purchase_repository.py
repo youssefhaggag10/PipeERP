@@ -21,12 +21,30 @@ class PurchaseRepository:
         )
         return [dict(row) for row in rows]
 
-    def create_order(self, supplier_id: int, product_id: int, lot_number: str, quantity: float, unit: str, unit_price: float) -> int:
-        warehouse = self.database.fetch_one("SELECT id FROM warehouses WHERE is_active = 1 ORDER BY id LIMIT 1")
+    def create_order(
+        self,
+        supplier_id: int,
+        product_id: int,
+        lot_number: str,
+        quantity: float,
+        unit: str,
+        unit_price: float,
+    ) -> int:
+        if quantity <= 0:
+            raise ValueError("الكمية يجب أن تكون أكبر من صفر")
+        if unit_price < 0:
+            raise ValueError("سعر الوحدة لا يمكن أن يكون سالبًا")
+        if not lot_number.strip():
+            raise ValueError("رقم الدفعة مطلوب")
+        warehouse = self.database.fetch_one(
+            "SELECT id FROM warehouses WHERE is_active = 1 ORDER BY id LIMIT 1"
+        )
         if warehouse is None:
             raise ValueError("لا يوجد مخزن افتراضي")
         with self.database.session() as connection:
-            next_id = connection.execute("SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM purchase_orders").fetchone()["next_id"]
+            next_id = connection.execute(
+                "SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM purchase_orders"
+            ).fetchone()["next_id"]
             order_number = f"PO{int(next_id):05d}"
             cursor = connection.execute(
                 """
@@ -38,21 +56,41 @@ class PurchaseRepository:
             order_id = int(cursor.lastrowid)
             connection.execute(
                 """
-                INSERT INTO purchase_order_lines(purchase_order_id, product_id, lot_number, quantity, unit, unit_price, line_total)
+                INSERT INTO purchase_order_lines(
+                    purchase_order_id, product_id, lot_number, quantity,
+                    unit, unit_price, line_total
+                )
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (order_id, product_id, lot_number.strip(), quantity, unit, unit_price, quantity * unit_price),
+                (
+                    order_id,
+                    product_id,
+                    lot_number.strip(),
+                    quantity,
+                    unit,
+                    unit_price,
+                    quantity * unit_price,
+                ),
             )
             return order_id
 
     def receive_order(self, order_id: int) -> None:
-        order = self.database.fetch_one("SELECT * FROM purchase_orders WHERE id = ?", (order_id,))
-        if order is None:
-            raise ValueError("أمر الشراء غير موجود")
-        if order["status"] == "received":
-            return
-        lines = self.database.fetch_all("SELECT * FROM purchase_order_lines WHERE purchase_order_id = ?", (order_id,))
-        with self.database.session() as connection:
+        with self.database.session(immediate=True) as connection:
+            order = connection.execute(
+                "SELECT * FROM purchase_orders WHERE id = ?",
+                (order_id,),
+            ).fetchone()
+            if order is None:
+                raise ValueError("أمر الشراء غير موجود")
+            if order["status"] == "received":
+                return
+            lines = connection.execute(
+                "SELECT * FROM purchase_order_lines WHERE purchase_order_id = ? ORDER BY id",
+                (order_id,),
+            ).fetchall()
+            if not lines:
+                raise ValueError("أمر الشراء لا يحتوي على بنود")
+
             for line in lines:
                 lot = connection.execute(
                     "SELECT id FROM lots WHERE product_id = ? AND lot_number = ?",
@@ -68,7 +106,11 @@ class PurchaseRepository:
                     lot_id = int(lot["id"])
                 connection.execute(
                     """
-                    INSERT INTO inventory_moves(product_id, warehouse_id, lot_id, quantity_in, quantity_out, unit_cost, reference_type, reference_id, partner_id, notes)
+                    INSERT INTO inventory_moves(
+                        product_id, warehouse_id, lot_id, quantity_in,
+                        quantity_out, unit_cost, reference_type,
+                        reference_id, partner_id, notes
+                    )
                     VALUES (?, ?, ?, ?, 0, ?, 'purchase', ?, ?, ?)
                     """,
                     (
@@ -82,4 +124,7 @@ class PurchaseRepository:
                         order["order_number"],
                     ),
                 )
-            connection.execute("UPDATE purchase_orders SET status = 'received' WHERE id = ?", (order_id,))
+            connection.execute(
+                "UPDATE purchase_orders SET status = 'received' WHERE id = ?",
+                (order_id,),
+            )

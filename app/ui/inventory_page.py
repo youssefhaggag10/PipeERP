@@ -1,8 +1,17 @@
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 from app.repositories.inventory_repository import InventoryRepository
-
 
 PRODUCT_TYPE_LABELS = {
     "raw_material": "خامة",
@@ -22,11 +31,17 @@ class InventoryPage(QWidget):
 
         title = QLabel("رصيد المخزون")
         title.setObjectName("titleLabel")
-        subtitle = QLabel("الرصيد ناتج من حركات المخزون فقط. استخدم التسوية للرصيد الافتتاحي أو الجرد.")
+        subtitle = QLabel(
+            "الرصيد ناتج من حركات المخزون فقط. استخدم التسوية للرصيد الافتتاحي أو الجرد."
+        )
         subtitle.setObjectName("subtitleLabel")
 
         self.quantity_input = QLineEdit()
         self.quantity_input.setPlaceholderText("كمية التسوية: موجب للإضافة، سالب للخصم")
+        self.cost_input = QLineEdit("0")
+        self.cost_input.setPlaceholderText("تكلفة الوحدة للإضافة")
+        self.lot_input = QLineEdit()
+        self.lot_input.setPlaceholderText("رقم الدفعة للإضافة (اختياري)")
         self.notes_input = QLineEdit()
         self.notes_input.setPlaceholderText("ملاحظات")
         adjust_button = QPushButton("تسجيل تسوية للصنف المحدد")
@@ -35,6 +50,8 @@ class InventoryPage(QWidget):
         adjustment_layout = QHBoxLayout()
         adjustment_layout.addWidget(adjust_button)
         adjustment_layout.addWidget(self.quantity_input)
+        adjustment_layout.addWidget(self.cost_input)
+        adjustment_layout.addWidget(self.lot_input)
         adjustment_layout.addWidget(self.notes_input)
 
         self.table = QTableWidget(0, 5)
@@ -58,15 +75,24 @@ class InventoryPage(QWidget):
             return
         try:
             quantity = float(self.quantity_input.text().strip())
+            unit_cost = float(self.cost_input.text().strip() or 0)
         except ValueError:
-            QMessageBox.warning(self, "تنبيه", "اكتب كمية صحيحة")
+            QMessageBox.warning(self, "تنبيه", "اكتب كمية وتكلفة صحيحتين")
             return
-        self.repository.post_adjustment(
-            int(self.rows[row]["id"]),
-            quantity,
-            self.notes_input.text().strip(),
-        )
+        try:
+            self.repository.post_adjustment(
+                int(self.rows[row]["id"]),
+                quantity,
+                self.notes_input.text().strip(),
+                unit_cost=unit_cost,
+                lot_number=self.lot_input.text(),
+            )
+        except ValueError as error:
+            QMessageBox.warning(self, "تنبيه", str(error))
+            return
         self.quantity_input.clear()
+        self.cost_input.setText("0")
+        self.lot_input.clear()
         self.notes_input.clear()
         self.reload()
 

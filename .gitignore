@@ -7,6 +7,8 @@ __pycache__/
 .venv/
 venv/
 env/
+.pytest_cache/
+.ruff_cache/
 
 # PySide / Qt
 *.qmlc
@@ -16,7 +18,12 @@ env/
 *.db
 *.sqlite
 *.sqlite3
+data/
 backups/
+
+# Packaging
+dist/
+build/
 
 # IDE
 .vscode/

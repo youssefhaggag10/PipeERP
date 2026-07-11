@@ -1,8 +1,18 @@
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 from app.repositories.partner_repository import PartnerRepository
-
 
 REFERENCE_LABELS = {
     "purchase": "شراء",
@@ -54,7 +64,9 @@ class PartnersPage(QWidget):
 
         self.moves_title = QLabel("حركات مرتبطة بالعميل / المورد")
         self.moves_table = QTableWidget(0, 8)
-        self.moves_table.setHorizontalHeaderLabels(["التاريخ", "كود الصنف", "الصنف", "داخل", "خارج", "التكلفة", "النوع", "ملاحظات"])
+        self.moves_table.setHorizontalHeaderLabels(
+            ["التاريخ", "كود الصنف", "الصنف", "داخل", "خارج", "التكلفة", "النوع", "ملاحظات"]
+        )
 
         layout = QVBoxLayout()
         layout.setContentsMargins(24, 24, 24, 24)
@@ -75,7 +87,13 @@ class PartnersPage(QWidget):
         if not name:
             QMessageBox.warning(self, "تنبيه", "الاسم مطلوب")
             return
-        self.repository.create_partner(self.partner_type, self.code_input.text(), name, self.phone_input.text(), self.address_input.text())
+        self.repository.create_partner(
+            self.partner_type,
+            self.code_input.text(),
+            name,
+            self.phone_input.text(),
+            self.address_input.text(),
+        )
         self.code_input.clear()
         self.name_input.clear()
         self.phone_input.clear()
@@ -108,8 +126,14 @@ class PartnersPage(QWidget):
         self.moves_table.setRowCount(len(moves))
         for row_index, item in enumerate(moves):
             values = [
-                item["move_date"], item["code"], item["name"], item["quantity_in"],
-                item["quantity_out"], item["unit_cost"], self.ref_label(item["reference_type"]), item["notes"]
+                item["move_date"],
+                item["code"],
+                item["name"],
+                item["quantity_in"],
+                item["quantity_out"],
+                item["unit_cost"],
+                self.ref_label(item["reference_type"]),
+                item["notes"],
             ]
             for col_index, value in enumerate(values):
                 self.moves_table.setItem(row_index, col_index, QTableWidgetItem(str(value)))
