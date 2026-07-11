@@ -55,7 +55,12 @@ class _PaymentOrderMixin:
         return amount
 
     def _apply_search(self) -> None:
-        query = self.search_input.text().strip().casefold()
+        search_input = getattr(self, "search_input", None)
+        orders_table = getattr(self, "orders_table", None)
+        if search_input is None or orders_table is None:
+            return
+
+        query = search_input.text().strip().casefold()
         for row_index, order in enumerate(self.orders):
             haystack = " ".join(
                 str(order.get(key, ""))
@@ -66,7 +71,7 @@ class _PaymentOrderMixin:
                     "partner_phone",
                 )
             ).casefold()
-            self.orders_table.setRowHidden(row_index, bool(query) and query not in haystack)
+            orders_table.setRowHidden(row_index, bool(query) and query not in haystack)
 
     def _record_selected_payment(self, invoice_type: str) -> None:
         order_id = self.selected_order_id()
