@@ -10,6 +10,7 @@ class ProductRepository:
             """
             SELECT id, code, name, product_type, unit, min_stock, track_lots, is_active
             FROM products
+            WHERE is_active = 1
             ORDER BY id DESC
             """
         )
@@ -35,7 +36,10 @@ class ProductRepository:
 
     def delete_product(self, product_id: int) -> None:
         with self.database.session() as connection:
-            connection.execute("DELETE FROM products WHERE id = ?", (product_id,))
+            connection.execute(
+                "UPDATE products SET is_active = 0 WHERE id = ?",
+                (product_id,),
+            )
 
     def count_by_type(self) -> dict:
         rows = self.database.fetch_all(
