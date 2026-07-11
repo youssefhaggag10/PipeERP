@@ -56,6 +56,10 @@ class PartnersPage(QWidget):
         actions.addWidget(delete_button)
         actions.addStretch()
 
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("بحث بالكود أو الاسم أو رقم الهاتف أو العنوان")
+        self.search_input.textChanged.connect(self.apply_search)
+
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["الكود", "الاسم", "الهاتف", "العنوان"])
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -73,6 +77,7 @@ class PartnersPage(QWidget):
         layout.addWidget(title_label)
         layout.addLayout(form)
         layout.addLayout(actions)
+        layout.addWidget(self.search_input)
         layout.addWidget(self.table)
         layout.addWidget(self.moves_title)
         layout.addWidget(self.moves_table)
@@ -115,11 +120,21 @@ class PartnersPage(QWidget):
             values = [item["code"] or "", item["name"], item["phone"] or "", item["address"] or ""]
             for col_index, value in enumerate(values):
                 self.table.setItem(row_index, col_index, QTableWidgetItem(str(value)))
+        self.apply_search()
         self.load_selected_moves()
+
+    def apply_search(self) -> None:
+        query = self.search_input.text().strip().casefold()
+        for row_index, item in enumerate(self.rows):
+            haystack = " ".join(
+                str(item.get(key, "") or "")
+                for key in ("code", "name", "phone", "address")
+            ).casefold()
+            self.table.setRowHidden(row_index, bool(query) and query not in haystack)
 
     def load_selected_moves(self) -> None:
         row = self.table.currentRow()
-        if row < 0 or row >= len(self.rows):
+        if row < 0 or row >= len(self.rows) or self.table.isRowHidden(row):
             self.moves_table.setRowCount(0)
             return
         moves = self.repository.list_partner_moves(int(self.rows[row]["id"]))
