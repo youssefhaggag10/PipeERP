@@ -11,20 +11,22 @@ from PySide6.QtWidgets import (
 
 from app.database.connection import Database
 from app.models.user import User
+from app.repositories.accounting_repository import AccountingRepository
 from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.partner_repository import PartnerRepository
 from app.repositories.product_repository import ProductRepository
 from app.repositories.purchase_repository import PurchaseRepository
 from app.repositories.sales_repository import SalesRepository
 from app.repositories.warehouse_repository import WarehouseRepository
+from app.ui.accounting_order_pages import PurchaseAccountingPage, SalesAccountingPage
+from app.ui.accounts_page import AccountsPage
 from app.ui.dashboard import DashboardPage
 from app.ui.inventory_page import InventoryPage
 from app.ui.lot_balances_page import LotBalancesPage
 from app.ui.partners_page import PartnersPage
 from app.ui.placeholder_page import PlaceholderPage
 from app.ui.products_page import ProductsPage
-from app.ui.purchase_page import PurchasePage
-from app.ui.sales_page import SalesPage
+from app.ui.reports_page import ReportsPage
 from app.ui.stock_card_page import StockCardPage
 from app.ui.transactions_list_page import TransactionsListPage
 from app.ui.warehouse_page import WarehousePage
@@ -47,6 +49,7 @@ class MainWindow(QMainWindow):
         purchase_repository = PurchaseRepository(database)
         sales_repository = SalesRepository(database)
         warehouse_repository = WarehouseRepository(database)
+        accounting_repository = AccountingRepository(database)
 
         self.pages = QStackedWidget()
         self.add_page("الرئيسية", DashboardPage(product_repository, inventory_repository))
@@ -58,7 +61,7 @@ class MainWindow(QMainWindow):
         self.add_page("أرصدة الدفعات", LotBalancesPage(inventory_repository))
         self.add_page(
             "المشتريات",
-            PurchasePage(
+            PurchaseAccountingPage(
                 purchase_repository,
                 partner_repository,
                 product_repository,
@@ -67,13 +70,14 @@ class MainWindow(QMainWindow):
         )
         self.add_page(
             "المبيعات",
-            SalesPage(
+            SalesAccountingPage(
                 sales_repository,
                 partner_repository,
                 product_repository,
                 warehouse_repository,
             ),
         )
+        self.add_page("الحسابات", AccountsPage(accounting_repository, partner_repository))
         self.add_page("كارت الصنف", StockCardPage(inventory_repository))
         self.add_page(
             "التصنيع",
@@ -81,7 +85,7 @@ class MainWindow(QMainWindow):
                 "التصنيع", "أوامر التصنيع", ["رقم الأمر", "المنتج", "الكمية", "الحالة"]
             ),
         )
-        self.add_page("التقارير", PlaceholderPage("التقارير", "تقارير الإنتاج والمخزون والتكلفة"))
+        self.add_page("التقارير", ReportsPage(accounting_repository, partner_repository))
         self.add_page("الإعدادات", PlaceholderPage("الإعدادات", "المستخدمين والإعدادات العامة"))
 
         header = QLabel("3A PIPE")
