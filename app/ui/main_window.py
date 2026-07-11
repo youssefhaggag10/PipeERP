@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 from app.database.connection import Database
 from app.models.user import User
 from app.repositories.accounting_repository import AccountingRepository
+from app.repositories.crm_repository import CRMRepository
 from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.invoice_repository import InvoiceRepository
 from app.repositories.partner_repository import PartnerRepository
@@ -21,6 +22,7 @@ from app.repositories.sales_repository import SalesRepository
 from app.repositories.warehouse_repository import WarehouseRepository
 from app.ui.accounting_order_pages import PurchaseAccountingPage, SalesAccountingPage
 from app.ui.accounts_page import AccountsPage
+from app.ui.crm_page import CRMPage
 from app.ui.dashboard import DashboardPage
 from app.ui.inventory_page import InventoryPage
 from app.ui.lot_balances_page import LotBalancesPage
@@ -52,9 +54,11 @@ class MainWindow(QMainWindow):
         warehouse_repository = WarehouseRepository(database)
         accounting_repository = AccountingRepository(database)
         invoice_repository = InvoiceRepository(database)
+        crm_repository = CRMRepository(database, current_user)
 
         self.pages = QStackedWidget()
         self.add_page("الرئيسية", DashboardPage(product_repository, inventory_repository))
+        self.add_page("CRM متابعة العملاء", CRMPage(crm_repository))
         self.add_page("الأصناف", ProductsPage(product_repository))
         self.add_page("الموردين", PartnersPage("الموردين", "supplier", partner_repository))
         self.add_page("العملاء", PartnersPage("العملاء", "customer", partner_repository))
