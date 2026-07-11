@@ -13,6 +13,7 @@ from app.database.connection import Database
 from app.models.user import User
 from app.repositories.accounting_repository import AccountingRepository
 from app.repositories.inventory_repository import InventoryRepository
+from app.repositories.invoice_repository import InvoiceRepository
 from app.repositories.partner_repository import PartnerRepository
 from app.repositories.product_repository import ProductRepository
 from app.repositories.purchase_repository import PurchaseRepository
@@ -50,6 +51,7 @@ class MainWindow(QMainWindow):
         sales_repository = SalesRepository(database)
         warehouse_repository = WarehouseRepository(database)
         accounting_repository = AccountingRepository(database)
+        invoice_repository = InvoiceRepository(database)
 
         self.pages = QStackedWidget()
         self.add_page("الرئيسية", DashboardPage(product_repository, inventory_repository))
@@ -77,7 +79,10 @@ class MainWindow(QMainWindow):
                 warehouse_repository,
             ),
         )
-        self.add_page("الحسابات", AccountsPage(accounting_repository, partner_repository))
+        self.add_page(
+            "الحسابات",
+            AccountsPage(accounting_repository, partner_repository, invoice_repository),
+        )
         self.add_page("كارت الصنف", StockCardPage(inventory_repository))
         self.add_page(
             "التصنيع",
