@@ -12,6 +12,19 @@ def format_egypt_datetime(value: object) -> str:
         return ""
 
     parsed: datetime | None = None
-    for pattern in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
-        try:
-            parsed
+    normalized = text.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        for pattern in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+            try:
+                parsed = datetime.strptime(text, pattern)
+                break
+            except ValueError:
+                continue
+
+    if parsed is None:
+        return text
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(EGYPT_TIMEZONE).strftime("%Y-%m-%d %I:%M:%S %p")
