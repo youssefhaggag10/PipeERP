@@ -42,11 +42,11 @@ class InvoicesTab(QWidget):
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText(
-            "بحث برقم الفاتورة أو رقم الأمر أو الاسم أو رقم الهاتف"
+            "بحث برقم الفاتورة أو رقم الأمر أو الاسم أو رقم الهاتف أو طريقة الدفع"
         )
         self.search_input.textChanged.connect(self._apply_search)
 
-        self.table = QTableWidget(0, 10)
+        self.table = QTableWidget(0, 11)
         partner_label = "العميل" if invoice_type == "sales" else "المورد"
         self.table.setHorizontalHeaderLabels(
             [
@@ -57,6 +57,7 @@ class InvoicesTab(QWidget):
                 "الهاتف",
                 "الإجمالي",
                 "المدفوع",
+                "طريقة الدفع",
                 "المتبقي",
                 "حالة الفاتورة",
                 "حالة الدفع",
@@ -102,9 +103,14 @@ class InvoicesTab(QWidget):
 
         for row in self.rows:
             if self.invoice_type == "sales":
-                phone_row = self.repository.database.fetch_one(
+                details_row = self.repository.database.fetch_one(
                     """
-                    SELECT COALESCE(p.phone, '') AS phone
+                    SELECT COALESCE(p.phone, '') AS phone,
+                           COALESCE((
+                               SELECT GROUP_CONCAT(DISTINCT NULLIF(TRIM(pt.payment_method), ''))
+                               FROM payment_transactions pt
+                               WHERE pt.sales_invoice_id = si.id
+                           ), '') AS payment_methods
                     FROM sales_invoices si
                     JOIN partners p ON p.id = si.customer_id
                     WHERE si.id = ?
@@ -112,16 +118,34 @@ class InvoicesTab(QWidget):
                     (int(row["id"]),),
                 )
             else:
-                phone_row = self.repository.database.fetch_one(
+                details_row = self.repository.database.fetch_one(
                     """
-                    SELECT COALESCE(p.phone, '') AS phone
+                    SELECT COALESCE(p.phone, '') AS phone,
+                           COALESCE((
+                               SELECT GROUP_CONCAT(DISTINCT NULLIF(TRIM(pt.payment_method), ''))
+                               FROM payment_transactions pt
+                               WHERE pt.purchase_invoice_id = pi.id
+                           ), '') AS payment_methods
                     FROM purchase_invoices pi
                     JOIN partners p ON p.id = pi.supplier_id
                     WHERE pi.id = ?
                     """,
                     (int(row["id"]),),
                 )
-            row["partner_phone"] = "" if phone_row is None else str(phone_row["phone"] or "")
+
+            row["partner_phone"] = (
+                "" if details_row is None else str(details_row["phone"] or "")
+            )
+            raw_methods = (
+                "" if details_row is None else str(details_row["payment_methods"] or "")
+            )
+            methods = [method.strip() for method in raw_methods.split(",") if method.strip()]
+            if methods:
+                row["payment_methods"] = "، ".join(methods)
+            elif float(row["paid"]) > 0.000001:
+                row["payment_methods"] = "غير محددة"
+            else:
+                row["payment_methods"] = "—"
 
         self.table.setRowCount(len(self.rows))
         for row_index, row in enumerate(self.rows):
@@ -133,6 +157,7 @@ class InvoicesTab(QWidget):
                 row["partner_phone"],
                 f"{float(row['total']):,.2f}",
                 f"{float(row['paid']):,.2f}",
+                row["payment_methods"],
                 f"{float(row['remaining']):,.2f}",
                 INVOICE_STATUS_LABELS.get(str(row["status"]), str(row["status"])),
                 PAYMENT_STATUS_LABELS.get(
@@ -142,10 +167,10 @@ class InvoicesTab(QWidget):
             for column_index, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
                 item.setTextAlignment(Qt.AlignCenter)
-                if column_index == 8:
+                if column_index == 9:
                     item.setBackground(INVOICE_COLORS.get(str(row["status"]), QColor("#64748B")))
                     item.setForeground(QColor("white"))
-                elif column_index == 9:
+                elif column_index == 10:
                     item.setBackground(
                         PAYMENT_COLORS.get(str(row["payment_status"]), QColor("#64748B"))
                     )
@@ -163,6 +188,7 @@ class InvoicesTab(QWidget):
                     "order_number",
                     "partner_name",
                     "partner_phone",
+                    "payment_methods",
                 )
             ).casefold()
             self.table.setRowHidden(row_index, bool(query) and query not in haystack)
