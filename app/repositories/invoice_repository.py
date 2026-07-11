@@ -8,101 +8,179 @@ class InvoiceRepository:
         self.database = database
 
     def _ensure_invoices(self) -> None:
+        """Synchronize invoices with fulfilled orders only.
+
+        Draft orders may carry advance payments, but must not have invoices.
+        Once an order is received/delivered, its invoice is created and posted,
+        then any order-level advance payments are linked to that invoice.
+        """
         with self.database.session(immediate=True) as connection:
+            # Remove legacy invoices that were generated too early for draft orders.
+            # Their payments remain linked to the order as advances.
+            connection.execute(
+                """
+                UPDATE payment_transactions
+                SET sales_invoice_id = NULL
+                WHERE sales_invoice_id IN (
+                    SELECT si.id
+                    FROM sales_invoices si
+                    JOIN sales_orders so ON so.id = si.sales_order_id
+                    WHERE so.status = 'draft'
+                )
+                """
+            )
+            connection.execute(
+                """
+                DELETE FROM sales_invoices
+                WHERE sales_order_id IN (
+                    SELECT id FROM sales_orders WHERE status = 'draft'
+                )
+                """
+            )
+            connection.execute(
+                """
+                UPDATE payment_transactions
+                SET purchase_invoice_id = NULL
+                WHERE purchase_invoice_id IN (
+                    SELECT pi.id
+                    FROM purchase_invoices pi
+                    JOIN purchase_orders po ON po.id = pi.purchase_order_id
+                    WHERE po.status = 'draft'
+                )
+                """
+            )
+            connection.execute(
+                """
+                DELETE FROM purchase_invoices
+                WHERE purchase_order_id IN (
+                    SELECT id FROM purchase_orders WHERE status = 'draft'
+                )
+                """
+            )
+
             sales_orders = connection.execute(
                 """
-                SELECT so.id, so.customer_id, so.order_date, so.status, so.notes,
+                SELECT so.id, so.customer_id, so.notes,
                        COALESCE(SUM(sol.line_total), 0) AS total
                 FROM sales_orders so
                 LEFT JOIN sales_order_lines sol ON sol.sales_order_id = so.id
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM sales_invoices si WHERE si.sales_order_id = so.id
-                )
-                GROUP BY so.id, so.customer_id, so.order_date, so.status, so.notes
+                WHERE so.status = 'delivered'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM sales_invoices si WHERE si.sales_order_id = so.id
+                  )
+                GROUP BY so.id, so.customer_id, so.notes
                 ORDER BY so.id
                 """
             ).fetchall()
             for order in sales_orders:
-                paid = float(
-                    connection.execute(
-                        """
-                        SELECT COALESCE(SUM(amount), 0) AS paid
-                        FROM payment_transactions
-                        WHERE reference_type = 'sale' AND reference_id = ?
-                        """,
-                        (order[0],),
-                    ).fetchone()["paid"]
-                )
-                status = "posted" if str(order[3]) == "delivered" or paid > 0 else "draft"
                 connection.execute(
                     """
                     INSERT INTO sales_invoices(
                         invoice_number, sales_order_id, customer_id, invoice_date,
                         status, total, notes, posted_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'posted' THEN CURRENT_TIMESTAMP ELSE NULL END)
+                    )
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP, 'posted', ?, ?, CURRENT_TIMESTAMP)
                     """,
                     (
-                        f"SI{int(order[0]):05d}", order[0], order[1], order[2], status,
-                        float(order[5]), order[4] or "", status,
+                        f"SI{int(order[0]):05d}",
+                        order[0],
+                        order[1],
+                        float(order[3]),
+                        order[2] or "",
                     ),
                 )
 
             purchase_orders = connection.execute(
                 """
-                SELECT po.id, po.supplier_id, po.order_date, po.status, po.notes,
+                SELECT po.id, po.supplier_id, po.notes,
                        COALESCE(SUM(pol.line_total), 0) AS total
                 FROM purchase_orders po
                 LEFT JOIN purchase_order_lines pol ON pol.purchase_order_id = po.id
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM purchase_invoices pi WHERE pi.purchase_order_id = po.id
-                )
-                GROUP BY po.id, po.supplier_id, po.order_date, po.status, po.notes
+                WHERE po.status = 'received'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM purchase_invoices pi WHERE pi.purchase_order_id = po.id
+                  )
+                GROUP BY po.id, po.supplier_id, po.notes
                 ORDER BY po.id
                 """
             ).fetchall()
             for order in purchase_orders:
-                paid = float(
-                    connection.execute(
-                        """
-                        SELECT COALESCE(SUM(amount), 0) AS paid
-                        FROM payment_transactions
-                        WHERE reference_type = 'purchase' AND reference_id = ?
-                        """,
-                        (order[0],),
-                    ).fetchone()["paid"]
-                )
-                status = "posted" if str(order[3]) == "received" or paid > 0 else "draft"
                 connection.execute(
                     """
                     INSERT INTO purchase_invoices(
                         invoice_number, purchase_order_id, supplier_id, invoice_date,
                         status, total, notes, posted_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'posted' THEN CURRENT_TIMESTAMP ELSE NULL END)
+                    )
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP, 'posted', ?, ?, CURRENT_TIMESTAMP)
                     """,
                     (
-                        f"PI{int(order[0]):05d}", order[0], order[1], order[2], status,
-                        float(order[5]), order[4] or "", status,
+                        f"PI{int(order[0]):05d}",
+                        order[0],
+                        order[1],
+                        float(order[3]),
+                        order[2] or "",
                     ),
                 )
 
+            # Repair old fulfilled orders whose invoice was still a draft.
+            connection.execute(
+                """
+                UPDATE sales_invoices
+                SET status = 'posted', posted_at = COALESCE(posted_at, CURRENT_TIMESTAMP)
+                WHERE status = 'draft'
+                  AND sales_order_id IN (
+                      SELECT id FROM sales_orders WHERE status = 'delivered'
+                  )
+                """
+            )
+            connection.execute(
+                """
+                UPDATE purchase_invoices
+                SET status = 'posted', posted_at = COALESCE(posted_at, CURRENT_TIMESTAMP)
+                WHERE status = 'draft'
+                  AND purchase_order_id IN (
+                      SELECT id FROM purchase_orders WHERE status = 'received'
+                  )
+                """
+            )
+
+            # Transfer advance payments from the order to the active invoice.
             connection.execute(
                 """
                 UPDATE payment_transactions
                 SET sales_invoice_id = (
-                    SELECT si.id FROM sales_invoices si
+                    SELECT si.id
+                    FROM sales_invoices si
                     WHERE si.sales_order_id = payment_transactions.reference_id
+                      AND si.status <> 'cancelled'
                 )
-                WHERE reference_type = 'sale' AND sales_invoice_id IS NULL
+                WHERE reference_type = 'sale'
+                  AND sales_invoice_id IS NULL
+                  AND EXISTS (
+                      SELECT 1
+                      FROM sales_invoices si
+                      WHERE si.sales_order_id = payment_transactions.reference_id
+                        AND si.status <> 'cancelled'
+                  )
                 """
             )
             connection.execute(
                 """
                 UPDATE payment_transactions
                 SET purchase_invoice_id = (
-                    SELECT pi.id FROM purchase_invoices pi
+                    SELECT pi.id
+                    FROM purchase_invoices pi
                     WHERE pi.purchase_order_id = payment_transactions.reference_id
+                      AND pi.status <> 'cancelled'
                 )
-                WHERE reference_type = 'purchase' AND purchase_invoice_id IS NULL
+                WHERE reference_type = 'purchase'
+                  AND purchase_invoice_id IS NULL
+                  AND EXISTS (
+                      SELECT 1
+                      FROM purchase_invoices pi
+                      WHERE pi.purchase_order_id = payment_transactions.reference_id
+                        AND pi.status <> 'cancelled'
+                  )
                 """
             )
 
