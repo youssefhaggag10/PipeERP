@@ -20,6 +20,7 @@ from app.repositories.product_repository import ProductRepository
 from app.repositories.purchase_repository import PurchaseRepository
 from app.repositories.sales_repository import SalesRepository
 from app.repositories.warehouse_repository import WarehouseRepository
+from app.services.crm_customer_sync import CRMCustomerSync
 from app.ui.accounting_order_pages import PurchaseAccountingPage, SalesAccountingPage
 from app.ui.accounts_page import AccountsPage
 from app.ui.crm_page import CRMPage
@@ -55,6 +56,8 @@ class MainWindow(QMainWindow):
         accounting_repository = AccountingRepository(database)
         invoice_repository = InvoiceRepository(database)
         crm_repository = CRMRepository(database, current_user)
+        self.crm_sync = CRMCustomerSync(database, current_user)
+        self.crm_sync.sync()
 
         self.pages = QStackedWidget()
         self.add_page("الرئيسية", DashboardPage(product_repository, inventory_repository))
@@ -116,8 +119,11 @@ class MainWindow(QMainWindow):
         self.pages.addWidget(page)
 
     def pages_changed(self, index: int) -> None:
-        if index >= 0:
-            page = self.pages.widget(index)
-            if hasattr(page, "reload"):
-                page.reload()
-            self.pages.setCurrentIndex(index)
+        if index < 0:
+            return
+        page = self.pages.widget(index)
+        if isinstance(page, CRMPage):
+            self.crm_sync.sync()
+        if hasattr(page, "reload"):
+            page.reload()
+        self.pages.setCurrentIndex(index)
