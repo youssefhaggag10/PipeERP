@@ -4,37 +4,6 @@ from app.database.connection import Database
 class SalesRepository:
     def __init__(self, database: Database) -> None:
         self.database = database
-        self.ensure_schema()
-
-    def ensure_schema(self) -> None:
-        with self.database.session() as connection:
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS sales_orders (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    order_number TEXT NOT NULL UNIQUE,
-                    customer_id INTEGER NOT NULL REFERENCES partners(id),
-                    warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
-                    order_date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    status TEXT NOT NULL DEFAULT 'draft',
-                    notes TEXT,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS sales_order_lines (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    sales_order_id INTEGER NOT NULL REFERENCES sales_orders(id),
-                    product_id INTEGER NOT NULL REFERENCES products(id),
-                    quantity REAL NOT NULL,
-                    unit TEXT NOT NULL,
-                    unit_price REAL NOT NULL DEFAULT 0,
-                    line_total REAL NOT NULL DEFAULT 0
-                )
-                """
-            )
 
     def list_orders(self) -> list[dict]:
         rows = self.database.fetch_all(
