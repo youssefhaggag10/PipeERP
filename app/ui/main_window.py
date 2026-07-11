@@ -57,10 +57,22 @@ class MainWindow(QMainWindow):
         self.add_page("رصيد المخزون", InventoryPage(inventory_repository))
         self.add_page("أرصدة الدفعات", LotBalancesPage(inventory_repository))
         self.add_page(
-            "المشتريات", PurchasePage(purchase_repository, partner_repository, product_repository)
+            "المشتريات",
+            PurchasePage(
+                purchase_repository,
+                partner_repository,
+                product_repository,
+                warehouse_repository,
+            ),
         )
         self.add_page(
-            "المبيعات", SalesPage(sales_repository, partner_repository, product_repository)
+            "المبيعات",
+            SalesPage(
+                sales_repository,
+                partner_repository,
+                product_repository,
+                warehouse_repository,
+            ),
         )
         self.add_page("كارت الصنف", StockCardPage(inventory_repository))
         self.add_page(
