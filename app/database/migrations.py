@@ -1,8 +1,8 @@
 from collections.abc import Callable
 from sqlite3 import Connection
 
-DATABASE_VERSION = "0.5.0"
-LATEST_SCHEMA_VERSION = 5
+DATABASE_VERSION = "0.6.0"
+LATEST_SCHEMA_VERSION = 6
 
 
 INITIAL_SCHEMA_SQL = """
@@ -190,6 +190,42 @@ ON payment_transactions(transaction_type, transaction_date);
 """
 
 
+INVOICES_SQL = """
+CREATE TABLE IF NOT EXISTS sales_invoices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_number TEXT NOT NULL UNIQUE,
+    sales_order_id INTEGER NOT NULL UNIQUE REFERENCES sales_orders(id),
+    customer_id INTEGER NOT NULL REFERENCES partners(id),
+    invoice_date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'posted', 'cancelled')),
+    total REAL NOT NULL DEFAULT 0,
+    notes TEXT,
+    posted_at TEXT,
+    cancelled_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS purchase_invoices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_number TEXT NOT NULL UNIQUE,
+    purchase_order_id INTEGER NOT NULL UNIQUE REFERENCES purchase_orders(id),
+    supplier_id INTEGER NOT NULL REFERENCES partners(id),
+    invoice_date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'posted', 'cancelled')),
+    total REAL NOT NULL DEFAULT 0,
+    notes TEXT,
+    posted_at TEXT,
+    cancelled_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_sales_invoices_customer
+ON sales_invoices(customer_id, invoice_date, id);
+CREATE INDEX IF NOT EXISTS idx_purchase_invoices_supplier
+ON purchase_invoices(supplier_id, invoice_date, id);
+"""
+
+
 def _column_exists(connection: Connection, table_name: str, column_name: str) -> bool:
     rows = connection.execute(f"PRAGMA table_info({table_name})").fetchall()
     return any(row[1] == column_name for row in rows)
@@ -294,12 +330,102 @@ def _migration_005_accounting_and_single_warehouse(connection: Connection) -> No
     connection.execute("UPDATE warehouses SET is_active = 0 WHERE id <> ?", (main_id,))
 
 
+def _migration_006_invoices(connection: Connection) -> None:
+    connection.executescript(INVOICES_SQL)
+    if not _column_exists(connection, "payment_transactions", "sales_invoice_id"):
+        connection.execute(
+            "ALTER TABLE payment_transactions ADD COLUMN sales_invoice_id INTEGER REFERENCES sales_invoices(id)"
+        )
+    if not _column_exists(connection, "payment_transactions", "purchase_invoice_id"):
+        connection.execute(
+            "ALTER TABLE payment_transactions ADD COLUMN purchase_invoice_id INTEGER REFERENCES purchase_invoices(id)"
+        )
+
+    sales_orders = connection.execute(
+        """
+        SELECT so.id, so.customer_id, so.order_date, so.status, so.notes,
+               COALESCE(SUM(sol.line_total), 0) AS total
+        FROM sales_orders so
+        LEFT JOIN sales_order_lines sol ON sol.sales_order_id = so.id
+        GROUP BY so.id, so.customer_id, so.order_date, so.status, so.notes
+        ORDER BY so.id
+        """
+    ).fetchall()
+    for order in sales_orders:
+        status = "posted" if str(order[3]) == "delivered" else "draft"
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO sales_invoices(
+                invoice_number, sales_order_id, customer_id, invoice_date,
+                status, total, notes, posted_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'posted' THEN ? ELSE NULL END)
+            """,
+            (
+                f"SI{int(order[0]):05d}", order[0], order[1], order[2], status,
+                float(order[5]), order[4] or "", status, order[2],
+            ),
+        )
+
+    purchase_orders = connection.execute(
+        """
+        SELECT po.id, po.supplier_id, po.order_date, po.status, po.notes,
+               COALESCE(SUM(pol.line_total), 0) AS total
+        FROM purchase_orders po
+        LEFT JOIN purchase_order_lines pol ON pol.purchase_order_id = po.id
+        GROUP BY po.id, po.supplier_id, po.order_date, po.status, po.notes
+        ORDER BY po.id
+        """
+    ).fetchall()
+    for order in purchase_orders:
+        status = "posted" if str(order[3]) == "received" else "draft"
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO purchase_invoices(
+                invoice_number, purchase_order_id, supplier_id, invoice_date,
+                status, total, notes, posted_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'posted' THEN ? ELSE NULL END)
+            """,
+            (
+                f"PI{int(order[0]):05d}", order[0], order[1], order[2], status,
+                float(order[5]), order[4] or "", status, order[2],
+            ),
+        )
+
+    connection.execute(
+        """
+        UPDATE payment_transactions
+        SET sales_invoice_id = (
+            SELECT si.id FROM sales_invoices si
+            WHERE si.sales_order_id = payment_transactions.reference_id
+        )
+        WHERE reference_type = 'sale' AND sales_invoice_id IS NULL
+        """
+    )
+    connection.execute(
+        """
+        UPDATE payment_transactions
+        SET purchase_invoice_id = (
+            SELECT pi.id FROM purchase_invoices pi
+            WHERE pi.purchase_order_id = payment_transactions.reference_id
+        )
+        WHERE reference_type = 'purchase' AND purchase_invoice_id IS NULL
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_payments_sales_invoice ON payment_transactions(sales_invoice_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_payments_purchase_invoice ON payment_transactions(purchase_invoice_id)"
+    )
+
+
 MIGRATIONS: tuple[tuple[int, Callable[[Connection], None]], ...] = (
     (1, _migration_001_initial_schema),
     (2, _migration_002_inventory_partner_link),
     (3, _migration_003_indexes),
     (4, _migration_004_fifo_cost_allocations),
     (5, _migration_005_accounting_and_single_warehouse),
+    (6, _migration_006_invoices),
 )
 
 
