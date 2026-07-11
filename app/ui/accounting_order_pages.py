@@ -1,4 +1,5 @@
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
@@ -13,10 +14,18 @@ from PySide6.QtWidgets import (
 )
 
 from app.repositories.invoice_repository import InvoiceRepository
+from app.services.invoice_service import INVOICE_STATUS_LABELS
 from app.ui.order_details_dialog import OrderDetailsDialog
 from app.ui.purchase_page import PurchasePage
 from app.ui.sales_page import SalesPage
 from app.utils.datetime_utils import format_egypt_datetime
+
+
+INVOICE_COLORS = {
+    "draft": QColor("#64748B"),
+    "posted": QColor("#2563EB"),
+    "cancelled": QColor("#DC2626"),
+}
 
 
 class _PaymentOrderMixin:
@@ -69,6 +78,7 @@ class _PaymentOrderMixin:
                     "invoice_number",
                     "partner_name",
                     "partner_phone",
+                    "invoice_status",
                 )
             ).casefold()
             orders_table.setRowHidden(row_index, bool(query) and query not in haystack)
@@ -133,6 +143,17 @@ class _PaymentOrderMixin:
         self.reload_orders()
         QMessageBox.information(self, "تم", f"تم تسجيل {action_label} وربطه بالفاتورة")
 
+    @staticmethod
+    def _invoice_status_label(status: str) -> str:
+        return INVOICE_STATUS_LABELS.get(status, "—" if not status else status)
+
+    @staticmethod
+    def _style_invoice_status(item: QTableWidgetItem, status: str) -> None:
+        color = INVOICE_COLORS.get(status)
+        if color is not None:
+            item.setBackground(color)
+            item.setForeground(QColor("white"))
+
 
 class PurchaseAccountingPage(_PaymentOrderMixin, PurchasePage):
     def __init__(self, *args, **kwargs) -> None:
@@ -147,8 +168,9 @@ class PurchaseAccountingPage(_PaymentOrderMixin, PurchasePage):
         self.orders_table.setColumnCount(12)
         self.orders_table.setHorizontalHeaderLabels(
             [
-                "رقم الأمر", "الوقت", "المورد", "الهاتف", "الأصناف", "عدد البنود",
-                "المخزن", "الحالة", "الإجمالي", "المدفوع", "المتبقي", "رقم الفاتورة",
+                "رقم الأمر", "الوقت", "المورد", "الأصناف", "عدد البنود", "المخزن",
+                "حالة الأمر", "الإجمالي", "المدفوع", "المتبقي", "رقم الفاتورة",
+                "حالة الفاتورة",
             ]
         )
         self.reload_orders()
@@ -163,7 +185,8 @@ class PurchaseAccountingPage(_PaymentOrderMixin, PurchasePage):
                    COALESCE(SUM(pol.line_total), 0) AS total,
                    COALESCE((SELECT SUM(pt.amount) FROM payment_transactions pt
                        WHERE pt.reference_type = 'purchase' AND pt.reference_id = po.id), 0) AS paid,
-                   COALESCE(pi.invoice_number, '') AS invoice_number
+                   COALESCE(pi.invoice_number, '') AS invoice_number,
+                   COALESCE(pi.status, '') AS invoice_status
             FROM purchase_orders po
             JOIN partners p ON p.id = po.supplier_id
             JOIN warehouses w ON w.id = po.warehouse_id
@@ -171,7 +194,7 @@ class PurchaseAccountingPage(_PaymentOrderMixin, PurchasePage):
             LEFT JOIN products product ON product.id = pol.product_id
             LEFT JOIN purchase_invoices pi ON pi.purchase_order_id = po.id
             GROUP BY po.id, po.order_number, po.order_date, po.status,
-                     p.name, p.phone, w.name, pi.invoice_number
+                     p.name, p.phone, w.name, pi.invoice_number, pi.status
             ORDER BY po.id DESC
             """
         )
@@ -186,16 +209,18 @@ class PurchaseAccountingPage(_PaymentOrderMixin, PurchasePage):
             visible_summary = summary if len(summary) <= 45 else summary[:42] + "..."
             values = [
                 order["order_number"], format_egypt_datetime(order["order_date"]),
-                order["partner_name"], order["partner_phone"], visible_summary,
-                order["line_count"], order["warehouse_name"],
-                self.status_label(order["status"]), f"{float(order['total']):,.2f}",
-                f"{float(order['paid']):,.2f}", f"{float(order['remaining']):,.2f}",
-                order["invoice_number"],
+                order["partner_name"], visible_summary, order["line_count"],
+                order["warehouse_name"], self.status_label(order["status"]),
+                f"{float(order['total']):,.2f}", f"{float(order['paid']):,.2f}",
+                f"{float(order['remaining']):,.2f}", order["invoice_number"],
+                self._invoice_status_label(str(order["invoice_status"])),
             ]
             for column_index, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
-                if column_index == 4:
+                if column_index == 3:
                     item.setToolTip(summary)
+                if column_index == 11:
+                    self._style_invoice_status(item, str(order["invoice_status"]))
                 self.orders_table.setItem(row_index, column_index, item)
         self._apply_search()
 
@@ -283,8 +308,9 @@ class SalesAccountingPage(_PaymentOrderMixin, SalesPage):
         self.orders_table.setColumnCount(12)
         self.orders_table.setHorizontalHeaderLabels(
             [
-                "رقم الأمر", "الوقت", "العميل", "الهاتف", "الأصناف", "عدد البنود",
-                "المخزن", "الحالة", "الإجمالي", "المدفوع", "المتبقي", "رقم الفاتورة",
+                "رقم الأمر", "الوقت", "العميل", "الأصناف", "عدد البنود", "المخزن",
+                "حالة الأمر", "الإجمالي", "المدفوع", "المتبقي", "رقم الفاتورة",
+                "حالة الفاتورة",
             ]
         )
         self.reload_orders()
@@ -299,7 +325,8 @@ class SalesAccountingPage(_PaymentOrderMixin, SalesPage):
                    COALESCE(SUM(sol.line_total), 0) AS total,
                    COALESCE((SELECT SUM(pt.amount) FROM payment_transactions pt
                        WHERE pt.reference_type = 'sale' AND pt.reference_id = so.id), 0) AS paid,
-                   COALESCE(si.invoice_number, '') AS invoice_number
+                   COALESCE(si.invoice_number, '') AS invoice_number,
+                   COALESCE(si.status, '') AS invoice_status
             FROM sales_orders so
             JOIN partners p ON p.id = so.customer_id
             JOIN warehouses w ON w.id = so.warehouse_id
@@ -307,7 +334,7 @@ class SalesAccountingPage(_PaymentOrderMixin, SalesPage):
             LEFT JOIN products product ON product.id = sol.product_id
             LEFT JOIN sales_invoices si ON si.sales_order_id = so.id
             GROUP BY so.id, so.order_number, so.order_date, so.status,
-                     p.name, p.phone, w.name, si.invoice_number
+                     p.name, p.phone, w.name, si.invoice_number, si.status
             ORDER BY so.id DESC
             """
         )
@@ -322,16 +349,18 @@ class SalesAccountingPage(_PaymentOrderMixin, SalesPage):
             visible_summary = summary if len(summary) <= 45 else summary[:42] + "..."
             values = [
                 order["order_number"], format_egypt_datetime(order["order_date"]),
-                order["partner_name"], order["partner_phone"], visible_summary,
-                order["line_count"], order["warehouse_name"],
-                self.status_label(order["status"]), f"{float(order['total']):,.2f}",
-                f"{float(order['paid']):,.2f}", f"{float(order['remaining']):,.2f}",
-                order["invoice_number"],
+                order["partner_name"], visible_summary, order["line_count"],
+                order["warehouse_name"], self.status_label(order["status"]),
+                f"{float(order['total']):,.2f}", f"{float(order['paid']):,.2f}",
+                f"{float(order['remaining']):,.2f}", order["invoice_number"],
+                self._invoice_status_label(str(order["invoice_status"])),
             ]
             for column_index, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
-                if column_index == 4:
+                if column_index == 3:
                     item.setToolTip(summary)
+                if column_index == 11:
+                    self._style_invoice_status(item, str(order["invoice_status"]))
                 self.orders_table.setItem(row_index, column_index, item)
         self._apply_search()
 
