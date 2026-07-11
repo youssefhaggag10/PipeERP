@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QInputDialog,
+    QLineEdit,
     QMessageBox,
     QPushButton,
     QTableWidget,
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from app.repositories.invoice_repository import InvoiceRepository
 from app.services.invoice_service import INVOICE_STATUS_LABELS, PAYMENT_STATUS_LABELS
+from app.utils.datetime_utils import format_egypt_datetime
 
 
 INVOICE_COLORS = {
@@ -38,14 +40,21 @@ class InvoicesTab(QWidget):
         self.rows: list[dict] = []
         self.setLayoutDirection(Qt.RightToLeft)
 
-        self.table = QTableWidget(0, 9)
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText(
+            "بحث برقم الفاتورة أو رقم الأمر أو الاسم أو رقم الهاتف"
+        )
+        self.search_input.textChanged.connect(self._apply_search)
+
+        self.table = QTableWidget(0, 10)
         partner_label = "العميل" if invoice_type == "sales" else "المورد"
         self.table.setHorizontalHeaderLabels(
             [
                 "رقم الفاتورة",
                 "رقم الأمر",
+                "الوقت",
                 partner_label,
-                "التاريخ",
+                "الهاتف",
                 "الإجمالي",
                 "المدفوع",
                 "المتبقي",
@@ -79,6 +88,7 @@ class InvoicesTab(QWidget):
         actions.addStretch()
 
         layout = QVBoxLayout(self)
+        layout.addWidget(self.search_input)
         layout.addLayout(actions)
         layout.addWidget(self.table)
         self.reload()
@@ -89,13 +99,38 @@ class InvoicesTab(QWidget):
         except Exception as error:
             QMessageBox.critical(self, "خطأ", f"تعذر تحميل الفواتير: {error}")
             return
+
+        for row in self.rows:
+            if self.invoice_type == "sales":
+                phone_row = self.repository.database.fetch_one(
+                    """
+                    SELECT COALESCE(p.phone, '') AS phone
+                    FROM sales_invoices si
+                    JOIN partners p ON p.id = si.customer_id
+                    WHERE si.id = ?
+                    """,
+                    (int(row["id"]),),
+                )
+            else:
+                phone_row = self.repository.database.fetch_one(
+                    """
+                    SELECT COALESCE(p.phone, '') AS phone
+                    FROM purchase_invoices pi
+                    JOIN partners p ON p.id = pi.supplier_id
+                    WHERE pi.id = ?
+                    """,
+                    (int(row["id"]),),
+                )
+            row["partner_phone"] = "" if phone_row is None else str(phone_row["phone"] or "")
+
         self.table.setRowCount(len(self.rows))
         for row_index, row in enumerate(self.rows):
             values = [
                 row["invoice_number"],
                 row["order_number"],
+                format_egypt_datetime(row["invoice_date"]),
                 row["partner_name"],
-                row["invoice_date"],
+                row["partner_phone"],
                 f"{float(row['total']):,.2f}",
                 f"{float(row['paid']):,.2f}",
                 f"{float(row['remaining']):,.2f}",
@@ -107,15 +142,30 @@ class InvoicesTab(QWidget):
             for column_index, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
                 item.setTextAlignment(Qt.AlignCenter)
-                if column_index == 7:
+                if column_index == 8:
                     item.setBackground(INVOICE_COLORS.get(str(row["status"]), QColor("#64748B")))
                     item.setForeground(QColor("white"))
-                elif column_index == 8:
+                elif column_index == 9:
                     item.setBackground(
                         PAYMENT_COLORS.get(str(row["payment_status"]), QColor("#64748B"))
                     )
                     item.setForeground(QColor("white"))
                 self.table.setItem(row_index, column_index, item)
+        self._apply_search()
+
+    def _apply_search(self) -> None:
+        query = self.search_input.text().strip().casefold()
+        for row_index, row in enumerate(self.rows):
+            haystack = " ".join(
+                str(row.get(key, ""))
+                for key in (
+                    "invoice_number",
+                    "order_number",
+                    "partner_name",
+                    "partner_phone",
+                )
+            ).casefold()
+            self.table.setRowHidden(row_index, bool(query) and query not in haystack)
 
     def _selected(self) -> dict | None:
         row_index = self.table.currentRow()
