@@ -1,5 +1,6 @@
 from app.database.connection import Database
 from app.services.inventory_costing_service import InventoryCostingService
+from app.services.payment_service import post_order_payment
 
 
 class SalesRepository:
@@ -14,7 +15,11 @@ class SalesRepository:
                    p.name AS customer_name, w.name AS warehouse_name,
                    COUNT(sol.id) AS line_count,
                    COALESCE(GROUP_CONCAT(product.name, '، '), '') AS product_summary,
-                   COALESCE(SUM(sol.line_total), 0) AS total
+                   COALESCE(SUM(sol.line_total), 0) AS total,
+                   COALESCE((
+                       SELECT SUM(pt.amount) FROM payment_transactions pt
+                       WHERE pt.reference_type = 'sale' AND pt.reference_id = so.id
+                   ), 0) AS paid
             FROM sales_orders so
             JOIN partners p ON p.id = so.customer_id
             JOIN warehouses w ON w.id = so.warehouse_id
@@ -25,13 +30,22 @@ class SalesRepository:
             ORDER BY so.id DESC
             """
         )
-        return [dict(row) for row in rows]
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["remaining"] = float(item["total"]) - float(item["paid"])
+            result.append(item)
+        return result
 
     def get_order_details(self, order_id: int) -> dict:
         order = self.database.fetch_one(
             """
             SELECT so.id, so.order_number, so.order_date, so.status,
-                   so.notes, p.name AS customer_name, w.name AS warehouse_name
+                   so.notes, p.name AS customer_name, w.name AS warehouse_name,
+                   COALESCE((
+                       SELECT SUM(pt.amount) FROM payment_transactions pt
+                       WHERE pt.reference_type = 'sale' AND pt.reference_id = so.id
+                   ), 0) AS paid
             FROM sales_orders so
             JOIN partners p ON p.id = so.customer_id
             JOIN warehouses w ON w.id = so.warehouse_id
@@ -55,44 +69,32 @@ class SalesRepository:
         result = dict(order)
         result["lines"] = [dict(line) for line in lines]
         result["total"] = sum(float(line["line_total"]) for line in lines)
+        result["remaining"] = float(result["total"]) - float(result["paid"])
         return result
 
     def get_default_warehouse_id(self) -> int:
         warehouse = self.database.fetch_one(
-            "SELECT id FROM warehouses WHERE is_active = 1 ORDER BY id LIMIT 1"
+            "SELECT id FROM warehouses WHERE code = 'MAIN' AND is_active = 1 LIMIT 1"
         )
         if warehouse is None:
-            raise ValueError("لا يوجد مخزن")
+            raise ValueError("مخزن المصنع غير موجود")
         return int(warehouse["id"])
 
     def get_available_quantity(self, product_id: int, warehouse_id: int | None = None) -> float:
-        if warehouse_id is None:
-            row = self.database.fetch_one(
-                """
-                SELECT COALESCE(SUM(quantity_in - quantity_out), 0) AS qty
-                FROM inventory_moves
-                WHERE product_id = ?
-                """,
-                (product_id,),
-            )
-        else:
-            row = self.database.fetch_one(
-                """
-                SELECT COALESCE(SUM(quantity_in - quantity_out), 0) AS qty
-                FROM inventory_moves
-                WHERE product_id = ? AND warehouse_id = ?
-                """,
-                (product_id, warehouse_id),
-            )
+        warehouse_id = warehouse_id or self.get_default_warehouse_id()
+        row = self.database.fetch_one(
+            """
+            SELECT COALESCE(SUM(quantity_in - quantity_out), 0) AS qty
+            FROM inventory_moves
+            WHERE product_id = ? AND warehouse_id = ?
+            """,
+            (product_id, warehouse_id),
+        )
         return float(row["qty"] if row is not None else 0)
 
     def create_order(
         self, customer_id: int, product_id: int, quantity: float, unit: str, unit_price: float
     ) -> int:
-        if quantity <= 0:
-            raise ValueError("الكمية يجب أن تكون أكبر من صفر")
-        if unit_price < 0:
-            raise ValueError("سعر الوحدة لا يمكن أن يكون سالبًا")
         return self.create_order_with_lines(
             customer_id=customer_id,
             warehouse_id=self.get_default_warehouse_id(),
@@ -110,12 +112,15 @@ class SalesRepository:
         self,
         *,
         customer_id: int,
-        warehouse_id: int,
+        warehouse_id: int | None = None,
         lines: list[dict],
         notes: str = "",
+        paid_amount: float = 0,
     ) -> int:
         if not lines:
             raise ValueError("أضف بندًا واحدًا على الأقل")
+        if paid_amount < 0:
+            raise ValueError("المدفوع لا يمكن أن يكون سالبًا")
 
         normalized_lines: list[dict] = []
         for line_number, line in enumerate(lines, start=1):
@@ -137,6 +142,10 @@ class SalesRepository:
                 }
             )
 
+        order_total = sum(float(line["line_total"]) for line in normalized_lines)
+        if paid_amount - order_total > 0.000001:
+            raise ValueError("المدفوع لا يمكن أن يكون أكبر من إجمالي الأمر")
+
         with self.database.session(immediate=True) as connection:
             customer = connection.execute(
                 """
@@ -145,14 +154,9 @@ class SalesRepository:
                 """,
                 (customer_id,),
             ).fetchone()
-            warehouse = connection.execute(
-                "SELECT id FROM warehouses WHERE id = ? AND is_active = 1",
-                (warehouse_id,),
-            ).fetchone()
             if customer is None:
                 raise ValueError("العميل غير موجود أو غير نشط")
-            if warehouse is None:
-                raise ValueError("المخزن غير موجود أو غير نشط")
+            warehouse_id = self.get_default_warehouse_id()
             next_id = connection.execute(
                 "SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM sales_orders"
             ).fetchone()["next_id"]
@@ -177,21 +181,26 @@ class SalesRepository:
                     VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (
-                        order_id,
-                        line["product_id"],
-                        line["quantity"],
-                        line["unit"],
-                        line["unit_price"],
-                        line["line_total"],
+                        order_id, line["product_id"], line["quantity"],
+                        line["unit"], line["unit_price"], line["line_total"],
                     ),
+                )
+            if paid_amount > 0:
+                post_order_payment(
+                    connection,
+                    transaction_type="customer_receipt",
+                    partner_id=customer_id,
+                    amount=paid_amount,
+                    reference_type="sale",
+                    reference_id=order_id,
+                    notes=f"تحصيل عند إنشاء أمر البيع {order_number}",
                 )
             return order_id
 
     def deliver_order(self, order_id: int) -> None:
         with self.database.session(immediate=True) as connection:
             order = connection.execute(
-                "SELECT * FROM sales_orders WHERE id = ?",
-                (order_id,),
+                "SELECT * FROM sales_orders WHERE id = ?", (order_id,)
             ).fetchone()
             if order is None:
                 raise ValueError("أمر البيع غير موجود")
@@ -216,6 +225,5 @@ class SalesRepository:
                     notes=order["order_number"],
                 )
             connection.execute(
-                "UPDATE sales_orders SET status = 'delivered' WHERE id = ?",
-                (order_id,),
+                "UPDATE sales_orders SET status = 'delivered' WHERE id = ?", (order_id,)
             )
