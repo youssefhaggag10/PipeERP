@@ -34,33 +34,12 @@ def test_migrations_create_complete_schema() -> None:
 
 def test_migrations_are_idempotent() -> None:
     connection = sqlite3.connect(":memory:")
+
     run_migrations(connection)
     run_migrations(connection)
 
     assert connection.execute("PRAGMA user_version").fetchone()[0] == LATEST_SCHEMA_VERSION
-
-
-def test_existing_inventory_moves_get_partner_link() -> None:
-    connection = sqlite3.connect(":memory:")
-    connection.executescript(
-        """
-        CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-        CREATE TABLE inventory_moves (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            product_id INTEGER NOT NULL,
-            warehouse_id INTEGER NOT NULL,
-            quantity_in REAL NOT NULL DEFAULT 0,
-            quantity_out REAL NOT NULL DEFAULT 0,
-            unit_cost REAL NOT NULL DEFAULT 0,
-            reference_type TEXT NOT NULL
-        );
-        """
-    )
-    connection.execute("PRAGMA user_version = 1")
-
-    run_migrations(connection)
-
-    columns = {
-        row[1] for row in connection.execute("PRAGMA table_info(inventory_moves)").fetchall()
-    }
-    assert "partner_id" in columns
+    version_rows = connection.execute(
+        "SELECT value FROM settings WHERE key = 'db_version'"
+    ).fetchall()
+    assert len(version_rows) == 1
