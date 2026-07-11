@@ -15,26 +15,34 @@ class DashboardPage(QWidget):
         self.grid.setSpacing(14)
         layout = QVBoxLayout()
         layout.setContentsMargins(24, 24, 24, 24)
-        layout.addWidget(QLabel("\u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629"))
-        layout.addWidget(QLabel("\u0645\u0624\u0634\u0631\u0627\u062a \u0627\u0644\u0645\u062e\u0632\u0648\u0646"))
+        layout.addWidget(QLabel("الرئيسية"))
+        layout.addWidget(QLabel("مؤشرات المخزون"))
         layout.addLayout(self.grid)
         layout.addStretch()
         self.setLayout(layout)
         self.reload()
 
     def reload(self) -> None:
+        self._clear_cards()
         summary = self.product_repository.count_by_type()
         cards = [
-            ("\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0623\u0635\u0646\u0627\u0641", str(summary["total"])),
-            ("\u0623\u0635\u0646\u0627\u0641 \u0644\u0647\u0627 \u0631\u0635\u064a\u062f", str(self.inventory_repository.count_products_with_stock())),
-            ("\u0631\u0635\u064a\u062f \u0627\u0644\u062e\u0627\u0645\u0627\u062a", str(round(self.inventory_repository.total_quantity_by_type("raw_material"), 2))),
-            ("\u0631\u0635\u064a\u062f \u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a", str(round(self.inventory_repository.total_quantity_by_type("finished_good"), 2))),
-            ("\u0631\u0635\u064a\u062f \u0627\u0644\u0647\u0627\u0644\u0643", str(round(self.inventory_repository.total_quantity_by_type("waste"), 2))),
-            ("\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0631\u0635\u064a\u062f", str(round(self.inventory_repository.total_quantity(), 2))),
-            ("\u0646\u0642\u0635 \u0627\u0644\u0645\u062e\u0632\u0648\u0646", str(self.inventory_repository.count_low_stock())),
+            ("إجمالي الأصناف", str(summary["total"])),
+            ("أصناف لها رصيد", str(self.inventory_repository.count_products_with_stock())),
+            ("رصيد الخامات", str(round(self.inventory_repository.total_quantity_by_type("raw_material"), 2))),
+            ("رصيد المنتجات", str(round(self.inventory_repository.total_quantity_by_type("finished_good"), 2))),
+            ("رصيد الهالك", str(round(self.inventory_repository.total_quantity_by_type("waste"), 2))),
+            ("إجمالي الرصيد", str(round(self.inventory_repository.total_quantity(), 2))),
+            ("نقص المخزون", str(self.inventory_repository.count_low_stock())),
         ]
         for index, card in enumerate(cards):
             self.grid.addWidget(self._card(card[0], card[1]), index // 2, index % 2)
+
+    def _clear_cards(self) -> None:
+        while self.grid.count():
+            item = self.grid.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
 
     def _card(self, title: str, value: str) -> QFrame:
         frame = QFrame()
