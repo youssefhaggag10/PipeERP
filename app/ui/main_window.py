@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
 from app.database.connection import Database
 from app.models.user import User
 from app.repositories.accounting_repository import AccountingRepository
-from app.repositories.admin_repository import AdminRepository
 from app.repositories.crm_repository import CRMRepository
 from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.invoice_repository import InvoiceRepository
@@ -21,6 +20,7 @@ from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.repositories.product_repository import ProductRepository
 from app.repositories.purchase_repository import PurchaseRepository
 from app.repositories.sales_repository import SalesRepository
+from app.repositories.system_admin_repository import SystemAdminRepository
 from app.repositories.warehouse_repository import WarehouseRepository
 from app.services.crm_customer_sync import CRMCustomerSync
 from app.ui.accounting_order_pages import PurchaseAccountingPage, SalesAccountingPage
@@ -49,7 +49,7 @@ class MainWindow(QMainWindow):
         self.navigation.setFixedWidth(240)
         self.navigation.currentRowChanged.connect(self.pages_changed)
 
-        admin_repository = AdminRepository(database, current_user)
+        admin_repository = SystemAdminRepository(database, current_user)
         product_repository = ProductRepository(database)
         inventory_repository = InventoryRepository(database)
         partner_repository = PartnerRepository(database)
