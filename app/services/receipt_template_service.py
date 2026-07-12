@@ -11,38 +11,6 @@ def _money(value: object) -> str:
     return f"{float(value or 0):,.2f}"
 
 
-def _company_parts(value: object) -> tuple[str, str]:
-    text = str(value or "").strip()
-    if not text:
-        return "", ""
-    for separator in (" - ", " – ", " — "):
-        if separator in text:
-            arabic, english = text.split(separator, 1)
-            return arabic.strip(), english.strip().upper()
-    return text, ""
-
-
-def _meta_row(label: str, value: str, *, rtl_value: bool = False) -> str:
-    value_class = "meta-value rtl-value" if rtl_value else "meta-value ltr-value"
-    value_dir = "rtl" if rtl_value else "ltr"
-    return f"""
-        <tr>
-            <td class="meta-spacer" width="8%">&nbsp;</td>
-            <td class="{value_class}" width="55%" dir="{value_dir}">{value}</td>
-            <td class="meta-gap" width="3%">&nbsp;</td>
-            <td class="meta-label" width="34%" dir="rtl">{label}</td>
-        </tr>
-    """
-
-
-def _date_parts(value: object) -> tuple[str, str]:
-    formatted = format_egypt_datetime(value)
-    if " " not in formatted:
-        return formatted, ""
-    date, time = formatted.split(" ", 1)
-    return date, time
-
-
 def build_sales_receipt_html(
     invoice: dict,
     settings: dict[str, str],
@@ -50,34 +18,26 @@ def build_sales_receipt_html(
     logo_url: str = "",
     qr_url: str = "",
 ) -> str:
-    """Build a Qt-rich-text-safe 80 mm sales receipt.
-
-    QTextDocument supports only a subset of browser CSS. In particular, nested percentage
-    widths and auto margins can collapse columns on thermal printers. The receipt therefore
-    uses full-width tables and explicit cell widths for predictable Arabic/RTL rendering.
-    """
-    phones = " | ".join(
+    phones = " — ".join(
         line.strip() for line in settings.get("phones", "").splitlines() if line.strip()
     )
-    company_ar, company_en = _company_parts(settings.get("company_name"))
+    customer_details = [invoice.get("customer_name", "")]
+    if invoice.get("customer_phone"):
+        customer_details.append(invoice["customer_phone"])
+    customer_text = " — ".join(_text(value) for value in customer_details if value)
 
-    line_rows: list[str] = []
-    for line in invoice.get("lines", []):
+    line_rows = []
+    for index, line in enumerate(invoice.get("lines", []), start=1):
         line_rows.append(
             """
             <tr>
-                <td class="money-cell" dir="ltr">{total}</td>
-                <td class="money-cell" dir="ltr">{price}</td>
-                <td class="qty-cell" dir="ltr">
-                    <div class="quantity">{quantity:g}</div>
-                    <div class="unit" dir="rtl">{unit}</div>
-                </td>
-                <td class="product-cell" dir="rtl">
-                    <div class="product-name">{name}</div>
-                    <div class="product-code" dir="ltr">{code}</div>
-                </td>
+                <td class="product">{index}. {name}<br><span class="code">{code}</span></td>
+                <td>{quantity:g}<br>{unit}</td>
+                <td>{price}</td>
+                <td>{total}</td>
             </tr>
             """.format(
+                index=index,
                 name=_text(line.get("name")),
                 code=_text(line.get("code")),
                 quantity=float(line.get("quantity", 0)),
@@ -87,283 +47,98 @@ def build_sales_receipt_html(
             )
         )
 
-    logo_html = (
-        f'<div class="logo-wrap"><img class="logo" width="105" src="{logo_url}"></div>'
-        if logo_url
-        else ""
-    )
-
-    instapay_handle = _text(settings.get("instapay_handle"))
+    logo_html = f'<img class="logo" src="{logo_url}">' if logo_url else ""
     qr_html = ""
     if qr_url:
         qr_html = f"""
-        <div class="payment-block">
-            <div class="payment-title" dir="rtl">الدفع عبر <span dir="ltr">InstaPay</span></div>
-            <img class="qr" width="116" src="{qr_url}">
-            <div class="handle" dir="ltr">{instapay_handle}</div>
-            <div class="hint" dir="rtl">تأكد من اسم المستفيد قبل إتمام التحويل</div>
-        </div>
-        """
-    elif instapay_handle:
-        qr_html = f"""
-        <div class="payment-block">
-            <div class="payment-title" dir="rtl">الدفع عبر <span dir="ltr">InstaPay</span></div>
-            <div class="handle" dir="ltr">{instapay_handle}</div>
+        <div class="payment">
+            <div class="payment-title">الدفع عبر InstaPay</div>
+            <img class="qr" src="{qr_url}">
+            <div><strong>اسم المستفيد:</strong> {_text(settings.get('beneficiary_name'))}</div>
+            <div class="handle">{_text(settings.get('instapay_handle'))}</div>
+            <div class="hint">تأكد من اسم المستفيد قبل إتمام التحويل</div>
         </div>
         """
 
+    payment_methods = _text(invoice.get("payment_methods") or "—")
     footer = _text(settings.get("footer", "")).replace("\n", "<br>")
-    customer_name = _text(invoice.get("customer_name", ""))
-    customer_phone = _text(invoice.get("customer_phone", ""))
     invoice_number = _text(invoice.get("invoice_number"))
     order_number = _text(invoice.get("order_number"))
-    invoice_date, invoice_time = _date_parts(invoice.get("invoice_date"))
+    invoice_date = _text(format_egypt_datetime(invoice.get("invoice_date")))
     invoice_total = _money(invoice.get("total"))
     invoice_paid = _money(invoice.get("paid"))
     invoice_remaining = _money(invoice.get("remaining"))
-    payment_methods = _text(invoice.get("payment_methods") or "—")
-
-    company_html = f"""
-        <div class="company-ar" dir="rtl">{_text(company_ar)}</div>
-        <div class="company-en" dir="ltr">{_text(company_en)}</div>
-    """
-
-    meta_rows = [
-        _meta_row("رقم الفاتورة", invoice_number),
-        _meta_row("رقم الأمر", order_number),
-        _meta_row("التاريخ", _text(invoice_date)),
-    ]
-    if invoice_time:
-        meta_rows.append(_meta_row("الوقت", _text(invoice_time)))
-    meta_rows.append(_meta_row("العميل", customer_name, rtl_value=True))
-    if customer_phone:
-        meta_rows.append(_meta_row("الهاتف", customer_phone))
-
     return f"""
     <!DOCTYPE html>
-    <html lang="ar" dir="rtl">
+    <html dir="rtl" lang="ar">
     <head>
         <meta charset="utf-8">
         <style>
             body {{
-                margin: 0;
+                direction: rtl;
+                font-family: "DejaVu Sans", "Tahoma", "Arial";
                 color: #000;
                 background: #fff;
-                font-family: "DejaVu Sans", "Tahoma", "Arial";
-                font-size: 8.2pt;
-            }}
-            .header {{ text-align: center; }}
-            .logo-wrap {{ margin: 1pt 0 4pt; text-align: center; }}
-            .logo {{ width: 105px; max-height: 74pt; }}
-            .company-ar {{ font-size: 10.4pt; font-weight: 900; text-align: center; }}
-            .company-en {{
-                margin-top: 2pt;
-                font-family: "Arial", "DejaVu Sans";
                 font-size: 9pt;
-                font-weight: 900;
-                text-align: center;
+                margin: 0;
             }}
-            .address {{ direction: rtl; text-align: center; font-size: 7.8pt; margin-top: 3pt; }}
-            .phones {{
-                direction: ltr;
-                text-align: center;
-                font-family: "Arial", "DejaVu Sans";
-                font-size: 7.8pt;
-                margin-top: 2pt;
-            }}
-            .invoice-title {{
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-size: 10.4pt;
-                font-weight: 900;
-                margin: 7pt 0 5pt;
-                padding: 3.5pt 0;
-                text-align: center;
-                direction: rtl;
-            }}
-
-            .meta {{
-                width: 100%;
-                border-collapse: collapse;
-                direction: ltr;
-                margin: 1pt 0 7pt;
-            }}
-            .meta td {{ padding: 1.6pt 1pt; vertical-align: middle; border: 0; }}
-            .meta-spacer {{ width: 8%; }}
-            .meta-value {{ width: 55%; text-align: right; font-size: 7.7pt; font-weight: 700; }}
-            .meta-gap {{ width: 3%; }}
-            .meta-label {{
-                width: 34%;
-                direction: rtl;
-                text-align: right;
-                font-size: 7.7pt;
-                font-weight: 900;
-                white-space: nowrap;
-            }}
-            .ltr-value {{
-                direction: ltr;
-                text-align: right;
-                font-family: "Arial", "DejaVu Sans";
-            }}
-            .rtl-value {{ direction: rtl; text-align: right; }}
-
-            .items {{
-                width: 100%;
-                border-collapse: collapse;
-                direction: ltr;
-                border: 1px solid #000;
-                page-break-inside: avoid;
-            }}
+            .center {{ text-align: center; }}
+            .logo {{ width: 42mm; max-height: 26mm; }}
+            .company {{ font-size: 14pt; font-weight: bold; margin: 2px 0; }}
+            .invoice-title {{ font-size: 12pt; font-weight: bold; margin: 5px 0; }}
+            .muted {{ font-size: 8pt; }}
+            .separator {{ border-top: 1px dashed #000; margin: 5px 0; }}
+            .meta, .totals, .items {{ width: 100%; border-collapse: collapse; }}
+            .meta td {{ padding: 1px 0; vertical-align: top; }}
+            .label {{ font-weight: bold; white-space: nowrap; }}
             .items th, .items td {{
-                border: 1px solid #000;
-                padding: 3.4pt 1pt;
-                vertical-align: middle;
-            }}
-            .items th {{
-                background: #eeeeee;
-                font-size: 7pt;
-                font-weight: 900;
+                border-bottom: 1px solid #000;
+                padding: 3px 2px;
                 text-align: center;
-                white-space: nowrap;
+                vertical-align: top;
             }}
-            .total-head, .total-cell {{ width: 25%; }}
-            .price-head, .price-cell {{ width: 21%; }}
-            .qty-head, .qty-cell {{ width: 14%; }}
-            .product-head, .product-cell {{ width: 40%; }}
-            .money-cell {{
-                direction: ltr;
-                text-align: center;
-                font-family: "Arial", "DejaVu Sans";
-                font-size: 7pt;
-                font-weight: 800;
-                white-space: nowrap;
-            }}
-            .qty-cell {{ text-align: center; }}
-            .quantity {{ font-family: "Arial", "DejaVu Sans"; font-weight: 800; }}
-            .unit {{ font-size: 6.6pt; margin-top: 1pt; }}
-            .product-cell {{ direction: rtl; text-align: right; }}
-            .product-name {{ font-size: 7.4pt; font-weight: 900; }}
-            .product-code {{
-                direction: ltr;
-                text-align: right;
-                font-family: "Arial", "DejaVu Sans";
-                font-size: 6.5pt;
-                margin-top: 1pt;
-            }}
-
-            .totals {{
-                width: 100%;
-                border-collapse: collapse;
-                direction: ltr;
-                margin-top: 7pt;
-                page-break-inside: avoid;
-            }}
-            .totals td {{ padding: 2.5pt 2pt; border: 0; }}
-            .totals .totals-spacer {{ width: 9%; }}
-            .totals .total-content {{ border-bottom: 1px solid #000; }}
-            .totals .value {{
-                width: 42%;
-                direction: ltr;
-                text-align: center;
-                font-family: "Arial", "DejaVu Sans";
-                font-size: 9pt;
-                font-weight: 900;
-            }}
-            .totals .label {{
-                width: 40%;
-                direction: rtl;
-                text-align: center;
-                font-size: 9pt;
-                font-weight: 900;
-                white-space: nowrap;
-            }}
-            .totals .grand .total-content {{
-                border-top: 2px solid #000;
-                font-size: 10.2pt;
-            }}
-            .totals .method-value {{
-                direction: rtl;
-                text-align: center;
-                font-family: "DejaVu Sans", "Tahoma";
-                font-size: 8.2pt;
-            }}
-
-            .payment-block {{ text-align: center; margin-top: 10pt; page-break-inside: avoid; }}
-            .payment-title {{ font-size: 9.3pt; font-weight: 900; margin-bottom: 4pt; }}
-            .qr {{ width: 116px; }}
-            .handle {{
-                direction: ltr;
-                text-align: center;
-                font-family: "Arial", "DejaVu Sans";
-                font-weight: 900;
-                font-size: 8pt;
-                margin-top: 3pt;
-            }}
-            .hint {{ direction: rtl; text-align: center; font-size: 6.8pt; margin-top: 4pt; }}
-            .footer-divider {{ border-top: 1px dashed #000; margin-top: 8pt; }}
-            .footer {{
-                direction: rtl;
-                text-align: center;
-                font-size: 7.7pt;
-                font-weight: 800;
-                margin-top: 5pt;
-            }}
+            .items th {{ font-size: 8pt; }}
+            .items .product {{ width: 42%; text-align: right; }}
+            .code {{ font-size: 7pt; }}
+            .totals td {{ padding: 2px 0; font-size: 10pt; }}
+            .totals .value {{ text-align: left; font-weight: bold; }}
+            .grand td {{ border-top: 2px solid #000; font-size: 12pt; font-weight: bold; }}
+            .payment {{ text-align: center; margin-top: 6px; }}
+            .payment-title {{ font-size: 11pt; font-weight: bold; }}
+            .qr {{ width: 47mm; max-height: 52mm; }}
+            .handle {{ direction: ltr; font-family: Arial; font-weight: bold; font-size: 9pt; }}
+            .hint {{ font-size: 7pt; margin-top: 2px; }}
+            .footer {{ text-align: center; font-weight: bold; margin-top: 7px; }}
         </style>
     </head>
     <body>
-        <div class="header">
+        <div class="center">
             {logo_html}
-            {company_html}
-            <div class="address">{_text(settings.get('address'))}</div>
-            <div class="phones">{_text(phones)}</div>
+            <div class="company">{_text(settings.get('company_name'))}</div>
+            <div>{_text(settings.get('address'))}</div>
+            <div class="muted">{_text(phones)}</div>
             <div class="invoice-title">فاتورة مبيعات</div>
         </div>
-
-        <table class="meta" width="100%" dir="ltr" cellspacing="0" cellpadding="0">
-            {''.join(meta_rows)}
+        <div class="separator"></div>
+        <table class="meta">
+            <tr><td class="label">رقم الفاتورة:</td><td>{invoice_number}</td></tr>
+            <tr><td class="label">رقم الأمر:</td><td>{order_number}</td></tr>
+            <tr><td class="label">التاريخ:</td><td>{invoice_date}</td></tr>
+            <tr><td class="label">العميل:</td><td>{customer_text}</td></tr>
         </table>
-
-        <table class="items" width="100%" dir="ltr" cellspacing="0" cellpadding="0">
-            <tr>
-                <th class="total-head" width="25%" dir="rtl">الإجمالي</th>
-                <th class="price-head" width="21%" dir="rtl">السعر</th>
-                <th class="qty-head" width="14%" dir="rtl">الكمية</th>
-                <th class="product-head" width="40%" dir="rtl">الصنف</th>
-            </tr>
-            {''.join(line_rows)}
+        <div class="separator"></div>
+        <table class="items">
+            <thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead>
+            <tbody>{''.join(line_rows)}</tbody>
         </table>
-
-        <table class="totals" width="100%" dir="ltr" cellspacing="0" cellpadding="0">
-            <tr class="grand">
-                <td class="totals-spacer" width="9%"></td>
-                <td class="value total-content" width="42%" dir="ltr">{invoice_total}</td>
-                <td class="label total-content" width="40%" dir="rtl">الإجمالي</td>
-                <td class="totals-spacer" width="9%"></td>
-            </tr>
-            <tr>
-                <td class="totals-spacer" width="9%"></td>
-                <td class="value total-content" width="42%" dir="ltr">{invoice_paid}</td>
-                <td class="label total-content" width="40%" dir="rtl">المدفوع</td>
-                <td class="totals-spacer" width="9%"></td>
-            </tr>
-            <tr class="remaining">
-                <td class="totals-spacer" width="9%"></td>
-                <td class="value total-content" width="42%" dir="ltr">{invoice_remaining}</td>
-                <td class="label total-content" width="40%" dir="rtl">المتبقي</td>
-                <td class="totals-spacer" width="9%"></td>
-            </tr>
-            <tr>
-                <td class="totals-spacer" width="9%"></td>
-                <td class="value method-value total-content" width="42%" dir="rtl">
-                    {payment_methods}
-                </td>
-                <td class="label total-content" width="40%" dir="rtl">طريقة الدفع</td>
-                <td class="totals-spacer" width="9%"></td>
-            </tr>
+        <table class="totals">
+            <tr class="grand"><td>الإجمالي</td><td class="value">{invoice_total}</td></tr>
+            <tr><td>المدفوع</td><td class="value">{invoice_paid}</td></tr>
+            <tr><td>المتبقي</td><td class="value">{invoice_remaining}</td></tr>
+            <tr><td>طريقة الدفع</td><td class="value">{payment_methods}</td></tr>
         </table>
-
         {qr_html}
-        <div class="footer-divider"></div>
+        <div class="separator"></div>
         <div class="footer">{footer}</div>
     </body>
     </html>
