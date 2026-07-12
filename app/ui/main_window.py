@@ -16,22 +16,23 @@ from app.repositories.crm_repository import CRMRepository
 from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.invoice_repository import InvoiceRepository
 from app.repositories.partner_repository import PartnerRepository
+from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.repositories.product_repository import ProductRepository
 from app.repositories.purchase_repository import PurchaseRepository
 from app.repositories.sales_repository import SalesRepository
 from app.repositories.system_admin_repository import SystemAdminRepository
 from app.repositories.warehouse_repository import WarehouseRepository
 from app.services.crm_customer_sync import CRMCustomerSync
-from app.ui.accounting_order_pages import PurchaseAccountingPage, SalesAccountingPage
-from app.ui.accounts_page import AccountsPage
+from app.ui.accounting_order_pages import PurchaseAccountingPage
 from app.ui.crm_page import CRMPage
 from app.ui.dashboard import DashboardPage
 from app.ui.inventory_page import InventoryPage
 from app.ui.lot_balances_page import LotBalancesPage
 from app.ui.partners_page import PartnersPage
+from app.ui.print_enabled_pages import AccountsPageWithPrint, SalesAccountingPageWithPrint
+from app.ui.print_settings_page import PrintSettingsPage
 from app.ui.products_page import ProductsPage
 from app.ui.reports_page import ReportsPage
-from app.ui.settings_page import SettingsPage
 from app.ui.stock_card_page import StockCardPage
 from app.ui.transactions_list_page import TransactionsListPage
 from app.ui.warehouse_page import WarehousePage
@@ -57,6 +58,7 @@ class MainWindow(QMainWindow):
         warehouse_repository = WarehouseRepository(database)
         accounting_repository = AccountingRepository(database)
         invoice_repository = InvoiceRepository(database)
+        print_settings_repository = PrintSettingsRepository(database)
         crm_repository = CRMRepository(database, current_user)
         self.crm_sync = CRMCustomerSync(database, current_user)
 
@@ -92,7 +94,7 @@ class MainWindow(QMainWindow):
         if admin_repository.has_permission("sales"):
             self.add_page(
                 "المبيعات",
-                SalesAccountingPage(
+                SalesAccountingPageWithPrint(
                     sales_repository,
                     partner_repository,
                     product_repository,
@@ -102,7 +104,11 @@ class MainWindow(QMainWindow):
         if admin_repository.has_permission("accounts"):
             self.add_page(
                 "الحسابات",
-                AccountsPage(accounting_repository, partner_repository, invoice_repository),
+                AccountsPageWithPrint(
+                    accounting_repository,
+                    partner_repository,
+                    invoice_repository,
+                ),
             )
         if admin_repository.has_permission("stock_card"):
             self.add_page("كارت الصنف", StockCardPage(inventory_repository))
@@ -116,7 +122,10 @@ class MainWindow(QMainWindow):
         if admin_repository.has_permission("reports"):
             self.add_page("التقارير", ReportsPage(accounting_repository, partner_repository))
         if admin_repository.has_permission("settings"):
-            self.add_page("الإعدادات", SettingsPage(admin_repository))
+            self.add_page(
+                "الإعدادات",
+                PrintSettingsPage(print_settings_repository, admin_repository),
+            )
 
         if self.pages.count() == 0:
             empty_page = QWidget()
