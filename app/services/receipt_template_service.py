@@ -47,14 +47,21 @@ def build_sales_receipt_html(
             )
         )
 
-    logo_html = f'<img class="logo" src="{logo_url}">' if logo_url else ""
+    logo_html = (
+        f'<div class="logo-wrap"><img class="logo" width="105" src="{logo_url}"></div>'
+        if logo_url
+        else ""
+    )
     qr_html = ""
     if qr_url:
         qr_html = f"""
         <div class="payment">
             <div class="payment-title">الدفع عبر InstaPay</div>
-            <img class="qr" src="{qr_url}">
-            <div><strong>اسم المستفيد:</strong> {_text(settings.get('beneficiary_name'))}</div>
+            <img class="qr" width="116" src="{qr_url}">
+            <div class="beneficiary">
+                <strong>اسم المستفيد:</strong>
+                {_text(settings.get('beneficiary_name'))}
+            </div>
             <div class="handle">{_text(settings.get('instapay_handle'))}</div>
             <div class="hint">تأكد من اسم المستفيد قبل إتمام التحويل</div>
         </div>
@@ -79,43 +86,66 @@ def build_sales_receipt_html(
                 font-family: "DejaVu Sans", "Tahoma", "Arial";
                 color: #000;
                 background: #fff;
-                font-size: 9pt;
+                font-size: 10pt;
+                line-height: 1.25;
                 margin: 0;
             }}
             .center {{ text-align: center; }}
-            .logo {{ width: 42mm; max-height: 26mm; }}
-            .company {{ font-size: 14pt; font-weight: bold; margin: 2px 0; }}
-            .invoice-title {{ font-size: 12pt; font-weight: bold; margin: 5px 0; }}
-            .muted {{ font-size: 8pt; }}
-            .separator {{ border-top: 1px dashed #000; margin: 5px 0; }}
+            .logo-wrap {{ height: 82pt; margin: 0 0 2pt; text-align: center; }}
+            .logo {{ width: 105px; }}
+            .company {{ font-size: 13pt; font-weight: bold; margin: 2pt 0; }}
+            .address {{ font-size: 9pt; margin-top: 1pt; }}
+            .invoice-title {{
+                border: 1px solid #000;
+                font-size: 12pt;
+                font-weight: bold;
+                margin: 6pt 0 4pt;
+                padding: 3pt 0;
+            }}
+            .muted {{ direction: ltr; font-size: 8.5pt; margin-top: 1pt; }}
+            .separator {{ border-top: 1px dashed #000; margin: 4pt 0; }}
             .meta, .totals, .items {{ width: 100%; border-collapse: collapse; }}
-            .meta td {{ padding: 1px 0; vertical-align: top; }}
+            .meta td {{ padding: 1.5pt 1pt; vertical-align: top; }}
             .label {{ font-weight: bold; white-space: nowrap; }}
             .items th, .items td {{
                 border-bottom: 1px solid #000;
-                padding: 3px 2px;
+                padding: 3pt 1pt;
                 text-align: center;
                 vertical-align: top;
             }}
-            .items th {{ font-size: 8pt; }}
-            .items .product {{ width: 42%; text-align: right; }}
-            .code {{ font-size: 7pt; }}
-            .totals td {{ padding: 2px 0; font-size: 10pt; }}
+            .items th {{
+                border-bottom: 2px solid #000;
+                border-top: 1px solid #000;
+                font-size: 9pt;
+                font-weight: bold;
+            }}
+            .items .product {{ width: 40%; text-align: right; }}
+            .code {{ font-size: 7.5pt; }}
+            .totals {{ margin-top: 3pt; }}
+            .totals td {{ padding: 2pt 1pt; font-size: 10.5pt; }}
             .totals .value {{ text-align: left; font-weight: bold; }}
             .grand td {{ border-top: 2px solid #000; font-size: 12pt; font-weight: bold; }}
-            .payment {{ text-align: center; margin-top: 6px; }}
-            .payment-title {{ font-size: 11pt; font-weight: bold; }}
-            .qr {{ width: 47mm; max-height: 52mm; }}
-            .handle {{ direction: ltr; font-family: Arial; font-weight: bold; font-size: 9pt; }}
-            .hint {{ font-size: 7pt; margin-top: 2px; }}
-            .footer {{ text-align: center; font-weight: bold; margin-top: 7px; }}
+            .remaining td {{ border-bottom: 1px dashed #000; font-weight: bold; }}
+            .payment {{ text-align: center; margin-top: 7pt; }}
+            .payment-title {{ font-size: 10.5pt; font-weight: bold; margin-bottom: 2pt; }}
+            .qr {{ width: 116px; }}
+            .beneficiary {{ font-size: 8.5pt; margin-top: 2pt; }}
+            .handle {{
+                direction: ltr;
+                font-family: Arial;
+                font-weight: bold;
+                font-size: 9pt;
+                margin-top: 1pt;
+            }}
+            .hint {{ font-size: 7.5pt; margin-top: 2pt; }}
+            .footer {{ text-align: center; font-size: 9pt; font-weight: bold; margin-top: 5pt; }}
         </style>
     </head>
     <body>
         <div class="center">
             {logo_html}
             <div class="company">{_text(settings.get('company_name'))}</div>
-            <div>{_text(settings.get('address'))}</div>
+            <div class="address">{_text(settings.get('address'))}</div>
             <div class="muted">{_text(phones)}</div>
             <div class="invoice-title">فاتورة مبيعات</div>
         </div>
@@ -134,7 +164,7 @@ def build_sales_receipt_html(
         <table class="totals">
             <tr class="grand"><td>الإجمالي</td><td class="value">{invoice_total}</td></tr>
             <tr><td>المدفوع</td><td class="value">{invoice_paid}</td></tr>
-            <tr><td>المتبقي</td><td class="value">{invoice_remaining}</td></tr>
+            <tr class="remaining"><td>المتبقي</td><td class="value">{invoice_remaining}</td></tr>
             <tr><td>طريقة الدفع</td><td class="value">{payment_methods}</td></tr>
         </table>
         {qr_html}

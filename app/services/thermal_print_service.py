@@ -18,7 +18,7 @@ class ThermalPrintService:
         parent: QWidget | None = None,
     ) -> None:
         printer = self._printer(settings.get("printer_name", ""))
-        receipt_height = max(190.0, 165.0 + len(invoice.get("lines", [])) * 9.0)
+        receipt_height = max(145.0, 132.0 + len(invoice.get("lines", [])) * 9.0)
         page_size = QPageSize(
             QSizeF(self.PAPER_WIDTH_MM, receipt_height),
             QPageSize.Unit.Millimeter,
@@ -52,6 +52,12 @@ class ThermalPrintService:
                 logo_url=logo_url,
                 qr_url=qr_url,
             )
+        )
+        # QTextDocument otherwise keeps its desktop-sized default page and Qt scales the
+        # whole receipt down when it reaches an 80 mm printer.  Bind the document to the
+        # real printable rectangle so text and tables use the full paper width.
+        document.setPageSize(
+            printer.pageLayout().paintRect(QPageLayout.Unit.Point).size()
         )
 
         preview = QPrintPreviewDialog(printer, parent)

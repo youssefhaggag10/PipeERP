@@ -207,3 +207,7 @@ def test_print_defaults_and_receipt_template(accounting_data) -> None:
     assert "ahmed.a351054@instapay" in html
     assert "عميل &lt;اختبار&gt;" in html
     assert "75.00" in html
+    assert 'class="logo" width="105"' in html
+    assert 'class="qr" width="116"' in html
+    assert "font-size: 10pt" in html
+    assert "class=\"remaining\"" in html
