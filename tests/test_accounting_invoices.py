@@ -210,7 +210,7 @@ def test_print_defaults_and_receipt_template(accounting_data) -> None:
     assert "75.00" in html
     assert 'class="logo" width="105"' in html
     assert 'class="qr" width="116"' in html
-    assert "اسم المستفيد:" in html
+    assert "اسم المستفيد:" not in html
     assert 'class="company-en" dir="ltr">3A PIPES' in html
     assert 'class="product-head" width="40%" dir="rtl">الصنف' in html
     assert 'border: 1px solid #000' in html
@@ -218,7 +218,9 @@ def test_print_defaults_and_receipt_template(accounting_data) -> None:
     assert "<thead>" not in html
     assert "class=\"remaining\"" in html
     assert 'class="totals" width="100%"' in html
-    assert html.count('class="meta-spacer"') == 6
+    assert html.count('class="meta-spacer" width="8%"') == 6
+    assert html.count('class="meta-gap" width="3%"') == 6
+    assert "رقم الفاتورة:" not in html
     assert html.count('class="totals-spacer" width="9%"') == 8
     assert 'class="value total-content" width="42%"' in html
     assert 'class="label total-content" width="40%"' in html
