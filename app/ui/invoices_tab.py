@@ -14,9 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.repositories.invoice_repository import InvoiceRepository
-from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.services.invoice_service import INVOICE_STATUS_LABELS, PAYMENT_STATUS_LABELS
-from app.services.thermal_print_service import ThermalPrintService
 from app.utils.datetime_utils import format_egypt_datetime
 
 INVOICE_COLORS = {
@@ -38,8 +36,6 @@ class InvoicesTab(QWidget):
         super().__init__()
         self.repository = repository
         self.invoice_type = invoice_type
-        self.print_settings_repository = PrintSettingsRepository(repository.database)
-        self.print_service = ThermalPrintService()
         self.rows: list[dict] = []
         self.setLayoutDirection(Qt.RightToLeft)
 
@@ -83,14 +79,10 @@ class InvoicesTab(QWidget):
         refresh_button = QPushButton("تحديث")
         refresh_button.setObjectName("secondaryButton")
         refresh_button.clicked.connect(self.reload)
-        print_button = QPushButton("معاينة وطباعة الفاتورة")
-        print_button.clicked.connect(self.print_selected)
 
         actions = QHBoxLayout()
         actions.addWidget(post_button)
         actions.addWidget(payment_button)
-        if invoice_type == "sales":
-            actions.addWidget(print_button)
         actions.addWidget(cancel_button)
         actions.addWidget(refresh_button)
         actions.addStretch()
@@ -275,17 +267,3 @@ class InvoicesTab(QWidget):
             return
         self.reload()
         QMessageBox.information(self, "تم", "تم تسجيل الحركة المالية وتحديث حالة الدفع")
-
-    def print_selected(self) -> None:
-        row = self._selected()
-        if row is None:
-            return
-        if row["status"] != "posted":
-            QMessageBox.warning(self, "تنبيه", "يمكن طباعة فواتير المبيعات المعتمدة فقط")
-            return
-        try:
-            invoice = self.repository.get_sales_invoice_print_data(int(row["id"]))
-            settings = self.print_settings_repository.get_settings()
-            self.print_service.preview_sales_invoice(invoice, settings, self)
-        except ValueError as error:
-            QMessageBox.warning(self, "تنبيه", str(error))
