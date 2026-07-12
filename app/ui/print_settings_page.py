@@ -59,16 +59,16 @@ class PrintSettingsPage(SettingsPage):
 
         self.printer_input = QComboBox()
         self.printer_input.setEditable(True)
-        paper_width = QLineEdit("رول 80 مم — مساحة الطباعة الفعلية 72 مم")
+        paper_width = QLineEdit("A4 — 210 × 297 مم — رأسي")
         paper_width.setReadOnly(True)
 
-        printer_group = QGroupBox("الطابعة الحرارية")
+        printer_group = QGroupBox("طابعة فواتير A4")
         printer_form = QFormLayout(printer_group)
         printer_form.addRow("اسم الطابعة", self.printer_input)
         printer_form.addRow("المقاس", paper_width)
         printer_note = QLabel(
-            "الطول يُحسب تلقائيًا حسب محتوى الفاتورة. "
-            "لا يتم استخدام A4 أو طول ثابت للمتر أو المترين."
+            "يتم استخدام مقاس A4 القياسي بهوامش آمنة، ويمكن اختيار أي طابعة "
+            "مستندات مثبتة على Linux أو Windows."
         )
         printer_note.setWordWrap(True)
         printer_note.setObjectName("subtitleLabel")
@@ -212,7 +212,7 @@ class PrintSettingsPage(SettingsPage):
                     "footer": self.footer_input.toPlainText(),
                     "instapay_handle": self.instapay_input.text(),
                     "printer_name": self.printer_input.currentText(),
-                    "paper_width_mm": "80",
+                    "paper_width_mm": "210",
                 },
                 logo_source=self.logo_source,
                 qr_source=self.qr_source,

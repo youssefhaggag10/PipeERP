@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QMessageBox, QPushButton
 
 from app.repositories.print_settings_repository import PrintSettingsRepository
-from app.services.thermal_print_service import ThermalPrintService
+from app.services.a4_print_service import A4PrintService
 from app.ui.accounting_order_pages import SalesAccountingPage
 from app.ui.accounts_page import AccountsPage
 
@@ -9,9 +9,9 @@ from app.ui.accounts_page import AccountsPage
 class SalesAccountingPageWithPrint(SalesAccountingPage):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self._thermal_print_service = ThermalPrintService()
+        self._invoice_print_service = A4PrintService()
 
-        print_button = QPushButton("معاينة وطباعة فاتورة الأمر المحدد")
+        print_button = QPushButton("معاينة وطباعة فاتورة المبيعات A4")
         print_button.clicked.connect(self.preview_selected_invoice)
         self.layout().insertWidget(self.layout().count() - 1, print_button)
 
@@ -46,7 +46,7 @@ class SalesAccountingPageWithPrint(SalesAccountingPage):
             settings = PrintSettingsRepository(
                 self.sales_repository.database
             ).get_settings()
-            self._thermal_print_service.preview_sales_invoice(
+            self._invoice_print_service.preview_sales_invoice(
                 print_data,
                 settings,
                 self,
@@ -58,9 +58,9 @@ class SalesAccountingPageWithPrint(SalesAccountingPage):
 class AccountsPageWithPrint(AccountsPage):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self._thermal_print_service = ThermalPrintService()
+        self._invoice_print_service = A4PrintService()
 
-        print_button = QPushButton("معاينة وطباعة فاتورة المبيعات")
+        print_button = QPushButton("معاينة وطباعة فاتورة المبيعات A4")
         print_button.clicked.connect(self.preview_selected_sales_invoice)
 
         actions_item = self.sales_invoices_tab.layout().itemAt(1)
@@ -85,7 +85,7 @@ class AccountsPageWithPrint(AccountsPage):
             settings = PrintSettingsRepository(
                 self.invoice_repository.database
             ).get_settings()
-            self._thermal_print_service.preview_sales_invoice(
+            self._invoice_print_service.preview_sales_invoice(
                 print_data,
                 settings,
                 self,
