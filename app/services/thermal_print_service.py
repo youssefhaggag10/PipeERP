@@ -1,15 +1,32 @@
 from pathlib import Path
 
-from PySide6.QtCore import QMarginsF, QSizeF, QUrl
+from PySide6.QtCore import QMarginsF, QSizeF, Qt, QUrl
 from PySide6.QtGui import QImage, QPageLayout, QPageSize, QTextDocument
-from PySide6.QtPrintSupport import QPrinter, QPrinterInfo, QPrintPreviewDialog
-from PySide6.QtWidgets import QWidget
+from PySide6.QtPrintSupport import (
+    QPrintDialog,
+    QPrinter,
+    QPrinterInfo,
+    QPrintPreviewWidget,
+)
+from PySide6.QtWidgets import (
+    QDialog,
+    QHBoxLayout,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from app.services.receipt_template_service import build_sales_receipt_html
 
 
 class ThermalPrintService:
     PAPER_WIDTH_MM = 80.0
+    MEASURING_HEIGHT_MM = 500.0
+    SIDE_MARGIN_MM = 4.0
+    TOP_MARGIN_MM = 3.0
+    BOTTOM_MARGIN_MM = 3.0
+    MIN_RECEIPT_HEIGHT_MM = 120.0
+    HEIGHT_ALLOWANCE_MM = 10.0
 
     def preview_sales_invoice(
         self,
@@ -18,22 +35,46 @@ class ThermalPrintService:
         parent: QWidget | None = None,
     ) -> None:
         printer = self._printer(settings.get("printer_name", ""))
+        document = self._document(invoice, settings)
 
-        # Start with a tall page only to establish the real 80 mm printable width.
-        # The final page height is measured from the rendered document below.
-        measuring_page = QPageSize(
-            QSizeF(self.PAPER_WIDTH_MM, 500.0),
-            QPageSize.Unit.Millimeter,
-            "PipeERP-80mm-measure",
-            QPageSize.SizeMatchPolicy.ExactMatch,
-        )
-        printer.setPageSize(measuring_page)
-        printer.setPageMargins(
-            QMarginsF(4.0, 3.0, 4.0, 3.0),
-            QPageLayout.Unit.Millimeter,
-        )
-        printer.setFullPage(False)
+        # Prepare the initial preview geometry. The same geometry is applied again after
+        # the native print dialog closes because Windows printer drivers may reset custom
+        # roll dimensions when the selected printer changes.
+        self._prepare_document(printer, document)
 
+        dialog = QDialog(parent)
+        dialog.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        dialog.setWindowTitle(f"معاينة فاتورة {invoice['invoice_number']} — 80mm")
+        dialog.resize(900, 760)
+
+        preview = QPrintPreviewWidget(printer, dialog)
+        preview.setZoomMode(QPrintPreviewWidget.ZoomMode.FitToWidth)
+        preview.paintRequested.connect(
+            lambda requested_printer: self._render_document(requested_printer, document)
+        )
+
+        print_button = QPushButton("طباعة الفاتورة")
+        print_button.setDefault(True)
+        print_button.clicked.connect(
+            lambda: self._show_print_dialog(printer, document, dialog)
+        )
+        close_button = QPushButton("إغلاق")
+        close_button.setObjectName("secondaryButton")
+        close_button.clicked.connect(dialog.reject)
+
+        actions = QHBoxLayout()
+        actions.addStretch()
+        actions.addWidget(close_button)
+        actions.addWidget(print_button)
+
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(preview)
+        layout.addLayout(actions)
+
+        preview.updatePreview()
+        dialog.exec()
+
+    def _document(self, invoice: dict, settings: dict[str, str]) -> QTextDocument:
         document = QTextDocument()
         document.setDocumentMargin(0)
         logo_url = self._add_image_resource(
@@ -55,31 +96,88 @@ class ThermalPrintService:
                 qr_url=qr_url,
             )
         )
+        return document
+
+    def _show_print_dialog(
+        self,
+        printer: QPrinter,
+        document: QTextDocument,
+        parent: QWidget,
+    ) -> None:
+        print_dialog = QPrintDialog(printer, parent)
+        print_dialog.setWindowTitle("اختيار الطابعة — فاتورة 80mm")
+        if print_dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        # QPrintDialog can replace the page layout with the driver's default. Reapply the
+        # measured 80 mm roll immediately before painting to keep print and preview equal.
+        self._render_document(printer, document)
+
+    def _render_document(self, printer: QPrinter, document: QTextDocument) -> None:
+        self._prepare_document(printer, document)
+        document.print_(printer)
+
+    def _prepare_document(self, printer: QPrinter, document: QTextDocument) -> float:
+        self._apply_page_layout(printer, self.MEASURING_HEIGHT_MM, measuring=True)
 
         printable_width_points = printer.pageLayout().paintRect(
             QPageLayout.Unit.Point
         ).width()
         document.setTextWidth(printable_width_points)
         content_height_points = document.documentLayout().documentSize().height()
-        content_height_mm = content_height_points * 25.4 / 72.0
-        receipt_height_mm = max(120.0, content_height_mm + 10.0)
+        receipt_height_mm = max(
+            self.MIN_RECEIPT_HEIGHT_MM,
+            content_height_points * 25.4 / 72.0 + self.HEIGHT_ALLOWANCE_MM,
+        )
 
-        final_page = QPageSize(
-            QSizeF(self.PAPER_WIDTH_MM, receipt_height_mm),
+        self._apply_page_layout(printer, receipt_height_mm)
+        final_paint_rect = printer.pageLayout().paintRect(QPageLayout.Unit.Point)
+
+        # Some drivers clamp margins or custom width. If that happens, measure once more
+        # using the actual accepted width before locking the final page height.
+        if abs(final_paint_rect.width() - printable_width_points) > 0.5:
+            document.setTextWidth(final_paint_rect.width())
+            content_height_points = document.documentLayout().documentSize().height()
+            receipt_height_mm = max(
+                self.MIN_RECEIPT_HEIGHT_MM,
+                content_height_points * 25.4 / 72.0 + self.HEIGHT_ALLOWANCE_MM,
+            )
+            self._apply_page_layout(printer, receipt_height_mm)
+            final_paint_rect = printer.pageLayout().paintRect(QPageLayout.Unit.Point)
+
+        document.setPageSize(final_paint_rect.size())
+        return receipt_height_mm
+
+    def _apply_page_layout(
+        self,
+        printer: QPrinter,
+        height_mm: float,
+        *,
+        measuring: bool = False,
+    ) -> None:
+        page_name = "PipeERP-80mm-measure" if measuring else "PipeERP-80mm"
+        page_size = QPageSize(
+            QSizeF(self.PAPER_WIDTH_MM, height_mm),
             QPageSize.Unit.Millimeter,
-            "PipeERP-80mm",
+            page_name,
             QPageSize.SizeMatchPolicy.ExactMatch,
         )
-        printer.setPageSize(final_page)
-        document.setPageSize(
-            printer.pageLayout().paintRect(QPageLayout.Unit.Point).size()
+        margins = QMarginsF(
+            self.SIDE_MARGIN_MM,
+            self.TOP_MARGIN_MM,
+            self.SIDE_MARGIN_MM,
+            self.BOTTOM_MARGIN_MM,
         )
-
-        preview = QPrintPreviewDialog(printer, parent)
-        preview.setWindowTitle(f"معاينة فاتورة {invoice['invoice_number']} — 80mm")
-        preview.resize(900, 760)
-        preview.paintRequested.connect(document.print_)
-        preview.exec()
+        page_layout = QPageLayout(
+            page_size,
+            QPageLayout.Orientation.Portrait,
+            margins,
+            QPageLayout.Unit.Millimeter,
+        )
+        if not printer.setPageLayout(page_layout):
+            printer.setPageSize(page_size)
+            printer.setPageMargins(margins, QPageLayout.Unit.Millimeter)
+        printer.setFullPage(False)
 
     @staticmethod
     def _printer(configured_name: str) -> QPrinter:
