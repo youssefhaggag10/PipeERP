@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 from PySide6.QtCore import QMarginsF, QRectF, QSizeF, QTimer, QUrl
-from PySide6.QtGui import QImage, QPageLayout, QPageSize, QPainter, QTextDocument
+from PySide6.QtGui import (
+    QImage,
+    QPageLayout,
+    QPageSize,
+    QPainter,
+    QTextDocument,
+    QTextOption,
+)
 from PySide6.QtPrintSupport import (
     QPrinter,
     QPrinterInfo,
@@ -16,14 +24,22 @@ from app.services.receipt_template_service import build_sales_receipt_html
 
 
 class ThermalPrintService:
-    PAPER_WIDTH_MM = 80.0
-    PRINTABLE_WIDTH_MM = 72.0
-    SIDE_MARGIN_MM = 4.0
-    TOP_MARGIN_MM = 3.0
+    """Render and print an 80 mm receipt consistently on Linux and Windows.
+
+    Qt preview and physical printer paint devices do not necessarily expose the
+    same DPI or paper width.  The receipt is therefore rendered once to a 203
+    DPI image, then that exact image is fitted to the printer's real page.
+    """
+
+    ROLL_WIDTH_MM = 80.0
+    MAX_PRINTABLE_WIDTH_MM = 72.0
+    MIN_THERMAL_WIDTH_MM = 50.0
+    MAX_THERMAL_WIDTH_MM = 90.0
+    MIN_SIDE_MARGIN_MM = 1.5
+    TOP_MARGIN_MM = 2.5
     BOTTOM_MARGIN_MM = 4.0
-    HEIGHT_ALLOWANCE_MM = 6.0
     MIN_RECEIPT_HEIGHT_MM = 120.0
-    PRINTER_DPI = 203
+    RENDER_DPI = 203
 
     def preview_sales_invoice(
         self,
@@ -31,20 +47,25 @@ class ThermalPrintService:
         settings: dict[str, str],
         parent: QWidget | None = None,
     ) -> None:
-        document = self._build_document(invoice, settings)
-        receipt_height_mm = self._measure_receipt_height(document)
         printer = self._create_printer(str(settings.get("printer_name", "")))
-        self._apply_page_layout(printer, receipt_height_mm)
+        paper_width_mm = self._thermal_page_width_mm(printer)
+        content_width_mm = self._content_width_mm(paper_width_mm)
+        document = self._build_document(invoice, settings)
+        receipt_image = self._render_receipt_image(document, content_width_mm)
+        receipt_height_mm = max(
+            self.MIN_RECEIPT_HEIGHT_MM,
+            self.TOP_MARGIN_MM + self._pixels_to_mm(receipt_image.height()) + self.BOTTOM_MARGIN_MM,
+        )
+        self._apply_page_layout(printer, paper_width_mm, receipt_height_mm)
 
         preview = QPrintPreviewDialog(printer, parent)
-        preview.setWindowTitle(
-            f"معاينة فاتورة {invoice['invoice_number']} — رول 80 مم"
-        )
+        preview.setWindowTitle(f"معاينة فاتورة {invoice['invoice_number']} — رول 80 مم")
         preview.resize(1000, 820)
         preview.paintRequested.connect(
-            lambda requested_printer: self._paint_document(
+            lambda requested_printer: self._paint_receipt_image(
                 requested_printer,
-                document,
+                receipt_image,
+                paper_width_mm,
                 receipt_height_mm,
             )
         )
@@ -53,9 +74,7 @@ class ThermalPrintService:
         if preview_widget is not None:
             QTimer.singleShot(
                 0,
-                lambda: preview_widget.setZoomMode(
-                    QPrintPreviewWidget.ZoomMode.FitInView
-                ),
+                lambda: preview_widget.setZoomMode(QPrintPreviewWidget.ZoomMode.FitInView),
             )
 
         preview.exec()
@@ -67,6 +86,10 @@ class ThermalPrintService:
     ) -> QTextDocument:
         document = QTextDocument()
         document.setDocumentMargin(0)
+        text_option = document.defaultTextOption()
+        text_option.setUseDesignMetrics(True)
+        text_option.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+        document.setDefaultTextOption(text_option)
 
         logo_url = self._add_image_resource(
             document,
@@ -90,67 +113,80 @@ class ThermalPrintService:
         )
         return document
 
-    def _measure_receipt_height(self, document: QTextDocument) -> float:
-        printable_width_points = self.PRINTABLE_WIDTH_MM * 72.0 / 25.4
-        document.setPageSize(QSizeF(printable_width_points, 100000.0))
-        document.setTextWidth(printable_width_points)
-
-        content_height_points = max(
+    def _render_receipt_image(
+        self,
+        document: QTextDocument,
+        content_width_mm: float,
+    ) -> QImage:
+        width_points = self._mm_to_points(content_width_mm)
+        document.setTextWidth(width_points)
+        document.setPageSize(QSizeF(width_points, 100000.0))
+        height_points = max(
             1.0,
             float(document.documentLayout().documentSize().height()),
         )
-        document.setPageSize(
-            QSizeF(printable_width_points, content_height_points)
-        )
+        document.setPageSize(QSizeF(width_points, height_points))
 
-        content_height_mm = content_height_points * 25.4 / 72.0
-        return max(
-            self.MIN_RECEIPT_HEIGHT_MM,
-            content_height_mm
-            + self.TOP_MARGIN_MM
-            + self.BOTTOM_MARGIN_MM
-            + self.HEIGHT_ALLOWANCE_MM,
+        width_pixels = max(1, self._mm_to_pixels(content_width_mm))
+        height_pixels = max(
+            1,
+            int(math.ceil(height_points * self.RENDER_DPI / 72.0)),
         )
+        image = QImage(width_pixels, height_pixels, QImage.Format.Format_RGB32)
+        image.fill(0xFFFFFFFF)
+        dots_per_meter = round(self.RENDER_DPI / 0.0254)
+        image.setDotsPerMeterX(dots_per_meter)
+        image.setDotsPerMeterY(dots_per_meter)
 
-    def _paint_document(
+        painter = QPainter(image)
+        try:
+            painter.scale(self.RENDER_DPI / 72.0, self.RENDER_DPI / 72.0)
+            document.drawContents(
+                painter,
+                QRectF(0.0, 0.0, width_points, height_points),
+            )
+        finally:
+            painter.end()
+        return image
+
+    def _paint_receipt_image(
         self,
         printer: QPrinter,
-        document: QTextDocument,
+        receipt_image: QImage,
+        requested_paper_width_mm: float,
         receipt_height_mm: float,
     ) -> None:
-        self._apply_page_layout(printer, receipt_height_mm)
-
-        printable_width_points = self.PRINTABLE_WIDTH_MM * 72.0 / 25.4
-        document.setTextWidth(printable_width_points)
-        content_height_points = max(
-            1.0,
-            float(document.documentLayout().documentSize().height()),
-        )
-        document.setPageSize(
-            QSizeF(printable_width_points, content_height_points)
+        self._apply_page_layout(
+            printer,
+            requested_paper_width_mm,
+            receipt_height_mm,
         )
 
         painter = QPainter()
         if not painter.begin(printer):
-            return
+            raise RuntimeError("تعذر بدء الطباعة. راجع اتصال الطابعة والدرايفر.")
 
         try:
-            dpi_x = max(72, painter.device().logicalDpiX())
-            dpi_y = max(72, painter.device().logicalDpiY())
-            painter.scale(dpi_x / 72.0, dpi_y / 72.0)
+            viewport = QRectF(painter.viewport())
+            actual_width_mm = self._page_width_mm(printer)
+            if actual_width_mm <= 0.0:
+                actual_width_mm = requested_paper_width_mm
 
-            side_margin_points = self.SIDE_MARGIN_MM * 72.0 / 25.4
-            top_margin_points = self.TOP_MARGIN_MM * 72.0 / 25.4
-            painter.translate(side_margin_points, top_margin_points)
+            pixels_per_mm = viewport.width() / actual_width_mm
+            content_width_mm = self._content_width_mm(actual_width_mm)
+            target_width = min(
+                viewport.width(),
+                content_width_mm * pixels_per_mm,
+            )
+            scale = target_width / max(1, receipt_image.width())
+            target_height = receipt_image.height() * scale
+            left = viewport.left() + (viewport.width() - target_width) / 2.0
+            top = viewport.top() + self.TOP_MARGIN_MM * pixels_per_mm
 
-            document.drawContents(
-                painter,
-                QRectF(
-                    0.0,
-                    0.0,
-                    printable_width_points,
-                    content_height_points,
-                ),
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
+            painter.drawImage(
+                QRectF(left, top, target_width, target_height),
+                receipt_image,
             )
         finally:
             painter.end()
@@ -158,13 +194,14 @@ class ThermalPrintService:
     def _apply_page_layout(
         self,
         printer: QPrinter,
+        paper_width_mm: float,
         receipt_height_mm: float,
-    ) -> None:
-        printer.setResolution(self.PRINTER_DPI)
+    ) -> bool:
+        printer.setResolution(self.RENDER_DPI)
         page_size = QPageSize(
-            QSizeF(self.PAPER_WIDTH_MM, receipt_height_mm),
+            QSizeF(paper_width_mm, receipt_height_mm),
             QPageSize.Unit.Millimeter,
-            "PipeERP-80mm-dynamic",
+            "PipeERP-thermal-receipt",
             QPageSize.SizeMatchPolicy.ExactMatch,
         )
         page_layout = QPageLayout(
@@ -173,13 +210,18 @@ class ThermalPrintService:
             QMarginsF(0.0, 0.0, 0.0, 0.0),
             QPageLayout.Unit.Millimeter,
         )
-        if not printer.setPageLayout(page_layout):
-            printer.setPageSize(page_size)
-            printer.setPageMargins(
-                QMarginsF(0.0, 0.0, 0.0, 0.0),
-                QPageLayout.Unit.Millimeter,
+        accepted = bool(printer.setPageLayout(page_layout))
+        if not accepted:
+            size_accepted = bool(printer.setPageSize(page_size))
+            margins_accepted = bool(
+                printer.setPageMargins(
+                    QMarginsF(0.0, 0.0, 0.0, 0.0),
+                    QPageLayout.Unit.Millimeter,
+                )
             )
+            accepted = size_accepted and margins_accepted
         printer.setFullPage(True)
+        return accepted
 
     def _create_printer(self, configured_name: str) -> QPrinter:
         configured = configured_name.strip().casefold()
@@ -190,12 +232,47 @@ class ThermalPrintService:
                         printer_info,
                         QPrinter.PrinterMode.HighResolution,
                     )
-                    printer.setResolution(self.PRINTER_DPI)
+                    printer.setResolution(self.RENDER_DPI)
                     return printer
 
+            raise ValueError(
+                "الطابعة المحفوظة غير موجودة حاليًا. اختر اسم الطابعة الصحيح من إعدادات الطباعة."
+            )
+
         printer = QPrinter(QPrinter.PrinterMode.HighResolution)
-        printer.setResolution(self.PRINTER_DPI)
+        printer.setResolution(self.RENDER_DPI)
         return printer
+
+    def _thermal_page_width_mm(self, printer: QPrinter) -> float:
+        width_mm = self._page_width_mm(printer)
+        if self.MIN_THERMAL_WIDTH_MM <= width_mm <= self.MAX_THERMAL_WIDTH_MM:
+            return width_mm
+        return self.ROLL_WIDTH_MM
+
+    @classmethod
+    def _content_width_mm(cls, page_width_mm: float) -> float:
+        available_width = max(
+            1.0,
+            page_width_mm - (2.0 * cls.MIN_SIDE_MARGIN_MM),
+        )
+        return min(cls.MAX_PRINTABLE_WIDTH_MM, available_width)
+
+    @staticmethod
+    def _page_width_mm(printer: QPrinter) -> float:
+        rect = printer.pageLayout().fullRect(QPageLayout.Unit.Millimeter)
+        return float(rect.width())
+
+    @classmethod
+    def _mm_to_pixels(cls, value: float) -> int:
+        return round(value * cls.RENDER_DPI / 25.4)
+
+    @staticmethod
+    def _mm_to_points(value: float) -> float:
+        return value * 72.0 / 25.4
+
+    @classmethod
+    def _pixels_to_mm(cls, value: int) -> float:
+        return value * 25.4 / cls.RENDER_DPI
 
     @staticmethod
     def _add_image_resource(
@@ -233,10 +310,7 @@ class ThermalPrintService:
         for y in range(0, height, step):
             for x in range(0, width, step):
                 color = image.pixelColor(x, y)
-                if (
-                    color.alpha() > 10
-                    and min(color.red(), color.green(), color.blue()) < 245
-                ):
+                if color.alpha() > 10 and min(color.red(), color.green(), color.blue()) < 245:
                     left = min(left, x)
                     top = min(top, y)
                     right = max(right, x)
