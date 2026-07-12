@@ -22,6 +22,18 @@ def _company_parts(value: object) -> tuple[str, str]:
     return text, ""
 
 
+def _meta_row(label: str, value: str, *, rtl_value: bool = False) -> str:
+    value_class = "meta-value rtl-value" if rtl_value else "meta-value ltr-value"
+    value_dir = "rtl" if rtl_value else "ltr"
+    return f"""
+        <tr>
+            <td class="{value_class}" dir="{value_dir}">{value}</td>
+            <td class="meta-colon">:</td>
+            <td class="meta-label" dir="rtl">{label}</td>
+        </tr>
+    """
+
+
 def build_sales_receipt_html(
     invoice: dict,
     settings: dict[str, str],
@@ -35,7 +47,7 @@ def build_sales_receipt_html(
     company_ar, company_en = _company_parts(settings.get("company_name"))
 
     line_rows: list[str] = []
-    for index, line in enumerate(invoice.get("lines", []), start=1):
+    for line in invoice.get("lines", []):
         line_rows.append(
             """
             <tr>
@@ -46,12 +58,11 @@ def build_sales_receipt_html(
                     <div class="unit" dir="rtl">{unit}</div>
                 </td>
                 <td class="product-cell" dir="rtl">
-                    <div class="product-name">{index}. {name}</div>
+                    <div class="product-name">{name}</div>
                     <div class="product-code" dir="ltr">{code}</div>
                 </td>
             </tr>
             """.format(
-                index=index,
                 name=_text(line.get("name")),
                 code=_text(line.get("code")),
                 quantity=float(line.get("quantity", 0)),
@@ -76,9 +87,6 @@ def build_sales_receipt_html(
                 <span dir="ltr">InstaPay</span>
             </div>
             <img class="qr" width="116" src="{qr_url}">
-            <div class="beneficiary" dir="rtl">
-                <strong>اسم المستفيد:</strong> {_text(settings.get('beneficiary_name'))}
-            </div>
             <div class="handle" dir="ltr">{_text(settings.get('instapay_handle'))}</div>
             <div class="hint" dir="rtl">تأكد من اسم المستفيد قبل إتمام التحويل</div>
         </div>
@@ -95,15 +103,6 @@ def build_sales_receipt_html(
     invoice_remaining = _money(invoice.get("remaining"))
     payment_methods = _text(invoice.get("payment_methods") or "—")
 
-    customer_phone_row = ""
-    if customer_phone:
-        customer_phone_row = f"""
-        <tr>
-            <td class="meta-value ltr-value" dir="ltr">{customer_phone}</td>
-            <td class="meta-label" dir="rtl">الهاتف:</td>
-        </tr>
-        """
-
     company_html = (
         f"""
         <table class="company-line" dir="ltr">
@@ -117,6 +116,15 @@ def build_sales_receipt_html(
         if company_en
         else f'<div class="company-single" dir="rtl">{_text(company_ar)}</div>'
     )
+
+    meta_rows = [
+        _meta_row("رقم الفاتورة", invoice_number),
+        _meta_row("رقم الأمر", order_number),
+        _meta_row("التاريخ", invoice_date),
+        _meta_row("العميل", customer_name, rtl_value=True),
+    ]
+    if customer_phone:
+        meta_rows.append(_meta_row("الهاتف", customer_phone))
 
     return f"""
     <!DOCTYPE html>
@@ -139,7 +147,6 @@ def build_sales_receipt_html(
             .company-line {{
                 width: 100%;
                 border-collapse: collapse;
-                table-layout: auto;
                 margin: 1pt 0;
             }}
             .company-line td {{
@@ -167,12 +174,19 @@ def build_sales_receipt_html(
                 direction: rtl;
             }}
 
-            .meta {{ width: 100%; border-collapse: collapse; direction: ltr; margin-bottom: 4pt; }}
-            .meta td {{ padding: 1.5pt 1pt; vertical-align: top; border: 0; }}
-            .meta-value {{ width: 66%; }}
-            .meta-label {{ width: 34%; text-align: right; font-weight: 900; white-space: nowrap; }}
+            .meta {{
+                width: 100%;
+                border-collapse: collapse;
+                direction: ltr;
+                margin: 0 0 5pt;
+                table-layout: fixed;
+            }}
+            .meta td {{ padding: 1.5pt 0; vertical-align: middle; border: 0; }}
+            .meta-value {{ width: 55%; }}
+            .meta-colon {{ width: 5%; text-align: center; font-weight: 900; }}
+            .meta-label {{ width: 40%; text-align: right; font-weight: 900; white-space: nowrap; }}
             .ltr-value {{ direction: ltr; text-align: left; font-family: "Arial", "DejaVu Sans"; }}
-            .rtl-value {{ direction: rtl; text-align: right; }}
+            .rtl-value {{ direction: rtl; text-align: left; }}
 
             .items {{
                 width: 100%;
@@ -193,10 +207,10 @@ def build_sales_receipt_html(
                 text-align: center;
                 white-space: nowrap;
             }}
-            .total-col {{ width: 24%; }}
-            .price-col {{ width: 20%; }}
-            .qty-col {{ width: 16%; }}
-            .product-col {{ width: 40%; text-align: right !important; }}
+            .total-col {{ width: 22%; }}
+            .price-col {{ width: 18%; }}
+            .qty-col {{ width: 14%; }}
+            .product-col {{ width: 46%; text-align: right !important; }}
             .money-cell {{
                 direction: ltr;
                 text-align: center;
@@ -212,10 +226,17 @@ def build_sales_receipt_html(
             .product-name {{ font-size: 8pt; font-weight: 900; }}
             .product-code {{ direction: ltr; text-align: right; font-family: "Arial", "DejaVu Sans"; font-size: 7pt; margin-top: 1pt; }}
 
-            .totals {{ width: 100%; border-collapse: collapse; direction: ltr; margin-top: 5pt; }}
+            .totals-wrap {{ text-align: center; margin-top: 6pt; }}
+            .totals {{
+                width: 76%;
+                margin-left: auto;
+                margin-right: auto;
+                border-collapse: collapse;
+                direction: ltr;
+            }}
             .totals td {{ padding: 2pt 1pt; }}
             .totals .value {{
-                width: 55%;
+                width: 54%;
                 direction: ltr;
                 text-align: left;
                 font-family: "Arial", "DejaVu Sans";
@@ -223,7 +244,8 @@ def build_sales_receipt_html(
                 font-weight: 900;
                 white-space: nowrap;
             }}
-            .totals .label {{ width: 45%; direction: rtl; text-align: right; font-size: 10pt; font-weight: 900; }}
+            .totals .colon {{ width: 6%; text-align: center; font-weight: 900; }}
+            .totals .label {{ width: 40%; direction: rtl; text-align: right; font-size: 10pt; font-weight: 900; }}
             .totals .grand td {{ border-top: 2px solid #000; font-size: 11.5pt; }}
             .totals .remaining td {{ border-bottom: 1px dashed #000; }}
             .method-value {{ direction: rtl !important; text-align: left !important; font-family: "DejaVu Sans", "Tahoma" !important; font-size: 9pt !important; }}
@@ -232,7 +254,6 @@ def build_sales_receipt_html(
             .payment-title {{ font-size: 10pt; font-weight: 900; margin-bottom: 2pt; }}
             .payment-title span {{ margin: 0 1pt; }}
             .qr {{ width: 116px; }}
-            .beneficiary {{ direction: rtl; text-align: center; font-size: 8.2pt; margin-top: 2pt; }}
             .handle {{ direction: ltr; text-align: center; font-family: "Arial", "DejaVu Sans"; font-weight: 900; font-size: 8.8pt; margin-top: 1pt; }}
             .hint {{ direction: rtl; text-align: center; font-size: 7.2pt; margin-top: 2pt; }}
             .footer-divider {{ border-top: 1px dashed #000; margin-top: 5pt; }}
@@ -249,19 +270,15 @@ def build_sales_receipt_html(
         </div>
 
         <table class="meta" dir="ltr">
-            <tr><td class="meta-value ltr-value" dir="ltr">{invoice_number}</td><td class="meta-label" dir="rtl">رقم الفاتورة:</td></tr>
-            <tr><td class="meta-value ltr-value" dir="ltr">{order_number}</td><td class="meta-label" dir="rtl">رقم الأمر:</td></tr>
-            <tr><td class="meta-value ltr-value" dir="ltr">{invoice_date}</td><td class="meta-label" dir="rtl">التاريخ:</td></tr>
-            <tr><td class="meta-value rtl-value" dir="rtl">{customer_name}</td><td class="meta-label" dir="rtl">العميل:</td></tr>
-            {customer_phone_row}
+            {''.join(meta_rows)}
         </table>
 
         <table class="items" dir="ltr">
             <colgroup>
-                <col style="width:24%">
-                <col style="width:20%">
-                <col style="width:16%">
-                <col style="width:40%">
+                <col style="width:22%">
+                <col style="width:18%">
+                <col style="width:14%">
+                <col style="width:46%">
             </colgroup>
             <tr>
                 <th class="total-col" dir="rtl">الإجمالي</th>
@@ -272,12 +289,14 @@ def build_sales_receipt_html(
             {''.join(line_rows)}
         </table>
 
-        <table class="totals" dir="ltr">
-            <tr class="grand"><td class="value" dir="ltr">{invoice_total}</td><td class="label" dir="rtl">الإجمالي</td></tr>
-            <tr><td class="value" dir="ltr">{invoice_paid}</td><td class="label" dir="rtl">المدفوع</td></tr>
-            <tr class="remaining"><td class="value" dir="ltr">{invoice_remaining}</td><td class="label" dir="rtl">المتبقي</td></tr>
-            <tr><td class="value method-value" dir="rtl">{payment_methods}</td><td class="label" dir="rtl">طريقة الدفع</td></tr>
-        </table>
+        <div class="totals-wrap">
+            <table class="totals" dir="ltr">
+                <tr class="grand"><td class="value" dir="ltr">{invoice_total}</td><td class="colon">:</td><td class="label" dir="rtl">الإجمالي</td></tr>
+                <tr><td class="value" dir="ltr">{invoice_paid}</td><td class="colon">:</td><td class="label" dir="rtl">المدفوع</td></tr>
+                <tr class="remaining"><td class="value" dir="ltr">{invoice_remaining}</td><td class="colon">:</td><td class="label" dir="rtl">المتبقي</td></tr>
+                <tr><td class="value method-value" dir="rtl">{payment_methods}</td><td class="colon">:</td><td class="label" dir="rtl">طريقة الدفع</td></tr>
+            </table>
+        </div>
 
         {qr_html}
         <div class="footer-divider"></div>
