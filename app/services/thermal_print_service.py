@@ -18,14 +18,16 @@ class ThermalPrintService:
         parent: QWidget | None = None,
     ) -> None:
         printer = self._printer(settings.get("printer_name", ""))
-        receipt_height = max(190.0, 165.0 + len(invoice.get("lines", [])) * 9.0)
-        page_size = QPageSize(
-            QSizeF(self.PAPER_WIDTH_MM, receipt_height),
+
+        # Start with a tall page only to establish the real 80 mm printable width.
+        # The final page height is measured from the rendered document below.
+        measuring_page = QPageSize(
+            QSizeF(self.PAPER_WIDTH_MM, 500.0),
             QPageSize.Unit.Millimeter,
-            "PipeERP-80mm",
+            "PipeERP-80mm-measure",
             QPageSize.SizeMatchPolicy.ExactMatch,
         )
-        printer.setPageSize(page_size)
+        printer.setPageSize(measuring_page)
         printer.setPageMargins(
             QMarginsF(4.0, 3.0, 4.0, 3.0),
             QPageLayout.Unit.Millimeter,
@@ -52,6 +54,25 @@ class ThermalPrintService:
                 logo_url=logo_url,
                 qr_url=qr_url,
             )
+        )
+
+        printable_width_points = printer.pageLayout().paintRect(
+            QPageLayout.Unit.Point
+        ).width()
+        document.setTextWidth(printable_width_points)
+        content_height_points = document.documentLayout().documentSize().height()
+        content_height_mm = content_height_points * 25.4 / 72.0
+        receipt_height_mm = max(120.0, content_height_mm + 10.0)
+
+        final_page = QPageSize(
+            QSizeF(self.PAPER_WIDTH_MM, receipt_height_mm),
+            QPageSize.Unit.Millimeter,
+            "PipeERP-80mm",
+            QPageSize.SizeMatchPolicy.ExactMatch,
+        )
+        printer.setPageSize(final_page)
+        document.setPageSize(
+            printer.pageLayout().paintRect(QPageLayout.Unit.Point).size()
         )
 
         preview = QPrintPreviewDialog(printer, parent)
