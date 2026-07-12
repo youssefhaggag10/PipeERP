@@ -29,7 +29,7 @@ class ThermalPrintService:
         )
         printer.setPageSize(measuring_page)
         printer.setPageMargins(
-            QMarginsF(4.0, 3.0, 4.0, 3.0),
+            QMarginsF(2.5, 3.0, 2.5, 3.0),
             QPageLayout.Unit.Millimeter,
         )
         printer.setFullPage(False)
