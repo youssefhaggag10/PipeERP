@@ -16,7 +16,6 @@ from app.repositories.crm_repository import CRMRepository
 from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.invoice_repository import InvoiceRepository
 from app.repositories.partner_repository import PartnerRepository
-from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.repositories.product_repository import ProductRepository
 from app.repositories.purchase_repository import PurchaseRepository
 from app.repositories.sales_repository import SalesRepository
@@ -58,7 +57,6 @@ class MainWindow(QMainWindow):
         warehouse_repository = WarehouseRepository(database)
         accounting_repository = AccountingRepository(database)
         invoice_repository = InvoiceRepository(database)
-        print_settings_repository = PrintSettingsRepository(database)
         crm_repository = CRMRepository(database, current_user)
         self.crm_sync = CRMCustomerSync(database, current_user)
 
@@ -118,10 +116,7 @@ class MainWindow(QMainWindow):
         if admin_repository.has_permission("reports"):
             self.add_page("التقارير", ReportsPage(accounting_repository, partner_repository))
         if admin_repository.has_permission("settings"):
-            self.add_page(
-                "الإعدادات",
-                SettingsPage(print_settings_repository, admin_repository),
-            )
+            self.add_page("الإعدادات", SettingsPage(admin_repository))
 
         if self.pages.count() == 0:
             empty_page = QWidget()
