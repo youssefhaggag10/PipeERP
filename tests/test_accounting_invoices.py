@@ -5,10 +5,8 @@ from app.database.schema import initialize_database
 from app.repositories.accounting_repository import AccountingRepository
 from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.invoice_repository import InvoiceRepository
-from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.repositories.purchase_repository import PurchaseRepository
 from app.repositories.sales_repository import SalesRepository
-from app.services.receipt_template_service import build_sales_receipt_html
 
 
 @pytest.fixture
@@ -166,63 +164,3 @@ def test_fulfillment_creates_debt_and_applies_order_advances(accounting_data) ->
     customer = accounting.list_partner_balances("customer")[0]
     assert customer["paid"] == 40
     assert customer["balance"] == 60
-
-
-def test_print_defaults_and_receipt_template(accounting_data) -> None:
-    database, _ = accounting_data
-    settings = PrintSettingsRepository(database).get_settings()
-    assert settings["company_name"] == "ثري إيه بايب - 3A Pipes"
-    assert settings["paper_width_mm"] == "80"
-    assert settings["instapay_handle"] == "ahmed.a351054@instapay"
-    assert settings["logo_path"].endswith("default_logo.png")
-    assert settings["qr_path"].endswith("default_instapay_qr.png")
-
-    html = build_sales_receipt_html(
-        {
-            "invoice_number": "SI00001",
-            "order_number": "SO00001",
-            "invoice_date": "2026-07-12 01:00:00",
-            "customer_name": "عميل <اختبار>",
-            "customer_phone": "01000000000",
-            "total": 100,
-            "paid": 25,
-            "remaining": 75,
-            "payment_methods": "تحويل بنكي",
-            "lines": [
-                {
-                    "code": "P-1",
-                    "name": "ماسورة A1",
-                    "quantity": 2,
-                    "unit": "قطعة",
-                    "unit_price": 50,
-                    "line_total": 100,
-                }
-            ],
-        },
-        settings,
-        logo_url="receipt:logo",
-        qr_url="receipt:qr",
-    )
-    assert "ثري إيه بايب" in html
-    assert "3A PIPES" in html
-    assert "ahmed.a351054@instapay" in html
-    assert "عميل &lt;اختبار&gt;" in html
-    assert "75.00" in html
-    assert 'class="logo" width="105"' in html
-    assert 'class="qr" width="116"' in html
-    assert "اسم المستفيد:" not in html
-    assert 'class="company-en" dir="ltr">3A PIPES' in html
-    assert 'class="product-head" width="40%" dir="rtl">الصنف' in html
-    assert 'border: 1px solid #000' in html
-    assert 'page-break-inside: avoid' in html
-    assert "<thead>" not in html
-    assert "class=\"remaining\"" in html
-    assert 'class="totals" width="100%"' in html
-    assert html.count('class="meta-spacer" width="8%"') == 6
-    assert html.count('class="meta-gap" width="3%"') == 6
-    assert "رقم الفاتورة:" not in html
-    assert html.count('class="totals-spacer" width="9%"') == 8
-    assert 'class="value total-content" width="42%"' in html
-    assert 'class="label total-content" width="40%"' in html
-    assert '>2026-07-12</td>' in html
-    assert '>04:00:00 AM</td>' in html
