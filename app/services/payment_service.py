@@ -7,9 +7,10 @@ def post_order_payment(
     transaction_type: str,
     partner_id: int,
     amount: float,
-    reference_type: str,
-    reference_id: int,
+    reference_type: str | None,
+    reference_id: int | None,
     notes: str = "",
+    payment_method: str = "نقدي",
 ) -> int:
     if amount <= 0:
         raise ValueError("قيمة الدفع يجب أن تكون أكبر من صفر")
@@ -24,15 +25,16 @@ def post_order_payment(
         """
         INSERT INTO payment_transactions(
             transaction_number, transaction_type, partner_id, amount,
-            reference_type, reference_id, notes
+            payment_method, reference_type, reference_id, notes
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             transaction_number,
             transaction_type,
             partner_id,
             amount,
+            payment_method.strip() or "نقدي",
             reference_type,
             reference_id,
             notes.strip(),

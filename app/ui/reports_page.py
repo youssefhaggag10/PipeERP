@@ -165,7 +165,9 @@ class ReportsPage(QWidget):
         if not self.current_columns:
             QMessageBox.warning(self, "تنبيه", "أنشئ التقرير أولًا")
             return
-        default_name = f"{self.report_type.currentData()}_{QDate.currentDate().toString('yyyyMMdd')}.xlsx"
+        report_key = self.report_type.currentData()
+        date_stamp = QDate.currentDate().toString("yyyyMMdd")
+        default_name = f"{report_key}_{date_stamp}.xlsx"
         path, _ = QFileDialog.getSaveFileName(
             self,
             "حفظ تقرير Excel",

@@ -12,8 +12,12 @@ class AccountingRepository:
         row = self.database.fetch_one(
             """
             SELECT
-                COALESCE((SELECT SUM(line_total) FROM sales_order_lines), 0) AS sales_total,
-                COALESCE((SELECT SUM(line_total) FROM purchase_order_lines), 0) AS purchases_total,
+                COALESCE((
+                    SELECT SUM(total) FROM sales_invoices WHERE status = 'posted'
+                ), 0) AS sales_total,
+                COALESCE((
+                    SELECT SUM(total) FROM purchase_invoices WHERE status = 'posted'
+                ), 0) AS purchases_total,
                 COALESCE((
                     SELECT SUM(amount) FROM payment_transactions
                     WHERE transaction_type = 'customer_receipt'
@@ -29,19 +33,75 @@ class AccountingRepository:
                 COALESCE((
                     SELECT SUM(opening_balance) FROM partners
                     WHERE partner_type = 'supplier' AND is_active = 1
-                ), 0) AS supplier_opening
+                ), 0) AS supplier_opening,
+                COALESCE((
+                    SELECT SUM(pt.amount)
+                    FROM payment_transactions pt
+                    WHERE pt.transaction_type = 'customer_receipt'
+                      AND (
+                          pt.reference_id IS NULL
+                          OR EXISTS (
+                              SELECT 1 FROM sales_invoices si
+                              WHERE si.status = 'posted'
+                                AND (
+                                    si.id = pt.sales_invoice_id
+                                    OR si.sales_order_id = pt.reference_id
+                                )
+                          )
+                      )
+                ), 0) AS customer_applied,
+                COALESCE((
+                    SELECT SUM(pt.amount)
+                    FROM payment_transactions pt
+                    WHERE pt.transaction_type = 'supplier_payment'
+                      AND (
+                          pt.reference_id IS NULL
+                          OR EXISTS (
+                              SELECT 1 FROM purchase_invoices pi
+                              WHERE pi.status = 'posted'
+                                AND (
+                                    pi.id = pt.purchase_invoice_id
+                                    OR pi.purchase_order_id = pt.reference_id
+                                )
+                          )
+                      )
+                ), 0) AS supplier_applied,
+                COALESCE((
+                    SELECT SUM(pt.amount)
+                    FROM payment_transactions pt
+                    WHERE pt.transaction_type = 'customer_receipt'
+                      AND pt.reference_type = 'sale'
+                      AND pt.reference_id IS NOT NULL
+                      AND NOT EXISTS (
+                          SELECT 1 FROM sales_invoices si
+                          WHERE si.sales_order_id = pt.reference_id
+                            AND si.status = 'posted'
+                      )
+                ), 0) AS customer_advances,
+                COALESCE((
+                    SELECT SUM(pt.amount)
+                    FROM payment_transactions pt
+                    WHERE pt.transaction_type = 'supplier_payment'
+                      AND pt.reference_type = 'purchase'
+                      AND pt.reference_id IS NOT NULL
+                      AND NOT EXISTS (
+                          SELECT 1 FROM purchase_invoices pi
+                          WHERE pi.purchase_order_id = pt.reference_id
+                            AND pi.status = 'posted'
+                      )
+                ), 0) AS supplier_advances
             """
         )
         result = dict(row or {})
         result["receivables"] = (
             float(result.get("sales_total", 0))
             + float(result.get("customer_opening", 0))
-            - float(result.get("customer_receipts", 0))
+            - float(result.get("customer_applied", 0))
         )
         result["payables"] = (
             float(result.get("purchases_total", 0))
             + float(result.get("supplier_opening", 0))
-            - float(result.get("supplier_payments", 0))
+            - float(result.get("supplier_applied", 0))
         )
         return result
 
@@ -49,45 +109,72 @@ class AccountingRepository:
         if partner_type not in {"customer", "supplier"}:
             raise ValueError("نوع الطرف غير صحيح")
         if partner_type == "customer":
-            order_table = "sales_orders"
-            line_table = "sales_order_lines"
+            invoice_table = "sales_invoices"
+            invoice_partner_fk = "customer_id"
+            invoice_payment_fk = "sales_invoice_id"
             order_fk = "sales_order_id"
-            partner_fk = "customer_id"
+            reference_type = "sale"
             payment_type = "customer_receipt"
         else:
-            order_table = "purchase_orders"
-            line_table = "purchase_order_lines"
+            invoice_table = "purchase_invoices"
+            invoice_partner_fk = "supplier_id"
+            invoice_payment_fk = "purchase_invoice_id"
             order_fk = "purchase_order_id"
-            partner_fk = "supplier_id"
+            reference_type = "purchase"
             payment_type = "supplier_payment"
 
         rows = self.database.fetch_all(
             f"""
             SELECT p.id, p.code, p.name, p.phone, p.opening_balance,
                    COALESCE((
-                       SELECT SUM(lines.line_total)
-                       FROM {order_table} orders_table
-                       JOIN {line_table} lines ON lines.{order_fk} = orders_table.id
-                       WHERE orders_table.{partner_fk} = p.id
-                   ), 0) AS orders_total,
+                       SELECT SUM(invoice.total)
+                       FROM {invoice_table} invoice
+                       WHERE invoice.{invoice_partner_fk} = p.id
+                         AND invoice.status = 'posted'
+                   ), 0) AS invoices_total,
                    COALESCE((
                        SELECT SUM(pt.amount)
                        FROM payment_transactions pt
                        WHERE pt.partner_id = p.id
                          AND pt.transaction_type = ?
-                   ), 0) AS paid
+                         AND (
+                             pt.reference_id IS NULL
+                             OR EXISTS (
+                                 SELECT 1 FROM {invoice_table} applied_invoice
+                                 WHERE applied_invoice.status = 'posted'
+                                   AND (
+                                       applied_invoice.id = pt.{invoice_payment_fk}
+                                       OR applied_invoice.{order_fk} = pt.reference_id
+                                   )
+                             )
+                         )
+                   ), 0) AS paid,
+                   COALESCE((
+                       SELECT SUM(pt.amount)
+                       FROM payment_transactions pt
+                       WHERE pt.partner_id = p.id
+                         AND pt.transaction_type = ?
+                         AND pt.reference_type = ?
+                         AND pt.reference_id IS NOT NULL
+                         AND NOT EXISTS (
+                             SELECT 1 FROM {invoice_table} advance_invoice
+                             WHERE advance_invoice.{order_fk} = pt.reference_id
+                               AND advance_invoice.status = 'posted'
+                         )
+                   ), 0) AS advances
             FROM partners p
             WHERE p.partner_type = ? AND p.is_active = 1
             ORDER BY p.name
             """,
-            (payment_type, partner_type),
+            (payment_type, payment_type, reference_type, partner_type),
         )
         result = []
         for row in rows:
             item = dict(row)
+            item["orders_total"] = float(item["invoices_total"])
             item["balance"] = (
                 float(item["opening_balance"])
-                + float(item["orders_total"])
+                + float(item["invoices_total"])
                 - float(item["paid"])
             )
             result.append(item)
@@ -97,7 +184,11 @@ class AccountingRepository:
         if partner_type == "customer":
             rows = self.database.fetch_all(
                 """
-                SELECT so.id, so.order_number, so.customer_id AS partner_id,
+                SELECT so.id, so.order_number, so.customer_id AS partner_id, so.status,
+                       COALESCE((
+                           SELECT si.invoice_number FROM sales_invoices si
+                           WHERE si.sales_order_id = so.id AND si.status = 'posted'
+                       ), '') AS invoice_number,
                        COALESCE(SUM(sol.line_total), 0) AS total,
                        COALESCE((
                            SELECT SUM(pt.amount) FROM payment_transactions pt
@@ -106,7 +197,7 @@ class AccountingRepository:
                 FROM sales_orders so
                 LEFT JOIN sales_order_lines sol ON sol.sales_order_id = so.id
                 WHERE (? IS NULL OR so.customer_id = ?)
-                GROUP BY so.id, so.order_number, so.customer_id
+                GROUP BY so.id, so.order_number, so.customer_id, so.status
                 HAVING total - paid > 0.000001
                 ORDER BY so.id DESC
                 """,
@@ -115,7 +206,11 @@ class AccountingRepository:
         elif partner_type == "supplier":
             rows = self.database.fetch_all(
                 """
-                SELECT po.id, po.order_number, po.supplier_id AS partner_id,
+                SELECT po.id, po.order_number, po.supplier_id AS partner_id, po.status,
+                       COALESCE((
+                           SELECT pi.invoice_number FROM purchase_invoices pi
+                           WHERE pi.purchase_order_id = po.id AND pi.status = 'posted'
+                       ), '') AS invoice_number,
                        COALESCE(SUM(pol.line_total), 0) AS total,
                        COALESCE((
                            SELECT SUM(pt.amount) FROM payment_transactions pt
@@ -124,7 +219,7 @@ class AccountingRepository:
                 FROM purchase_orders po
                 LEFT JOIN purchase_order_lines pol ON pol.purchase_order_id = po.id
                 WHERE (? IS NULL OR po.supplier_id = ?)
-                GROUP BY po.id, po.order_number, po.supplier_id
+                GROUP BY po.id, po.order_number, po.supplier_id, po.status
                 HAVING total - paid > 0.000001
                 ORDER BY po.id DESC
                 """,
@@ -136,6 +231,11 @@ class AccountingRepository:
         for row in rows:
             item = dict(row)
             item["remaining"] = float(item["total"]) - float(item["paid"])
+            item["payment_context"] = (
+                f"فاتورة {item['invoice_number']}"
+                if item["invoice_number"]
+                else "مسودة — دفعة مقدمة"
+            )
             result.append(item)
         return result
 
@@ -145,7 +245,7 @@ class AccountingRepository:
         transaction_type: str,
         partner_id: int,
         amount: float,
-        payment_method: str = "cash",
+        payment_method: str = "نقدي",
         reference_id: int | None = None,
         notes: str = "",
     ) -> int:
@@ -220,8 +320,38 @@ class AccountingRepository:
             )
             connection.execute(
                 "UPDATE payment_transactions SET payment_method = ? WHERE id = ?",
-                (payment_method.strip() or "cash", transaction_id),
+                (payment_method.strip() or "نقدي", transaction_id),
             )
+            if reference_id is not None:
+                if reference_type == "sale":
+                    invoice = connection.execute(
+                        """
+                        SELECT id FROM sales_invoices
+                        WHERE sales_order_id = ? AND status = 'posted'
+                        """,
+                        (reference_id,),
+                    ).fetchone()
+                    if invoice is not None:
+                        connection.execute(
+                            "UPDATE payment_transactions SET sales_invoice_id = ? WHERE id = ?",
+                            (invoice["id"], transaction_id),
+                        )
+                else:
+                    invoice = connection.execute(
+                        """
+                        SELECT id FROM purchase_invoices
+                        WHERE purchase_order_id = ? AND status = 'posted'
+                        """,
+                        (reference_id,),
+                    ).fetchone()
+                    if invoice is not None:
+                        connection.execute(
+                            """
+                            UPDATE payment_transactions
+                            SET purchase_invoice_id = ? WHERE id = ?
+                            """,
+                            (invoice["id"], transaction_id),
+                        )
             return transaction_id
 
     def list_transactions(self, limit: int = 500) -> list[dict]:
@@ -313,21 +443,38 @@ class AccountingRepository:
         elif report_key in {"customer_balances", "supplier_balances"}:
             partner_type = "customer" if report_key == "customer_balances" else "supplier"
             name_label = "العميل" if partner_type == "customer" else "المورد"
-            columns = [name_label, "الرصيد الافتتاحي", "إجمالي المستندات", "المدفوع", "الرصيد"]
+            columns = [
+                name_label,
+                "الرصيد الافتتاحي",
+                "إجمالي الفواتير",
+                "المدفوع",
+                "دفعات مقدمة",
+                "الرصيد",
+            ]
             balance_rows = self.list_partner_balances(partner_type)
             return columns, [
                 {
                     name_label: item["name"],
                     "الرصيد الافتتاحي": item["opening_balance"],
-                    "إجمالي المستندات": item["orders_total"],
+                    "إجمالي الفواتير": item["invoices_total"],
                     "المدفوع": item["paid"],
+                    "دفعات مقدمة": item["advances"],
                     "الرصيد": item["balance"],
                 }
                 for item in balance_rows
                 if partner_id is None or int(item["id"]) == partner_id
             ]
         elif report_key == "payments":
-            columns = ["رقم الحركة", "التاريخ", "النوع", "الطرف", "المبلغ", "الطريقة", "المستند", "ملاحظات"]
+            columns = [
+                "رقم الحركة",
+                "التاريخ",
+                "النوع",
+                "الطرف",
+                "المبلغ",
+                "الطريقة",
+                "المستند",
+                "ملاحظات",
+            ]
             rows = self.database.fetch_all(
                 """
                 SELECT pt.transaction_number AS 'رقم الحركة',

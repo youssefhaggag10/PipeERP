@@ -225,6 +225,53 @@ class InvoiceRepository:
             result.append(item)
         return result
 
+    def get_sales_invoice_print_data(self, invoice_id: int) -> dict:
+        self._ensure_invoices()
+        row = self.database.fetch_one(
+            """
+            SELECT si.id, si.invoice_number, si.invoice_date, si.status, si.total,
+                   COALESCE(si.notes, '') AS notes, so.order_number,
+                   p.name AS customer_name, COALESCE(p.code, '') AS customer_code,
+                   COALESCE(p.phone, '') AS customer_phone,
+                   COALESCE(p.address, '') AS customer_address,
+                   COALESCE((
+                       SELECT SUM(pt.amount) FROM payment_transactions pt
+                       WHERE pt.sales_invoice_id = si.id
+                   ), 0) AS paid,
+                   COALESCE((
+                       SELECT GROUP_CONCAT(DISTINCT NULLIF(TRIM(pt.payment_method), ''))
+                       FROM payment_transactions pt
+                       WHERE pt.sales_invoice_id = si.id
+                   ), '') AS payment_methods
+            FROM sales_invoices si
+            JOIN sales_orders so ON so.id = si.sales_order_id
+            JOIN partners p ON p.id = si.customer_id
+            WHERE si.id = ?
+            """,
+            (invoice_id,),
+        )
+        if row is None:
+            raise ValueError("فاتورة المبيعات غير موجودة")
+        if row["status"] != "posted":
+            raise ValueError("يمكن طباعة فواتير المبيعات المعتمدة فقط")
+
+        lines = self.database.fetch_all(
+            """
+            SELECT product.code, product.name, sol.quantity, sol.unit,
+                   sol.unit_price, sol.line_total
+            FROM sales_invoices si
+            JOIN sales_order_lines sol ON sol.sales_order_id = si.sales_order_id
+            JOIN products product ON product.id = sol.product_id
+            WHERE si.id = ?
+            ORDER BY sol.id
+            """,
+            (invoice_id,),
+        )
+        result = dict(row)
+        result["lines"] = [dict(line) for line in lines]
+        result["remaining"] = max(0.0, float(result["total"]) - float(result["paid"]))
+        return result
+
     def post_invoice(self, invoice_type: str, invoice_id: int) -> None:
         table = self._table(invoice_type)
         with self.database.session(immediate=True) as connection:
@@ -251,14 +298,16 @@ class InvoiceRepository:
                 raise ValueError("الفاتورة غير موجودة")
             paid = float(
                 connection.execute(
-                    f"SELECT COALESCE(SUM(amount), 0) AS paid FROM payment_transactions WHERE {invoice_column} = ?",
+                    "SELECT COALESCE(SUM(amount), 0) AS paid "
+                    f"FROM payment_transactions WHERE {invoice_column} = ?",
                     (invoice_id,),
                 ).fetchone()["paid"]
             )
             if paid > 0.000001:
                 raise ValueError("اعكس سندات الدفع المرتبطة بالفاتورة أولًا قبل إلغائها")
             connection.execute(
-                f"UPDATE {table} SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP WHERE id = ?",
+                f"UPDATE {table} SET status = 'cancelled', "
+                "cancelled_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (invoice_id,),
             )
 
@@ -292,7 +341,9 @@ class InvoiceRepository:
 
         with self.database.session(immediate=True) as connection:
             invoice = connection.execute(
-                f"SELECT id, status, total, {partner_column} AS partner_id, {order_column} AS order_id, invoice_number FROM {table} WHERE id = ?",
+                f"SELECT id, status, total, {partner_column} AS partner_id, "
+                f"{order_column} AS order_id, invoice_number "
+                f"FROM {table} WHERE id = ?",
                 (invoice_id,),
             ).fetchone()
             if invoice is None:
@@ -301,7 +352,8 @@ class InvoiceRepository:
                 raise ValueError("يجب اعتماد الفاتورة قبل تسجيل الدفع")
             paid = float(
                 connection.execute(
-                    f"SELECT COALESCE(SUM(amount), 0) AS paid FROM payment_transactions WHERE {invoice_column} = ?",
+                    "SELECT COALESCE(SUM(amount), 0) AS paid "
+                    f"FROM payment_transactions WHERE {invoice_column} = ?",
                     (invoice_id,),
                 ).fetchone()["paid"]
             )
@@ -318,7 +370,8 @@ class InvoiceRepository:
                 notes=notes or f"دفعة على الفاتورة {invoice['invoice_number']}",
             )
             connection.execute(
-                f"UPDATE payment_transactions SET payment_method = ?, {invoice_column} = ? WHERE id = ?",
+                "UPDATE payment_transactions SET payment_method = ?, "
+                f"{invoice_column} = ? WHERE id = ?",
                 (payment_method.strip() or "نقدي", invoice_id, transaction_id),
             )
             return transaction_id

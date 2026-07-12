@@ -1,8 +1,8 @@
 from collections.abc import Callable
 from sqlite3 import Connection
 
-DATABASE_VERSION = "0.6.0"
-LATEST_SCHEMA_VERSION = 6
+DATABASE_VERSION = "0.7.0"
+LATEST_SCHEMA_VERSION = 7
 
 
 INITIAL_SCHEMA_SQL = """
@@ -334,11 +334,13 @@ def _migration_006_invoices(connection: Connection) -> None:
     connection.executescript(INVOICES_SQL)
     if not _column_exists(connection, "payment_transactions", "sales_invoice_id"):
         connection.execute(
-            "ALTER TABLE payment_transactions ADD COLUMN sales_invoice_id INTEGER REFERENCES sales_invoices(id)"
+            "ALTER TABLE payment_transactions ADD COLUMN sales_invoice_id "
+            "INTEGER REFERENCES sales_invoices(id)"
         )
     if not _column_exists(connection, "payment_transactions", "purchase_invoice_id"):
         connection.execute(
-            "ALTER TABLE payment_transactions ADD COLUMN purchase_invoice_id INTEGER REFERENCES purchase_invoices(id)"
+            "ALTER TABLE payment_transactions ADD COLUMN purchase_invoice_id "
+            "INTEGER REFERENCES purchase_invoices(id)"
         )
 
     sales_orders = connection.execute(
@@ -412,10 +414,38 @@ def _migration_006_invoices(connection: Connection) -> None:
         """
     )
     connection.execute(
-        "CREATE INDEX IF NOT EXISTS idx_payments_sales_invoice ON payment_transactions(sales_invoice_id)"
+        "CREATE INDEX IF NOT EXISTS idx_payments_sales_invoice "
+        "ON payment_transactions(sales_invoice_id)"
     )
     connection.execute(
-        "CREATE INDEX IF NOT EXISTS idx_payments_purchase_invoice ON payment_transactions(purchase_invoice_id)"
+        "CREATE INDEX IF NOT EXISTS idx_payments_purchase_invoice "
+        "ON payment_transactions(purchase_invoice_id)"
+    )
+
+
+def _migration_007_print_settings(connection: Connection) -> None:
+    defaults = {
+        "print_company_name": "ثري إيه بايب - 3A Pipes",
+        "print_address": "المنوفية - سرس الليان",
+        "print_phones": "01229351054\n01035474002",
+        "print_footer": "شكرًا لثقتكم في ثري إيه بايب — جودة تُبنى عليها.",
+        "print_beneficiary_name": "ثري إيه بايب - 3A Pipes",
+        "print_instapay_handle": "ahmed.a351054@instapay",
+        "print_printer_name": "Star TSP100",
+        "print_paper_width_mm": "80",
+        "print_logo_path": "",
+        "print_qr_path": "",
+    }
+    connection.executemany(
+        "INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)",
+        defaults.items(),
+    )
+    connection.execute(
+        """
+        UPDATE payment_transactions
+        SET payment_method = 'نقدي'
+        WHERE LOWER(TRIM(payment_method)) = 'cash'
+        """
     )
 
 
@@ -426,6 +456,7 @@ MIGRATIONS: tuple[tuple[int, Callable[[Connection], None]], ...] = (
     (4, _migration_004_fifo_cost_allocations),
     (5, _migration_005_accounting_and_single_warehouse),
     (6, _migration_006_invoices),
+    (7, _migration_007_print_settings),
 )
 
 

@@ -1,6 +1,5 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
-
 
 EGYPT_TIMEZONE = ZoneInfo("Africa/Cairo")
 
@@ -26,5 +25,5 @@ def format_egypt_datetime(value: object) -> str:
     if parsed is None:
         return text
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
     return parsed.astimezone(EGYPT_TIMEZONE).strftime("%Y-%m-%d %I:%M:%S %p")

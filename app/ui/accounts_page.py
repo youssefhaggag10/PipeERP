@@ -41,20 +41,24 @@ class AccountsPage(QWidget):
         subtitle = QLabel("متابعة الأرصدة والفواتير والتحصيلات والسداد والمديونيات")
         subtitle.setObjectName("subtitleLabel")
 
-        self.sales_card = self._metric_card("إجمالي المبيعات")
+        self.sales_card = self._metric_card("إجمالي فواتير المبيعات")
         self.receipts_card = self._metric_card("تحصيلات العملاء")
+        self.customer_advances_card = self._metric_card("دفعات مقدمة من العملاء")
         self.receivables_card = self._metric_card("مديونيات العملاء")
-        self.purchases_card = self._metric_card("إجمالي المشتريات")
+        self.purchases_card = self._metric_card("إجمالي فواتير المشتريات")
         self.payments_card = self._metric_card("مدفوعات الموردين")
+        self.supplier_advances_card = self._metric_card("دفعات مقدمة للموردين")
         self.payables_card = self._metric_card("مديونيات الموردين")
 
         cards = QGridLayout()
         cards.addWidget(self.sales_card[0], 0, 0)
         cards.addWidget(self.receipts_card[0], 0, 1)
-        cards.addWidget(self.receivables_card[0], 0, 2)
+        cards.addWidget(self.customer_advances_card[0], 0, 2)
+        cards.addWidget(self.receivables_card[0], 0, 3)
         cards.addWidget(self.purchases_card[0], 1, 0)
         cards.addWidget(self.payments_card[0], 1, 1)
-        cards.addWidget(self.payables_card[0], 1, 2)
+        cards.addWidget(self.supplier_advances_card[0], 1, 2)
+        cards.addWidget(self.payables_card[0], 1, 3)
 
         self.customer_table = self._balance_table("العميل")
         self.supplier_table = self._balance_table("المورد")
@@ -90,9 +94,16 @@ class AccountsPage(QWidget):
         return box, value
 
     def _balance_table(self, partner_label: str) -> QTableWidget:
-        table = QTableWidget(0, 5)
+        table = QTableWidget(0, 6)
         table.setHorizontalHeaderLabels(
-            [partner_label, "الرصيد الافتتاحي", "إجمالي المستندات", "المدفوع", "الرصيد"]
+            [
+                partner_label,
+                "الرصيد الافتتاحي",
+                "إجمالي الفواتير المعتمدة",
+                "المدفوع",
+                "دفعات مقدمة",
+                "الرصيد المستحق",
+            ]
         )
         table.setEditTriggers(QTableWidget.NoEditTriggers)
         table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -150,12 +161,24 @@ class AccountsPage(QWidget):
         summary = self.accounting_repository.dashboard_summary()
         self.sales_card[1].setText(f"{float(summary['sales_total']):,.2f}")
         self.receipts_card[1].setText(f"{float(summary['customer_receipts']):,.2f}")
+        self.customer_advances_card[1].setText(
+            f"{float(summary['customer_advances']):,.2f}"
+        )
         self.receivables_card[1].setText(f"{float(summary['receivables']):,.2f}")
         self.purchases_card[1].setText(f"{float(summary['purchases_total']):,.2f}")
         self.payments_card[1].setText(f"{float(summary['supplier_payments']):,.2f}")
+        self.supplier_advances_card[1].setText(
+            f"{float(summary['supplier_advances']):,.2f}"
+        )
         self.payables_card[1].setText(f"{float(summary['payables']):,.2f}")
-        self._fill_balances(self.customer_table, self.accounting_repository.list_partner_balances("customer"))
-        self._fill_balances(self.supplier_table, self.accounting_repository.list_partner_balances("supplier"))
+        self._fill_balances(
+            self.customer_table,
+            self.accounting_repository.list_partner_balances("customer"),
+        )
+        self._fill_balances(
+            self.supplier_table,
+            self.accounting_repository.list_partner_balances("supplier"),
+        )
         self._reload_payment_partners()
         self._fill_transactions()
         self.sales_invoices_tab.reload()
@@ -167,15 +190,20 @@ class AccountsPage(QWidget):
             values = [
                 row["name"],
                 f"{float(row['opening_balance']):,.2f}",
-                f"{float(row['orders_total']):,.2f}",
+                f"{float(row['invoices_total']):,.2f}",
                 f"{float(row['paid']):,.2f}",
+                f"{float(row['advances']):,.2f}",
                 f"{float(row['balance']):,.2f}",
             ]
             for column, value in enumerate(values):
                 table.setItem(row_index, column, QTableWidgetItem(str(value)))
 
     def _reload_payment_partners(self) -> None:
-        partner_type = "customer" if self.transaction_type.currentData() == "customer_receipt" else "supplier"
+        partner_type = (
+            "customer"
+            if self.transaction_type.currentData() == "customer_receipt"
+            else "supplier"
+        )
         selected = self.partner_input.currentData()
         self.partner_input.blockSignals(True)
         self.partner_input.clear()
@@ -190,14 +218,19 @@ class AccountsPage(QWidget):
 
     def _reload_open_orders(self) -> None:
         partner_id = self.partner_input.currentData()
-        partner_type = "customer" if self.transaction_type.currentData() == "customer_receipt" else "supplier"
+        partner_type = (
+            "customer"
+            if self.transaction_type.currentData() == "customer_receipt"
+            else "supplier"
+        )
         self.order_input.clear()
         self.order_input.addItem("بدون ربط بمستند محدد", None)
         if partner_id is None:
             return
         for order in self.accounting_repository.list_open_orders(partner_type, int(partner_id)):
             self.order_input.addItem(
-                f"{order['order_number']} — المتبقي {float(order['remaining']):,.2f}",
+                f"{order['order_number']} — {order['payment_context']} — "
+                f"المتبقي {float(order['remaining']):,.2f}",
                 order["id"],
             )
 

@@ -10,7 +10,7 @@ QDialog, QMainWindow {
     background-color: #0F172A;
 }
 
-QLineEdit, QComboBox, QTextEdit, QTableWidget {
+QLineEdit, QComboBox, QTextEdit, QPlainTextEdit, QTableWidget {
     background-color: #111827;
     border: 1px solid #334155;
     border-radius: 8px;

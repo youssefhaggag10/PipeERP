@@ -16,6 +16,7 @@ from app.repositories.crm_repository import CRMRepository
 from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.invoice_repository import InvoiceRepository
 from app.repositories.partner_repository import PartnerRepository
+from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.repositories.product_repository import ProductRepository
 from app.repositories.purchase_repository import PurchaseRepository
 from app.repositories.sales_repository import SalesRepository
@@ -28,9 +29,9 @@ from app.ui.dashboard import DashboardPage
 from app.ui.inventory_page import InventoryPage
 from app.ui.lot_balances_page import LotBalancesPage
 from app.ui.partners_page import PartnersPage
-from app.ui.placeholder_page import PlaceholderPage
 from app.ui.products_page import ProductsPage
 from app.ui.reports_page import ReportsPage
+from app.ui.settings_page import SettingsPage
 from app.ui.stock_card_page import StockCardPage
 from app.ui.transactions_list_page import TransactionsListPage
 from app.ui.warehouse_page import WarehousePage
@@ -58,6 +59,7 @@ class MainWindow(QMainWindow):
         crm_repository = CRMRepository(database, current_user)
         self.crm_sync = CRMCustomerSync(database, current_user)
         self.crm_sync.sync()
+        print_settings_repository = PrintSettingsRepository(database)
 
         self.pages = QStackedWidget()
         self.add_page("الرئيسية", DashboardPage(product_repository, inventory_repository))
@@ -98,7 +100,7 @@ class MainWindow(QMainWindow):
             ),
         )
         self.add_page("التقارير", ReportsPage(accounting_repository, partner_repository))
-        self.add_page("الإعدادات", PlaceholderPage("الإعدادات", "المستخدمين والإعدادات العامة"))
+        self.add_page("الإعدادات", SettingsPage(print_settings_repository))
 
         header = QLabel("3A PIPE")
         content_layout = QVBoxLayout()

@@ -1,8 +1,6 @@
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QFormLayout,
-    QHBoxLayout,
     QInputDialog,
     QLabel,
     QLineEdit,
@@ -14,12 +12,13 @@ from PySide6.QtWidgets import (
 )
 
 from app.repositories.invoice_repository import InvoiceRepository
+from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.services.invoice_service import INVOICE_STATUS_LABELS
+from app.services.thermal_print_service import ThermalPrintService
 from app.ui.order_details_dialog import OrderDetailsDialog
 from app.ui.purchase_page import PurchasePage
 from app.ui.sales_page import SalesPage
 from app.utils.datetime_utils import format_egypt_datetime
-
 
 INVOICE_COLORS = {
     "draft": QColor("#64748B"),
@@ -184,7 +183,8 @@ class PurchaseAccountingPage(_PaymentOrderMixin, PurchasePage):
                    COALESCE(GROUP_CONCAT(product.name, '، '), '') AS product_summary,
                    COALESCE(SUM(pol.line_total), 0) AS total,
                    COALESCE((SELECT SUM(pt.amount) FROM payment_transactions pt
-                       WHERE pt.reference_type = 'purchase' AND pt.reference_id = po.id), 0) AS paid,
+                       WHERE pt.reference_type = 'purchase'
+                         AND pt.reference_id = po.id), 0) AS paid,
                    COALESCE(pi.invoice_number, '') AS invoice_number,
                    COALESCE(pi.status, '') AS invoice_status
             FROM purchase_orders po
@@ -304,6 +304,9 @@ class SalesAccountingPage(_PaymentOrderMixin, SalesPage):
         pay_button = QPushButton("تسجيل تحصيل للأمر المحدد")
         pay_button.clicked.connect(lambda: self._record_selected_payment("sales"))
         self.layout().insertWidget(self.layout().count() - 1, pay_button)
+        print_button = QPushButton("معاينة وطباعة فاتورة الأمر المحدد")
+        print_button.clicked.connect(self.print_selected_invoice)
+        self.layout().insertWidget(self.layout().count() - 1, print_button)
 
         self.orders_table.setColumnCount(12)
         self.orders_table.setHorizontalHeaderLabels(
@@ -432,3 +435,35 @@ class SalesAccountingPage(_PaymentOrderMixin, SalesPage):
             rows=rows, total=float(order["total"]), parent=self,
         )
         dialog.exec()
+
+    def print_selected_invoice(self) -> None:
+        order_id = self.selected_order_id()
+        if order_id is None:
+            return
+        invoice = self.sales_repository.database.fetch_one(
+            """
+            SELECT id, status FROM sales_invoices
+            WHERE sales_order_id = ?
+            """,
+            (order_id,),
+        )
+        if invoice is None:
+            QMessageBox.warning(
+                self,
+                "تنبيه",
+                "الأمر ما زال مسودة. سلّم الأمر أولًا لإنشاء فاتورة المبيعات.",
+            )
+            return
+        if invoice["status"] != "posted":
+            QMessageBox.warning(self, "تنبيه", "يمكن طباعة الفاتورة المعتمدة فقط")
+            return
+        try:
+            print_data = self.invoice_repository.get_sales_invoice_print_data(
+                int(invoice["id"])
+            )
+            settings = PrintSettingsRepository(
+                self.sales_repository.database
+            ).get_settings()
+            ThermalPrintService().preview_sales_invoice(print_data, settings, self)
+        except ValueError as error:
+            QMessageBox.warning(self, "تنبيه", str(error))

@@ -1,6 +1,5 @@
 from sqlite3 import Connection
 
-
 INVOICE_STATUS_LABELS = {
     "draft": "مسودة",
     "posted": "معتمدة",
