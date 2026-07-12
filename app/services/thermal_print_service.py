@@ -235,10 +235,8 @@ class ThermalPrintService:
                     printer.setResolution(self.RENDER_DPI)
                     return printer
 
-            raise ValueError(
-                "الطابعة المحفوظة غير موجودة حاليًا. اختر اسم الطابعة الصحيح من إعدادات الطباعة."
-            )
-
+        # Keep preview available when a queue was renamed or belongs to another
+        # OS. The native print dialog can select the installed printer safely.
         printer = QPrinter(QPrinter.PrinterMode.HighResolution)
         printer.setResolution(self.RENDER_DPI)
         return printer
