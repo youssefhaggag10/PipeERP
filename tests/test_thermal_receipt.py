@@ -52,6 +52,13 @@ def test_receipt_template_uses_five_proportional_columns_and_right_meta() -> Non
     assert 'class="unit-cell" width="11%"' in html
     assert "سعر الوحدة" not in html
     assert 'class="meta-label" width="43%" dir="rtl">رقم الفاتورة:</td>' in html
+    assert html.index('<th width="24%">الإجمالي</th>') < html.index('<th width="34%">الصنف</th>')
+    invoice_row = html[html.index("SI00001") :]
+    assert invoice_row.index("SI00001") < invoice_row.index("رقم الفاتورة:")
+    first_item_row = html[html.index('class="money-cell total-cell"') :]
+    assert first_item_row.index('class="money-cell total-cell"') < first_item_row.index(
+        'class="product-cell"'
+    )
     assert "table-layout" not in html
     assert "max-height" not in html
 

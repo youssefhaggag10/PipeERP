@@ -35,8 +35,8 @@ def _meta_row(label: str, value: str, *, rtl_value: bool = False) -> str:
     value_class = "meta-value rtl-value" if rtl_value else "meta-value ltr-value"
     return f"""
         <tr>
-            <td class="meta-label" width="43%" dir="rtl">{_text(label)}:</td>
             <td class="{value_class}" width="57%" dir="{value_direction}">{value}</td>
+            <td class="meta-label" width="43%" dir="rtl">{_text(label)}:</td>
         </tr>
     """
 
@@ -45,15 +45,15 @@ def _line_row(line: dict) -> str:
     quantity = float(line.get("quantity", 0) or 0)
     return f"""
         <tr>
+            <td class="money-cell total-cell" width="24%" dir="ltr">
+                {_money(line.get("line_total"))}
+            </td>
+            <td class="money-cell" width="20%" dir="ltr">{_money(line.get("unit_price"))}</td>
+            <td class="unit-cell" width="11%" dir="rtl">{_text(line.get("unit"))}</td>
+            <td class="qty-cell" width="11%" dir="ltr">{quantity:g}</td>
             <td class="product-cell" width="34%" dir="rtl">
                 <div class="product-name">{_text(line.get("name"))}</div>
                 <div class="product-code" dir="ltr">{_text(line.get("code"))}</div>
-            </td>
-            <td class="qty-cell" width="11%" dir="ltr">{quantity:g}</td>
-            <td class="unit-cell" width="11%" dir="rtl">{_text(line.get("unit"))}</td>
-            <td class="money-cell" width="20%" dir="ltr">{_money(line.get("unit_price"))}</td>
-            <td class="money-cell total-cell" width="24%" dir="ltr">
-                {_money(line.get("line_total"))}
             </td>
         </tr>
     """
@@ -204,7 +204,7 @@ def build_sales_receipt_html(
                 width: 100%;
                 border-collapse: collapse;
                 margin: 1pt 0 8pt 0;
-                direction: rtl;
+                direction: ltr;
             }}
             .meta td {{ border: 0; padding: 2.2pt 1pt; vertical-align: top; }}
             .meta-label {{
@@ -224,7 +224,7 @@ def build_sales_receipt_html(
                 width: 100%;
                 border-collapse: collapse;
                 border: 1px solid #000000;
-                direction: rtl;
+                direction: ltr;
             }}
             .items th, .items td {{
                 border: 1px solid #000000;
@@ -263,7 +263,7 @@ def build_sales_receipt_html(
                 width: 88%;
                 margin-top: 10pt;
                 border-collapse: collapse;
-                direction: rtl;
+                direction: ltr;
             }}
             .totals-wrap td {{
                 padding: 3.8pt 3pt;
@@ -343,27 +343,27 @@ def build_sales_receipt_html(
 
             <table class="items" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
-                    <th width="34%">الصنف</th>
-                    <th width="11%">كمية</th>
-                    <th width="11%">وحدة</th>
-                    <th width="20%">السعر</th>
                     <th width="24%">الإجمالي</th>
+                    <th width="20%">السعر</th>
+                    <th width="11%">وحدة</th>
+                    <th width="11%">كمية</th>
+                    <th width="34%">الصنف</th>
                 </tr>
                 {item_rows}
             </table>
 
             <table class="totals-wrap" width="88%" align="center" cellspacing="0" cellpadding="0">
                 <tr>
-                    <td class="totals-label" width="47%">الإجمالي</td>
                     <td class="totals-value" width="53%">{_money(invoice.get("total"))}</td>
+                    <td class="totals-label" width="47%">الإجمالي</td>
                 </tr>
                 <tr>
-                    <td class="totals-label">المدفوع</td>
                     <td class="totals-value">{_money(invoice.get("paid"))}</td>
+                    <td class="totals-label">المدفوع</td>
                 </tr>
                 <tr class="remaining-row">
-                    <td class="totals-label">المتبقي</td>
                     <td class="totals-value">{_money(invoice.get("remaining"))}</td>
+                    <td class="totals-label">المتبقي</td>
                 </tr>
             </table>
 
