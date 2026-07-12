@@ -27,8 +27,9 @@ def _meta_row(label: str, value: str, *, rtl_value: bool = False) -> str:
     value_dir = "rtl" if rtl_value else "ltr"
     return f"""
         <tr>
+            <td class="meta-spacer"></td>
             <td class="{value_class}" dir="{value_dir}">{value}</td>
-            <td class="meta-label" dir="rtl">{label}</td>
+            <td class="meta-label" dir="rtl">{label}:</td>
         </tr>
     """
 
@@ -86,7 +87,7 @@ def build_sales_receipt_html(
         )
 
     logo_html = (
-        f'<div class="logo-wrap"><img class="logo" width="88" src="{logo_url}"></div>'
+        f'<div class="logo-wrap"><img class="logo" width="105" src="{logo_url}"></div>'
         if logo_url
         else ""
     )
@@ -97,7 +98,10 @@ def build_sales_receipt_html(
         qr_html = f"""
         <div class="payment-block">
             <div class="payment-title" dir="rtl">الدفع عبر <span dir="ltr">InstaPay</span></div>
-            <img class="qr" width="104" src="{qr_url}">
+            <img class="qr" width="116" src="{qr_url}">
+            <div class="beneficiary" dir="rtl">
+                <strong>اسم المستفيد:</strong> {_text(settings.get('beneficiary_name'))}
+            </div>
             <div class="handle" dir="ltr">{instapay_handle}</div>
             <div class="hint" dir="rtl">تأكد من اسم المستفيد قبل إتمام التحويل</div>
         </div>
@@ -148,34 +152,34 @@ def build_sales_receipt_html(
                 color: #000;
                 background: #fff;
                 font-family: "DejaVu Sans", "Tahoma", "Arial";
-                font-size: 8.6pt;
+                font-size: 8.2pt;
             }}
             .header {{ text-align: center; }}
-            .logo-wrap {{ margin: 0 0 2pt; text-align: center; }}
-            .logo {{ width: 88px; max-height: 58pt; }}
-            .company-ar {{ font-size: 11pt; font-weight: 900; text-align: center; }}
+            .logo-wrap {{ margin: 1pt 0 4pt; text-align: center; }}
+            .logo {{ width: 105px; max-height: 74pt; }}
+            .company-ar {{ font-size: 10.4pt; font-weight: 900; text-align: center; }}
             .company-en {{
-                margin-top: 1pt;
+                margin-top: 2pt;
                 font-family: "Arial", "DejaVu Sans";
-                font-size: 9.3pt;
+                font-size: 9pt;
                 font-weight: 900;
                 text-align: center;
             }}
-            .address {{ direction: rtl; text-align: center; font-size: 8pt; margin-top: 2pt; }}
+            .address {{ direction: rtl; text-align: center; font-size: 7.8pt; margin-top: 3pt; }}
             .phones {{
                 direction: ltr;
                 text-align: center;
                 font-family: "Arial", "DejaVu Sans";
-                font-size: 8pt;
-                margin-top: 1pt;
+                font-size: 7.8pt;
+                margin-top: 2pt;
             }}
             .invoice-title {{
                 border-top: 2px solid #000;
                 border-bottom: 2px solid #000;
-                font-size: 11pt;
+                font-size: 10.4pt;
                 font-weight: 900;
-                margin: 5pt 0 4pt;
-                padding: 3pt 0;
+                margin: 7pt 0 5pt;
+                padding: 3.5pt 0;
                 text-align: center;
                 direction: rtl;
             }}
@@ -184,13 +188,25 @@ def build_sales_receipt_html(
                 width: 100%;
                 border-collapse: collapse;
                 direction: ltr;
-                margin: 0 0 5pt;
+                margin: 1pt 0 7pt;
             }}
-            .meta td {{ padding: 1.4pt 2pt; vertical-align: middle; border: 0; }}
-            .meta-value {{ width: 65%; font-weight: 700; }}
-            .meta-label {{ width: 35%; text-align: right; font-weight: 900; white-space: nowrap; }}
-            .ltr-value {{ direction: ltr; text-align: left; font-family: "Arial", "DejaVu Sans"; }}
-            .rtl-value {{ direction: rtl; text-align: left; }}
+            .meta td {{ padding: 1.6pt 1pt; vertical-align: middle; border: 0; }}
+            .meta-spacer {{ width: 12%; }}
+            .meta-value {{ width: 50%; text-align: right; font-size: 8.1pt; font-weight: 700; }}
+            .meta-label {{
+                width: 38%;
+                direction: rtl;
+                text-align: right;
+                font-size: 8.1pt;
+                font-weight: 900;
+                white-space: nowrap;
+            }}
+            .ltr-value {{
+                direction: ltr;
+                text-align: right;
+                font-family: "Arial", "DejaVu Sans";
+            }}
+            .rtl-value {{ direction: rtl; text-align: right; }}
 
             .items {{
                 width: 100%;
@@ -201,12 +217,12 @@ def build_sales_receipt_html(
             }}
             .items th, .items td {{
                 border: 1px solid #000;
-                padding: 3pt 1pt;
+                padding: 3.4pt 1pt;
                 vertical-align: middle;
             }}
             .items th {{
                 background: #eeeeee;
-                font-size: 7.4pt;
+                font-size: 7pt;
                 font-weight: 900;
                 text-align: center;
                 white-space: nowrap;
@@ -219,20 +235,20 @@ def build_sales_receipt_html(
                 direction: ltr;
                 text-align: center;
                 font-family: "Arial", "DejaVu Sans";
-                font-size: 7.3pt;
+                font-size: 7pt;
                 font-weight: 800;
                 white-space: nowrap;
             }}
             .qty-cell {{ text-align: center; }}
             .quantity {{ font-family: "Arial", "DejaVu Sans"; font-weight: 800; }}
-            .unit {{ font-size: 6.8pt; margin-top: 1pt; }}
+            .unit {{ font-size: 6.6pt; margin-top: 1pt; }}
             .product-cell {{ direction: rtl; text-align: right; }}
-            .product-name {{ font-size: 7.8pt; font-weight: 900; }}
+            .product-name {{ font-size: 7.4pt; font-weight: 900; }}
             .product-code {{
                 direction: ltr;
                 text-align: right;
                 font-family: "Arial", "DejaVu Sans";
-                font-size: 6.8pt;
+                font-size: 6.5pt;
                 margin-top: 1pt;
             }}
 
@@ -240,58 +256,64 @@ def build_sales_receipt_html(
                 width: 100%;
                 border-collapse: collapse;
                 direction: ltr;
-                margin-top: 5pt;
+                margin-top: 7pt;
                 page-break-inside: avoid;
             }}
-            .totals td {{ padding: 2.4pt 3pt; border-bottom: 1px solid #d0d0d0; }}
+            .totals td {{ padding: 2.5pt 2pt; border: 0; }}
+            .totals .totals-spacer {{ width: 9%; }}
+            .totals .total-content {{ border-bottom: 1px solid #000; }}
             .totals .value {{
-                width: 65%;
+                width: 42%;
                 direction: ltr;
-                text-align: left;
+                text-align: center;
                 font-family: "Arial", "DejaVu Sans";
-                font-size: 9.5pt;
+                font-size: 9pt;
                 font-weight: 900;
             }}
             .totals .label {{
-                width: 35%;
+                width: 40%;
                 direction: rtl;
-                text-align: right;
-                font-size: 9.5pt;
+                text-align: center;
+                font-size: 9pt;
                 font-weight: 900;
                 white-space: nowrap;
             }}
-            .totals .grand td {{
+            .totals .grand .total-content {{
                 border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-size: 11pt;
+                font-size: 10.2pt;
             }}
-            .totals .remaining td {{ border-bottom: 2px solid #000; }}
             .totals .method-value {{
                 direction: rtl;
-                text-align: left;
+                text-align: center;
                 font-family: "DejaVu Sans", "Tahoma";
-                font-size: 8.8pt;
+                font-size: 8.2pt;
             }}
 
-            .payment-block {{ text-align: center; margin-top: 7pt; page-break-inside: avoid; }}
-            .payment-title {{ font-size: 9.5pt; font-weight: 900; margin-bottom: 2pt; }}
-            .qr {{ width: 104px; }}
+            .payment-block {{ text-align: center; margin-top: 10pt; page-break-inside: avoid; }}
+            .payment-title {{ font-size: 9.3pt; font-weight: 900; margin-bottom: 4pt; }}
+            .qr {{ width: 116px; }}
+            .beneficiary {{
+                direction: rtl;
+                text-align: center;
+                font-size: 7.7pt;
+                margin-top: 5pt;
+            }}
             .handle {{
                 direction: ltr;
                 text-align: center;
                 font-family: "Arial", "DejaVu Sans";
                 font-weight: 900;
-                font-size: 8.2pt;
-                margin-top: 1pt;
+                font-size: 8pt;
+                margin-top: 3pt;
             }}
-            .hint {{ direction: rtl; text-align: center; font-size: 7pt; margin-top: 2pt; }}
-            .footer-divider {{ border-top: 1px dashed #000; margin-top: 6pt; }}
+            .hint {{ direction: rtl; text-align: center; font-size: 6.8pt; margin-top: 4pt; }}
+            .footer-divider {{ border-top: 1px dashed #000; margin-top: 8pt; }}
             .footer {{
                 direction: rtl;
                 text-align: center;
-                font-size: 8pt;
+                font-size: 7.7pt;
                 font-weight: 800;
-                margin-top: 4pt;
+                margin-top: 5pt;
             }}
         </style>
     </head>
@@ -304,7 +326,7 @@ def build_sales_receipt_html(
             <div class="invoice-title">فاتورة مبيعات</div>
         </div>
 
-        <table class="meta" width="100%" dir="ltr">
+        <table class="meta" width="100%" dir="ltr" cellspacing="0" cellpadding="0">
             {''.join(meta_rows)}
         </table>
 
@@ -320,20 +342,30 @@ def build_sales_receipt_html(
 
         <table class="totals" width="100%" dir="ltr" cellspacing="0" cellpadding="0">
             <tr class="grand">
-                <td class="value" dir="ltr">{invoice_total}</td>
-                <td class="label" dir="rtl">الإجمالي</td>
+                <td class="totals-spacer" width="9%"></td>
+                <td class="value total-content" width="42%" dir="ltr">{invoice_total}</td>
+                <td class="label total-content" width="40%" dir="rtl">الإجمالي</td>
+                <td class="totals-spacer" width="9%"></td>
             </tr>
             <tr>
-                <td class="value" dir="ltr">{invoice_paid}</td>
-                <td class="label" dir="rtl">المدفوع</td>
+                <td class="totals-spacer" width="9%"></td>
+                <td class="value total-content" width="42%" dir="ltr">{invoice_paid}</td>
+                <td class="label total-content" width="40%" dir="rtl">المدفوع</td>
+                <td class="totals-spacer" width="9%"></td>
             </tr>
             <tr class="remaining">
-                <td class="value" dir="ltr">{invoice_remaining}</td>
-                <td class="label" dir="rtl">المتبقي</td>
+                <td class="totals-spacer" width="9%"></td>
+                <td class="value total-content" width="42%" dir="ltr">{invoice_remaining}</td>
+                <td class="label total-content" width="40%" dir="rtl">المتبقي</td>
+                <td class="totals-spacer" width="9%"></td>
             </tr>
             <tr>
-                <td class="value method-value" dir="rtl">{payment_methods}</td>
-                <td class="label" dir="rtl">طريقة الدفع</td>
+                <td class="totals-spacer" width="9%"></td>
+                <td class="value method-value total-content" width="42%" dir="rtl">
+                    {payment_methods}
+                </td>
+                <td class="label total-content" width="40%" dir="rtl">طريقة الدفع</td>
+                <td class="totals-spacer" width="9%"></td>
             </tr>
         </table>
 
