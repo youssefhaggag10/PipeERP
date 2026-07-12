@@ -31,14 +31,17 @@ class ThermalPrintService:
     DPI image, then that exact image is fitted to the printer's real page.
     """
 
-    ROLL_WIDTH_MM = 80.0
+    # Star's 80 mm roll exposes about 72 mm to the driver.  The saved PDF and
+    # the physical page must use that same width; an 80 mm PDF is scaled and
+    # centred by Chrome/CUPS and can be rejected by the native driver.
+    DRIVER_PAGE_WIDTH_MM = 72.0
     MAX_PRINTABLE_WIDTH_MM = 72.0
     MIN_THERMAL_WIDTH_MM = 50.0
     MAX_THERMAL_WIDTH_MM = 90.0
-    MIN_SIDE_MARGIN_MM = 1.5
-    TOP_MARGIN_MM = 2.5
-    BOTTOM_MARGIN_MM = 4.0
-    MIN_RECEIPT_HEIGHT_MM = 120.0
+    MIN_SIDE_MARGIN_MM = 1.0
+    TOP_MARGIN_MM = 1.0
+    BOTTOM_MARGIN_MM = 2.0
+    MIN_RECEIPT_HEIGHT_MM = 60.0
     RENDER_DPI = 203
 
     def preview_sales_invoice(
@@ -65,7 +68,6 @@ class ThermalPrintService:
             lambda requested_printer: self._paint_receipt_image(
                 requested_printer,
                 receipt_image,
-                paper_width_mm,
                 receipt_height_mm,
             )
         )
@@ -153,14 +155,13 @@ class ThermalPrintService:
         self,
         printer: QPrinter,
         receipt_image: QImage,
-        requested_paper_width_mm: float,
         receipt_height_mm: float,
     ) -> None:
-        self._apply_page_layout(
-            printer,
-            requested_paper_width_mm,
-            receipt_height_mm,
-        )
+        # paintRequested receives the printer chosen in the native dialog.
+        # Read its width before changing the layout so a 72 mm Star queue is
+        # never overwritten with the preview device's width.
+        selected_page_width_mm = self._thermal_page_width_mm(printer)
+        self._apply_page_layout(printer, selected_page_width_mm, receipt_height_mm)
 
         painter = QPainter()
         if not painter.begin(printer):
@@ -170,7 +171,7 @@ class ThermalPrintService:
             viewport = QRectF(painter.viewport())
             actual_width_mm = self._page_width_mm(printer)
             if actual_width_mm <= 0.0:
-                actual_width_mm = requested_paper_width_mm
+                actual_width_mm = selected_page_width_mm
 
             pixels_per_mm = viewport.width() / actual_width_mm
             content_width_mm = self._content_width_mm(actual_width_mm)
@@ -244,8 +245,8 @@ class ThermalPrintService:
     def _thermal_page_width_mm(self, printer: QPrinter) -> float:
         width_mm = self._page_width_mm(printer)
         if self.MIN_THERMAL_WIDTH_MM <= width_mm <= self.MAX_THERMAL_WIDTH_MM:
-            return width_mm
-        return self.ROLL_WIDTH_MM
+            return min(width_mm, self.DRIVER_PAGE_WIDTH_MM)
+        return self.DRIVER_PAGE_WIDTH_MM
 
     @classmethod
     def _content_width_mm(cls, page_width_mm: float) -> float:

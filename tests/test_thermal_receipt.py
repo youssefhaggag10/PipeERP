@@ -40,13 +40,16 @@ def _settings() -> dict[str, str]:
     }
 
 
-def test_receipt_template_uses_four_readable_columns_and_right_meta() -> None:
+def test_receipt_template_uses_five_proportional_columns_and_right_meta() -> None:
     html = build_sales_receipt_html(_invoice(), _settings())
 
-    assert '<th width="42%">الصنف</th>' in html
-    assert '<th width="16%">الكمية</th>' in html
-    assert '<th width="19%">السعر</th>' in html
-    assert '<th width="23%">الإجمالي</th>' in html
+    assert '<th width="34%">الصنف</th>' in html
+    assert '<th width="11%">كمية</th>' in html
+    assert '<th width="11%">وحدة</th>' in html
+    assert '<th width="20%">السعر</th>' in html
+    assert '<th width="24%">الإجمالي</th>' in html
+    assert 'class="qty-cell" width="11%"' in html
+    assert 'class="unit-cell" width="11%"' in html
     assert "سعر الوحدة" not in html
     assert 'class="meta-label" width="43%" dir="rtl">رقم الفاتورة:</td>' in html
     assert "table-layout" not in html

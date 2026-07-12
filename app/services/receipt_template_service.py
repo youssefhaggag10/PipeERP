@@ -45,16 +45,16 @@ def _line_row(line: dict) -> str:
     quantity = float(line.get("quantity", 0) or 0)
     return f"""
         <tr>
-            <td class="product-cell" width="42%" dir="rtl">
+            <td class="product-cell" width="34%" dir="rtl">
                 <div class="product-name">{_text(line.get("name"))}</div>
                 <div class="product-code" dir="ltr">{_text(line.get("code"))}</div>
             </td>
-            <td class="qty-cell" width="16%" dir="rtl">
-                <div dir="ltr">{quantity:g}</div>
-                <div>{_text(line.get("unit"))}</div>
+            <td class="qty-cell" width="11%" dir="ltr">{quantity:g}</td>
+            <td class="unit-cell" width="11%" dir="rtl">{_text(line.get("unit"))}</td>
+            <td class="money-cell" width="20%" dir="ltr">{_money(line.get("unit_price"))}</td>
+            <td class="money-cell total-cell" width="24%" dir="ltr">
+                {_money(line.get("line_total"))}
             </td>
-            <td class="money-cell" width="19%" dir="ltr">{_money(line.get("unit_price"))}</td>
-            <td class="money-cell" width="23%" dir="ltr">{_money(line.get("line_total"))}</td>
         </tr>
     """
 
@@ -98,7 +98,7 @@ def build_sales_receipt_html(
     if not item_rows:
         item_rows = """
             <tr>
-                <td class="empty-row" colspan="4" dir="rtl">لا توجد أصناف</td>
+                <td class="empty-row" colspan="5" dir="rtl">لا توجد أصناف</td>
             </tr>
         """
 
@@ -247,9 +247,9 @@ def build_sales_receipt_html(
                 font-family: "Arial", "DejaVu Sans";
                 font-size: 6.5pt;
             }}
-            .qty-cell, .money-cell {{
+            .qty-cell, .unit-cell, .money-cell {{
                 text-align: center;
-                font-size: 6.9pt;
+                font-size: 6.2pt;
                 font-weight: 800;
             }}
             .money-cell {{
@@ -257,6 +257,7 @@ def build_sales_receipt_html(
                 font-family: "Arial", "DejaVu Sans";
                 white-space: nowrap;
             }}
+            .total-cell {{ font-size: 5.8pt; }}
             .empty-row {{ text-align: center; padding: 10pt 0; }}
             .totals-wrap {{
                 width: 88%;
@@ -342,10 +343,11 @@ def build_sales_receipt_html(
 
             <table class="items" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
-                    <th width="42%">الصنف</th>
-                    <th width="16%">الكمية</th>
-                    <th width="19%">السعر</th>
-                    <th width="23%">الإجمالي</th>
+                    <th width="34%">الصنف</th>
+                    <th width="11%">كمية</th>
+                    <th width="11%">وحدة</th>
+                    <th width="20%">السعر</th>
+                    <th width="24%">الإجمالي</th>
                 </tr>
                 {item_rows}
             </table>
