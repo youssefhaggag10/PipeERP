@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from PySide6.QtCore import QMarginsF, QSizeF, Qt, QUrl
-from PySide6.QtGui import QColor, QImage, QPageLayout, QPageSize, QTextDocument
+from PySide6.QtCore import QMarginsF, QSizeF, QUrl
+from PySide6.QtGui import QImage, QPageLayout, QPageSize, QTextDocument
 from PySide6.QtPrintSupport import QPrinter, QPrinterInfo, QPrintPreviewDialog
 from PySide6.QtWidgets import QWidget
 
@@ -18,14 +18,16 @@ class ThermalPrintService:
         parent: QWidget | None = None,
     ) -> None:
         printer = self._printer(settings.get("printer_name", ""))
-        receipt_height = max(155.0, 140.0 + len(invoice.get("lines", [])) * 11.0)
-        page_size = QPageSize(
-            QSizeF(self.PAPER_WIDTH_MM, receipt_height),
+
+        # Start with a tall page only to establish the real 80 mm printable width.
+        # The final page height is measured from the rendered document below.
+        measuring_page = QPageSize(
+            QSizeF(self.PAPER_WIDTH_MM, 500.0),
             QPageSize.Unit.Millimeter,
-            "PipeERP-80mm",
+            "PipeERP-80mm-measure",
             QPageSize.SizeMatchPolicy.ExactMatch,
         )
-        printer.setPageSize(page_size)
+        printer.setPageSize(measuring_page)
         printer.setPageMargins(
             QMarginsF(4.0, 3.0, 4.0, 3.0),
             QPageLayout.Unit.Millimeter,
@@ -39,7 +41,6 @@ class ThermalPrintService:
             settings.get("logo_path", ""),
             "receipt:logo",
             trim_white=True,
-            thermal_monochrome=True,
         )
         qr_url = self._add_image_resource(
             document,
@@ -54,8 +55,22 @@ class ThermalPrintService:
                 qr_url=qr_url,
             )
         )
-        # Bind the QTextDocument to the actual 80 mm printable rectangle. Without this,
-        # Qt keeps a desktop-sized page and scales the whole receipt down at print time.
+
+        printable_width_points = printer.pageLayout().paintRect(
+            QPageLayout.Unit.Point
+        ).width()
+        document.setTextWidth(printable_width_points)
+        content_height_points = document.documentLayout().documentSize().height()
+        content_height_mm = content_height_points * 25.4 / 72.0
+        receipt_height_mm = max(120.0, content_height_mm + 10.0)
+
+        final_page = QPageSize(
+            QSizeF(self.PAPER_WIDTH_MM, receipt_height_mm),
+            QPageSize.Unit.Millimeter,
+            "PipeERP-80mm",
+            QPageSize.SizeMatchPolicy.ExactMatch,
+        )
+        printer.setPageSize(final_page)
         document.setPageSize(
             printer.pageLayout().paintRect(QPageLayout.Unit.Point).size()
         )
@@ -81,7 +96,6 @@ class ThermalPrintService:
         resource_name: str,
         *,
         trim_white: bool = False,
-        thermal_monochrome: bool = False,
     ) -> str:
         path = Path(path_value)
         if not path.is_file():
@@ -91,51 +105,9 @@ class ThermalPrintService:
             return ""
         if trim_white:
             image = ThermalPrintService._trim_white_border(image)
-        if thermal_monochrome:
-            image = ThermalPrintService._prepare_logo_for_thermal(image)
         url = QUrl(resource_name)
         document.addResource(QTextDocument.ResourceType.ImageResource, url, image)
         return resource_name
-
-    @staticmethod
-    def _prepare_logo_for_thermal(image: QImage) -> QImage:
-        """Convert faint/transparent logo artwork to strong black thermal output.
-
-        Thermal printers do not reproduce semi-transparent gray artwork reliably. The
-        source is first composited over white, then converted to a clean black/white
-        image so light parts of the 3A mark do not disappear on paper.
-        """
-        if image.isNull():
-            return image
-
-        if max(image.width(), image.height()) > 900:
-            image = image.scaled(
-                900,
-                900,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-
-        source = image.convertToFormat(QImage.Format.Format_ARGB32)
-        result = QImage(source.size(), QImage.Format.Format_ARGB32)
-        result.fill(QColor(255, 255, 255))
-
-        # A high threshold intentionally turns medium/light gray logo pixels into
-        # solid black. This is preferable to gray dithering on an 80 mm receipt.
-        threshold = 242.0
-        for y in range(source.height()):
-            for x in range(source.width()):
-                color = source.pixelColor(x, y)
-                alpha = color.alphaF()
-                luminance = (
-                    0.299 * color.red()
-                    + 0.587 * color.green()
-                    + 0.114 * color.blue()
-                )
-                composited = 255.0 - (255.0 - luminance) * alpha
-                if composited < threshold:
-                    result.setPixelColor(x, y, QColor(0, 0, 0))
-        return result
 
     @staticmethod
     def _trim_white_border(image: QImage) -> QImage:
