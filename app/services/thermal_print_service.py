@@ -76,7 +76,12 @@ class ThermalPrintService:
         # Measure independently from the active printer driver. Some thermal drivers
         # report A4 or a short label after the print dialog and would otherwise make
         # QTextDocument shrink the complete receipt to that reported page.
-        document.setPageSize(QSizeF())
+        document.setPageSize(
+            QSizeF(
+                printable_width_points,
+                self.MEASURING_HEIGHT_MM * 72.0 / 25.4,
+            )
+        )
         document.setTextWidth(printable_width_points)
         content_height_points = document.documentLayout().documentSize().height()
         content_height_mm = content_height_points * 25.4 / 72.0
