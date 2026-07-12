@@ -27,9 +27,10 @@ def _meta_row(label: str, value: str, *, rtl_value: bool = False) -> str:
     value_dir = "rtl" if rtl_value else "ltr"
     return f"""
         <tr>
-            <td class="meta-spacer"></td>
-            <td class="{value_class}" dir="{value_dir}">{value}</td>
-            <td class="meta-label" dir="rtl">{label}:</td>
+            <td class="meta-spacer" width="8%">&nbsp;</td>
+            <td class="{value_class}" width="55%" dir="{value_dir}">{value}</td>
+            <td class="meta-gap" width="3%">&nbsp;</td>
+            <td class="meta-label" width="34%" dir="rtl">{label}</td>
         </tr>
     """
 
@@ -99,9 +100,6 @@ def build_sales_receipt_html(
         <div class="payment-block">
             <div class="payment-title" dir="rtl">الدفع عبر <span dir="ltr">InstaPay</span></div>
             <img class="qr" width="116" src="{qr_url}">
-            <div class="beneficiary" dir="rtl">
-                <strong>اسم المستفيد:</strong> {_text(settings.get('beneficiary_name'))}
-            </div>
             <div class="handle" dir="ltr">{instapay_handle}</div>
             <div class="hint" dir="rtl">تأكد من اسم المستفيد قبل إتمام التحويل</div>
         </div>
@@ -191,13 +189,14 @@ def build_sales_receipt_html(
                 margin: 1pt 0 7pt;
             }}
             .meta td {{ padding: 1.6pt 1pt; vertical-align: middle; border: 0; }}
-            .meta-spacer {{ width: 12%; }}
-            .meta-value {{ width: 50%; text-align: right; font-size: 8.1pt; font-weight: 700; }}
+            .meta-spacer {{ width: 8%; }}
+            .meta-value {{ width: 55%; text-align: right; font-size: 7.7pt; font-weight: 700; }}
+            .meta-gap {{ width: 3%; }}
             .meta-label {{
-                width: 38%;
+                width: 34%;
                 direction: rtl;
                 text-align: right;
-                font-size: 8.1pt;
+                font-size: 7.7pt;
                 font-weight: 900;
                 white-space: nowrap;
             }}
@@ -292,12 +291,6 @@ def build_sales_receipt_html(
             .payment-block {{ text-align: center; margin-top: 10pt; page-break-inside: avoid; }}
             .payment-title {{ font-size: 9.3pt; font-weight: 900; margin-bottom: 4pt; }}
             .qr {{ width: 116px; }}
-            .beneficiary {{
-                direction: rtl;
-                text-align: center;
-                font-size: 7.7pt;
-                margin-top: 5pt;
-            }}
             .handle {{
                 direction: ltr;
                 text-align: center;
