@@ -204,10 +204,13 @@ def test_print_defaults_and_receipt_template(accounting_data) -> None:
         qr_url="receipt:qr",
     )
     assert "ثري إيه بايب" in html
+    assert "3A PIPES" in html
     assert "ahmed.a351054@instapay" in html
     assert "عميل &lt;اختبار&gt;" in html
     assert "75.00" in html
-    assert 'class="logo" width="105"' in html
+    assert 'class="logo" width="112"' in html
     assert 'class="qr" width="116"' in html
-    assert "font-size: 10pt" in html
+    assert 'class="company-en" dir="ltr"' in html
+    assert 'class="product-head">الصنف' in html
+    assert 'class="number-cell line-total" dir="ltr"' in html
     assert "class=\"remaining\"" in html
