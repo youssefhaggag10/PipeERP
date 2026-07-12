@@ -208,9 +208,11 @@ def test_print_defaults_and_receipt_template(accounting_data) -> None:
     assert "ahmed.a351054@instapay" in html
     assert "عميل &lt;اختبار&gt;" in html
     assert "75.00" in html
-    assert 'class="logo" width="112"' in html
+    assert 'class="logo" width="105"' in html
     assert 'class="qr" width="116"' in html
     assert 'class="company-en" dir="ltr"' in html
     assert 'class="product-head">الصنف' in html
-    assert 'class="number-cell line-total" dir="ltr"' in html
+    assert 'border: 1px solid #000' in html
+    assert 'page-break-inside: avoid' in html
+    assert "<thead>" not in html
     assert "class=\"remaining\"" in html
