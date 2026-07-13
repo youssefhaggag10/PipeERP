@@ -7,6 +7,7 @@ from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QPainter, QPen
 
 from app.core.config import AppConfig
 from app.utils.datetime_utils import format_egypt_datetime
+from app.utils.print_phone_utils import footer_phone_text
 
 
 class A4InvoiceRenderer:
@@ -296,26 +297,25 @@ class A4InvoiceRenderer:
         page_number: int,
         total_pages: int,
     ) -> None:
-        phones = [
-            line.strip() for line in str(settings.get("phones", "")).splitlines() if line.strip()
-        ]
-        if phones:
+        main_phone, sales_phones = footer_phone_text(settings.get("phones", ""))
+        if main_phone:
             self._draw_text(
                 painter,
                 QRect(105, 1368, 245, 43),
-                phones[0],
+                main_phone,
                 26,
                 self.WHITE,
                 bold=True,
             )
-        if len(phones) > 1:
+        if sales_phones:
             self._draw_text(
                 painter,
-                QRect(100, 1411, 250, 38),
-                f"إدارة المبيعات: {phones[1]}",
-                17,
+                QRect(100, 1406, 250, 50),
+                sales_phones,
+                16,
                 self.YELLOW,
                 bold=True,
+                min_size=9,
             )
 
         company_ar, company_en = self._company_parts(settings.get("company_name"))
