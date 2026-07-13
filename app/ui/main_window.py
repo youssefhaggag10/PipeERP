@@ -13,9 +13,11 @@ from app.database.connection import Database
 from app.models.user import User
 from app.repositories.accounting_repository import AccountingRepository
 from app.repositories.crm_repository import CRMRepository
+from app.repositories.enhanced_manufacturing_repository import (
+    EnhancedManufacturingRepository,
+)
 from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.invoice_repository import InvoiceRepository
-from app.repositories.manufacturing_repository import ManufacturingRepository
 from app.repositories.partner_repository import PartnerRepository
 from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.repositories.product_repository import ProductRepository
@@ -27,9 +29,9 @@ from app.services.crm_customer_sync import CRMCustomerSync
 from app.ui.accounting_order_pages import PurchaseAccountingPage
 from app.ui.crm_page import CRMPage
 from app.ui.dashboard import DashboardPage
+from app.ui.enhanced_manufacturing_page import EnhancedManufacturingPage
 from app.ui.inventory_page import InventoryPage
 from app.ui.lot_balances_page import LotBalancesPage
-from app.ui.manufacturing_page import ManufacturingPage
 from app.ui.partners_page import PartnersPage
 from app.ui.print_enabled_pages import AccountsPageWithPrint, SalesAccountingPageWithPrint
 from app.ui.print_settings_page import PrintSettingsPage
@@ -59,7 +61,7 @@ class MainWindow(QMainWindow):
         warehouse_repository = WarehouseRepository(database)
         accounting_repository = AccountingRepository(database)
         invoice_repository = InvoiceRepository(database)
-        manufacturing_repository = ManufacturingRepository(database)
+        manufacturing_repository = EnhancedManufacturingRepository(database)
         print_settings_repository = PrintSettingsRepository(database)
         crm_repository = CRMRepository(database, current_user)
         self.crm_sync = CRMCustomerSync(database, current_user)
@@ -117,7 +119,7 @@ class MainWindow(QMainWindow):
         if admin_repository.has_permission("manufacturing"):
             self.add_page(
                 "التصنيع",
-                ManufacturingPage(
+                EnhancedManufacturingPage(
                     manufacturing_repository,
                     product_repository,
                     warehouse_repository,
