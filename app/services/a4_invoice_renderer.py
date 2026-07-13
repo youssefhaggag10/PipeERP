@@ -115,11 +115,12 @@ class A4InvoiceRenderer:
         )
         self._draw_text(
             painter,
-            QRect(320, 105, 515, 40),
+            QRect(300, 100, 555, 48),
             company_en or "3A FOR PLASTIC PRODUCTS",
-            23,
+            42,
             self.BLUE,
             bold=True,
+            min_size=30,
         )
         self._draw_text(
             painter,
@@ -131,7 +132,7 @@ class A4InvoiceRenderer:
         )
         self._draw_text(
             painter,
-            QRect(300, 250, 545, 76),
+            QRect(255, 250, 545, 76),
             "فاتورة مبيعات",
             48,
             self.BLUE,
@@ -214,7 +215,7 @@ class A4InvoiceRenderer:
                     values[key],
                     17 if key not in {"name", "notes"} else 16,
                     self.BLACK,
-                    bold=key in {"line_total", "name", "serial"},
+                    bold=True,
                     min_size=10,
                 )
 
@@ -252,7 +253,7 @@ class A4InvoiceRenderer:
             painter,
             QRect(795, 1048, 218, 36),
             "الشروط والملاحظات",
-            17,
+            20,
             self.WHITE,
             bold=True,
         )
@@ -268,13 +269,13 @@ class A4InvoiceRenderer:
         for term in self.TERMS:
             self._draw_text(
                 painter,
-                QRect(235, term_y, 725, 32),
+                QRect(215, term_y, 745, 32),
                 term,
-                15,
+                19,
                 self.BLACK,
-                bold=False,
+                bold=True,
                 alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
-                min_size=11,
+                min_size=14,
             )
             term_y += 39
 
@@ -301,16 +302,16 @@ class A4InvoiceRenderer:
         if phones:
             self._draw_text(
                 painter,
-                QRect(55, 1368, 305, 43),
+                QRect(105, 1368, 245, 43),
                 phones[0],
-                29,
+                26,
                 self.WHITE,
                 bold=True,
             )
         if len(phones) > 1:
             self._draw_text(
                 painter,
-                QRect(55, 1411, 305, 38),
+                QRect(100, 1411, 250, 38),
                 f"إدارة المبيعات: {phones[1]}",
                 17,
                 self.YELLOW,
@@ -320,7 +321,7 @@ class A4InvoiceRenderer:
         company_ar, company_en = self._company_parts(settings.get("company_name"))
         self._draw_text(
             painter,
-            QRect(475, 1364, 235, 44),
+            QRect(500, 1362, 210, 46),
             company_ar or "ثري إيه بايب",
             27,
             self.WHITE,
@@ -328,15 +329,16 @@ class A4InvoiceRenderer:
         )
         self._draw_text(
             painter,
-            QRect(470, 1408, 245, 30),
+            QRect(500, 1406, 210, 38),
             company_en or "3A FOR PLASTIC PRODUCTS",
-            14,
+            27,
             self.WHITE,
             bold=True,
+            min_size=20,
         )
         self._draw_text(
             painter,
-            QRect(730, 1370, 265, 70),
+            QRect(735, 1370, 205, 70),
             str(settings.get("address", "") or "المنوفية - سرس الليان"),
             20,
             self.WHITE,
