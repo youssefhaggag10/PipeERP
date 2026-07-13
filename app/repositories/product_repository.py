@@ -46,6 +46,29 @@ class ProductRepository:
                 (product_id,),
             )
 
+    def update_product(self, product_id: int, data: dict) -> None:
+        with self.database.session() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE products
+                SET code = ?, name = ?, product_type = ?, unit = ?,
+                    min_stock = ?, track_lots = ?, standard_weight_kg = ?
+                WHERE id = ? AND is_active = 1
+                """,
+                (
+                    data["code"],
+                    data["name"],
+                    data["product_type"],
+                    data.get("unit", "كجم"),
+                    float(data.get("min_stock", 0) or 0),
+                    int(bool(data.get("track_lots", True))),
+                    float(data.get("standard_weight_kg", 0) or 0),
+                    product_id,
+                ),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError("الصنف غير موجود أو غير نشط")
+
     def count_by_type(self) -> dict:
         rows = self.database.fetch_all(
             """

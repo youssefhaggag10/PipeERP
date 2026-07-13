@@ -6,6 +6,7 @@ from app.database.connection import Database
 from app.database.schema import initialize_database
 from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.manufacturing_repository import ManufacturingRepository
+from app.repositories.product_repository import ProductRepository
 from app.services.manufacturing_planning_service import ProductionTarget, calculate_batch_plan
 
 
@@ -93,6 +94,33 @@ def test_shared_recipe_combines_pipe_sizes_and_rounds_batches_up() -> None:
     assert plan.batches == 24
     assert plan.planned_input_weight == 6600
     assert plan.expected_overage_weight == 200
+
+
+def test_existing_finished_product_weight_can_be_updated(database: Database) -> None:
+    with database.session() as connection:
+        product_id = int(
+            connection.execute(
+                """
+                INSERT INTO products(code, name, product_type, unit)
+                VALUES ('OLD-FG', 'ماسورة قديمة', 'finished_good', 'قطعة')
+                """
+            ).lastrowid
+        )
+    repository = ProductRepository(database)
+    repository.update_product(
+        product_id,
+        {
+            "code": "OLD-FG",
+            "name": "ماسورة قديمة",
+            "product_type": "finished_good",
+            "unit": "قطعة",
+            "min_stock": 0,
+            "track_lots": True,
+            "standard_weight_kg": 28,
+        },
+    )
+    product = next(row for row in repository.list_products() if row["id"] == product_id)
+    assert product["standard_weight_kg"] == 28
 
 
 def test_manufacturing_receives_extra_output_and_returns_costed_scrap(

@@ -30,6 +30,7 @@ class ProductsPage(QWidget):
         super().__init__()
         self.repository = repository
         self.products = []
+        self.editing_product_id: int | None = None
         self.setLayoutDirection(Qt.RightToLeft)
 
         title = QLabel("الأصناف")
@@ -54,8 +55,11 @@ class ProductsPage(QWidget):
         form.addRow("حد التنبيه", self.min_stock_input)
         form.addRow("وزن القطعة القياسي (كجم)", self.standard_weight_input)
 
-        save_button = QPushButton("حفظ الصنف")
-        save_button.clicked.connect(self.save_product)
+        self.save_button = QPushButton("حفظ الصنف")
+        self.save_button.clicked.connect(self.save_product)
+        cancel_edit_button = QPushButton("إلغاء التعديل")
+        cancel_edit_button.setObjectName("secondaryButton")
+        cancel_edit_button.clicked.connect(self.clear_editor)
         delete_button = QPushButton("حذف الصنف المحدد")
         delete_button.setObjectName("dangerButton")
         delete_button.clicked.connect(self.delete_selected_product)
@@ -66,9 +70,11 @@ class ProductsPage(QWidget):
         )
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
+        self.table.doubleClicked.connect(self.load_selected_product)
 
         actions = QHBoxLayout()
-        actions.addWidget(save_button)
+        actions.addWidget(self.save_button)
+        actions.addWidget(cancel_edit_button)
         actions.addWidget(delete_button)
         actions.addStretch()
 
@@ -98,15 +104,42 @@ class ProductsPage(QWidget):
             standard_weight = float(data["standard_weight_kg"])
             if standard_weight < 0:
                 raise ValueError
-            self.repository.create_product(data)
+            if self.editing_product_id is None:
+                self.repository.create_product(data)
+            else:
+                self.repository.update_product(self.editing_product_id, data)
         except ValueError:
             QMessageBox.warning(self, "تنبيه", "الوزن القياسي يجب أن يكون رقمًا غير سالب")
             return
+        self.clear_editor()
+        self.reload()
+
+    def load_selected_product(self) -> None:
+        row = self.table.currentRow()
+        if row < 0 or row >= len(self.products):
+            return
+        product = self.products[row]
+        self.editing_product_id = int(product["id"])
+        self.code_input.setText(str(product["code"]))
+        self.name_input.setText(str(product["name"]))
+        type_label = PRODUCT_TYPE_LABELS.get(product["product_type"])
+        if type_label:
+            self.type_input.setCurrentText(type_label)
+        self.unit_input.setText(str(product["unit"]))
+        self.min_stock_input.setText(f"{float(product['min_stock']):g}")
+        self.standard_weight_input.setText(
+            f"{float(product.get('standard_weight_kg', 0)):g}"
+        )
+        self.save_button.setText("حفظ تعديلات الصنف")
+
+    def clear_editor(self) -> None:
+        self.editing_product_id = None
         self.code_input.clear()
         self.name_input.clear()
+        self.unit_input.setText("كجم")
         self.min_stock_input.setText("0")
         self.standard_weight_input.setText("0")
-        self.reload()
+        self.save_button.setText("حفظ الصنف")
 
     def delete_selected_product(self) -> None:
         row = self.table.currentRow()
