@@ -273,7 +273,12 @@ class PurchaseAccountingPage(_PaymentOrderMixin, PurchasePage):
             [
                 line["code"], line["name"], line["lot_number"],
                 f"{float(line['quantity']):g}", line["unit"],
-                f"{float(line['unit_price']):,.2f}", f"{float(line['line_total']):,.2f}",
+                f"{float(line['unit_price']):,.2f}",
+                f"{float(line['manufacturing_unit_cost']):,.2f}",
+                f"{float(line['purchase_loss_quantity']):g}",
+                f"{float(line['net_quantity']):g}",
+                f"{float(line['inventory_unit_cost']):,.4f}",
+                f"{float(line['line_total']):,.2f}",
             ]
             for line in order["lines"]
         ]
@@ -287,7 +292,11 @@ class PurchaseAccountingPage(_PaymentOrderMixin, PurchasePage):
                 ("المتبقي", f"{float(order['remaining']):,.2f}"),
                 ("الملاحظات", order["notes"] or ""),
             ],
-            columns=["الكود", "الصنف", "الدفعة", "الكمية", "الوحدة", "السعر", "الإجمالي"],
+            columns=[
+                "الكود", "الصنف", "الدفعة", "الإجمالي كجم", "الوحدة",
+                "سعر الشراء", "تصنيع/كجم", "الفقد", "صافي المخزن",
+                "تكلفة المخزون", "الإجمالي",
+            ],
             rows=rows, total=float(order["total"]), parent=self,
         )
         dialog.exec()

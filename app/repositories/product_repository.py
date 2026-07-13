@@ -8,7 +8,8 @@ class ProductRepository:
     def list_products(self) -> list[dict]:
         rows = self.database.fetch_all(
             """
-            SELECT id, code, name, product_type, unit, min_stock, track_lots, is_active
+            SELECT id, code, name, product_type, unit, min_stock, track_lots,
+                   standard_weight_kg, is_active
             FROM products
             WHERE is_active = 1
             ORDER BY id DESC
@@ -20,8 +21,11 @@ class ProductRepository:
         with self.database.session() as connection:
             cursor = connection.execute(
                 """
-                INSERT INTO products(code, name, product_type, unit, min_stock, track_lots)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO products(
+                    code, name, product_type, unit, min_stock, track_lots,
+                    standard_weight_kg
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     data["code"],
@@ -30,6 +34,7 @@ class ProductRepository:
                     data.get("unit", "كجم"),
                     float(data.get("min_stock", 0) or 0),
                     int(bool(data.get("track_lots", True))),
+                    float(data.get("standard_weight_kg", 0) or 0),
                 ),
             )
             return int(cursor.lastrowid)

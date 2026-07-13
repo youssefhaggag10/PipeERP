@@ -15,6 +15,7 @@ from app.repositories.accounting_repository import AccountingRepository
 from app.repositories.crm_repository import CRMRepository
 from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.invoice_repository import InvoiceRepository
+from app.repositories.manufacturing_repository import ManufacturingRepository
 from app.repositories.partner_repository import PartnerRepository
 from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.repositories.product_repository import ProductRepository
@@ -28,13 +29,13 @@ from app.ui.crm_page import CRMPage
 from app.ui.dashboard import DashboardPage
 from app.ui.inventory_page import InventoryPage
 from app.ui.lot_balances_page import LotBalancesPage
+from app.ui.manufacturing_page import ManufacturingPage
 from app.ui.partners_page import PartnersPage
 from app.ui.print_enabled_pages import AccountsPageWithPrint, SalesAccountingPageWithPrint
 from app.ui.print_settings_page import PrintSettingsPage
 from app.ui.products_page import ProductsPage
 from app.ui.reports_page import ReportsPage
 from app.ui.stock_card_page import StockCardPage
-from app.ui.transactions_list_page import TransactionsListPage
 from app.ui.warehouse_page import WarehousePage
 
 
@@ -58,6 +59,7 @@ class MainWindow(QMainWindow):
         warehouse_repository = WarehouseRepository(database)
         accounting_repository = AccountingRepository(database)
         invoice_repository = InvoiceRepository(database)
+        manufacturing_repository = ManufacturingRepository(database)
         print_settings_repository = PrintSettingsRepository(database)
         crm_repository = CRMRepository(database, current_user)
         self.crm_sync = CRMCustomerSync(database, current_user)
@@ -115,8 +117,10 @@ class MainWindow(QMainWindow):
         if admin_repository.has_permission("manufacturing"):
             self.add_page(
                 "التصنيع",
-                TransactionsListPage(
-                    "التصنيع", "أوامر التصنيع", ["رقم الأمر", "المنتج", "الكمية", "الحالة"]
+                ManufacturingPage(
+                    manufacturing_repository,
+                    product_repository,
+                    warehouse_repository,
                 ),
             )
         if admin_repository.has_permission("reports"):

@@ -1,8 +1,8 @@
 from collections.abc import Callable
 from sqlite3 import Connection
 
-DATABASE_VERSION = "0.7.0"
-LATEST_SCHEMA_VERSION = 7
+DATABASE_VERSION = "0.8.0"
+LATEST_SCHEMA_VERSION = 8
 
 
 INITIAL_SCHEMA_SQL = """
@@ -449,6 +449,124 @@ def _migration_007_print_settings(connection: Connection) -> None:
     )
 
 
+MANUFACTURING_SQL = """
+CREATE TABLE IF NOT EXISTS manufacturing_recipes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL UNIQUE,
+    scrap_product_id INTEGER REFERENCES products(id),
+    notes TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS manufacturing_recipe_outputs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recipe_id INTEGER NOT NULL REFERENCES manufacturing_recipes(id),
+    product_id INTEGER NOT NULL UNIQUE REFERENCES products(id),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(recipe_id, product_id)
+);
+
+CREATE TABLE IF NOT EXISTS manufacturing_recipe_components (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recipe_id INTEGER NOT NULL REFERENCES manufacturing_recipes(id),
+    product_id INTEGER REFERENCES products(id),
+    component_kind TEXT NOT NULL DEFAULT 'material'
+        CHECK(component_kind IN ('material', 'optional_scrap')),
+    quantity_per_batch REAL NOT NULL CHECK(quantity_per_batch >= 0),
+    display_order INTEGER NOT NULL DEFAULT 0,
+    CHECK(
+        (component_kind = 'material' AND product_id IS NOT NULL)
+        OR component_kind = 'optional_scrap'
+    )
+);
+
+CREATE TABLE IF NOT EXISTS manufacturing_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_number TEXT NOT NULL UNIQUE,
+    recipe_id INTEGER NOT NULL REFERENCES manufacturing_recipes(id),
+    warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+    status TEXT NOT NULL DEFAULT 'draft'
+        CHECK(status IN ('draft', 'in_progress', 'completed', 'cancelled')),
+    planned_batches INTEGER NOT NULL DEFAULT 0 CHECK(planned_batches >= 0),
+    actual_batches INTEGER NOT NULL DEFAULT 0 CHECK(actual_batches >= 0),
+    returned_scrap_quantity REAL NOT NULL DEFAULT 0,
+    material_cost REAL NOT NULL DEFAULT 0,
+    finished_cost REAL NOT NULL DEFAULT 0,
+    weight_variance REAL NOT NULL DEFAULT 0,
+    notes TEXT,
+    started_at TEXT,
+    completed_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS manufacturing_order_outputs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    manufacturing_order_id INTEGER NOT NULL REFERENCES manufacturing_orders(id),
+    product_id INTEGER NOT NULL REFERENCES products(id),
+    planned_quantity REAL NOT NULL CHECK(planned_quantity >= 0),
+    actual_quantity REAL NOT NULL DEFAULT 0 CHECK(actual_quantity >= 0),
+    standard_weight_kg REAL NOT NULL CHECK(standard_weight_kg > 0),
+    unit_cost REAL NOT NULL DEFAULT 0,
+    UNIQUE(manufacturing_order_id, product_id)
+);
+
+CREATE TABLE IF NOT EXISTS manufacturing_order_materials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    manufacturing_order_id INTEGER NOT NULL REFERENCES manufacturing_orders(id),
+    product_id INTEGER NOT NULL REFERENCES products(id),
+    component_kind TEXT NOT NULL DEFAULT 'material'
+        CHECK(component_kind IN ('material', 'scrap')),
+    quantity_per_batch REAL NOT NULL DEFAULT 0,
+    planned_quantity REAL NOT NULL DEFAULT 0,
+    actual_quantity REAL NOT NULL DEFAULT 0,
+    unit_cost REAL NOT NULL DEFAULT 0,
+    total_cost REAL NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_recipe_components_recipe
+ON manufacturing_recipe_components(recipe_id, display_order, id);
+CREATE INDEX IF NOT EXISTS idx_recipe_outputs_recipe
+ON manufacturing_recipe_outputs(recipe_id);
+CREATE INDEX IF NOT EXISTS idx_manufacturing_orders_recipe
+ON manufacturing_orders(recipe_id, created_at, id);
+CREATE INDEX IF NOT EXISTS idx_manufacturing_materials_order
+ON manufacturing_order_materials(manufacturing_order_id);
+CREATE INDEX IF NOT EXISTS idx_manufacturing_outputs_order
+ON manufacturing_order_outputs(manufacturing_order_id);
+"""
+
+
+def _migration_008_manufacturing_foundation(connection: Connection) -> None:
+    purchase_columns = {
+        "manufacturing_unit_cost": "REAL NOT NULL DEFAULT 0",
+        "purchase_loss_quantity": "REAL NOT NULL DEFAULT 0",
+        "net_quantity": "REAL NOT NULL DEFAULT 0",
+        "inventory_unit_cost": "REAL NOT NULL DEFAULT 0",
+    }
+    for column_name, definition in purchase_columns.items():
+        if not _column_exists(connection, "purchase_order_lines", column_name):
+            connection.execute(
+                f"ALTER TABLE purchase_order_lines ADD COLUMN {column_name} {definition}"
+            )
+
+    connection.execute(
+        """
+        UPDATE purchase_order_lines
+        SET net_quantity = quantity,
+            inventory_unit_cost = unit_price
+        WHERE net_quantity <= 0
+        """
+    )
+
+    if not _column_exists(connection, "products", "standard_weight_kg"):
+        connection.execute(
+            "ALTER TABLE products ADD COLUMN standard_weight_kg REAL NOT NULL DEFAULT 0"
+        )
+    connection.executescript(MANUFACTURING_SQL)
+
+
 MIGRATIONS: tuple[tuple[int, Callable[[Connection], None]], ...] = (
     (1, _migration_001_initial_schema),
     (2, _migration_002_inventory_partner_link),
@@ -457,6 +575,7 @@ MIGRATIONS: tuple[tuple[int, Callable[[Connection], None]], ...] = (
     (5, _migration_005_accounting_and_single_warehouse),
     (6, _migration_006_invoices),
     (7, _migration_007_print_settings),
+    (8, _migration_008_manufacturing_foundation),
 )
 
 

@@ -39,6 +39,10 @@ class ProductsPage(QWidget):
         self.name_input = QLineEdit()
         self.unit_input = QLineEdit("كجم")
         self.min_stock_input = QLineEdit("0")
+        self.standard_weight_input = QLineEdit("0")
+        self.standard_weight_input.setToolTip(
+            "وزن القطعة القياسي للمنتج النهائي؛ يستخدم لحساب خلطات التصنيع"
+        )
         self.type_input = QComboBox()
         self.type_input.addItems(PRODUCT_TYPES.keys())
 
@@ -48,6 +52,7 @@ class ProductsPage(QWidget):
         form.addRow("النوع", self.type_input)
         form.addRow("الوحدة", self.unit_input)
         form.addRow("حد التنبيه", self.min_stock_input)
+        form.addRow("وزن القطعة القياسي (كجم)", self.standard_weight_input)
 
         save_button = QPushButton("حفظ الصنف")
         save_button.clicked.connect(self.save_product)
@@ -55,8 +60,10 @@ class ProductsPage(QWidget):
         delete_button.setObjectName("dangerButton")
         delete_button.clicked.connect(self.delete_selected_product)
 
-        self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["الكود", "الاسم", "النوع", "الوحدة", "حد التنبيه"])
+        self.table = QTableWidget(0, 6)
+        self.table.setHorizontalHeaderLabels(
+            ["الكود", "الاسم", "النوع", "الوحدة", "الوزن القياسي كجم", "حد التنبيه"]
+        )
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
 
@@ -81,15 +88,24 @@ class ProductsPage(QWidget):
             "product_type": PRODUCT_TYPES[self.type_input.currentText()],
             "unit": self.unit_input.text().strip() or "كجم",
             "min_stock": self.min_stock_input.text().strip() or "0",
+            "standard_weight_kg": self.standard_weight_input.text().strip() or "0",
             "track_lots": True,
         }
         if not data["code"] or not data["name"]:
             QMessageBox.warning(self, "تنبيه", "الكود والاسم مطلوبان")
             return
-        self.repository.create_product(data)
+        try:
+            standard_weight = float(data["standard_weight_kg"])
+            if standard_weight < 0:
+                raise ValueError
+            self.repository.create_product(data)
+        except ValueError:
+            QMessageBox.warning(self, "تنبيه", "الوزن القياسي يجب أن يكون رقمًا غير سالب")
+            return
         self.code_input.clear()
         self.name_input.clear()
         self.min_stock_input.setText("0")
+        self.standard_weight_input.setText("0")
         self.reload()
 
     def delete_selected_product(self) -> None:
@@ -115,6 +131,7 @@ class ProductsPage(QWidget):
                 product["name"],
                 PRODUCT_TYPE_LABELS.get(product["product_type"], product["product_type"]),
                 product["unit"],
+                f"{float(product.get('standard_weight_kg', 0)):g}",
                 str(product["min_stock"]),
             ]
             for col_index, value in enumerate(values):

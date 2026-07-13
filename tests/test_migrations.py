@@ -29,6 +29,12 @@ def test_migrations_create_complete_schema() -> None:
         "sales_orders",
         "sales_order_lines",
         "inventory_cost_allocations",
+        "manufacturing_recipes",
+        "manufacturing_recipe_outputs",
+        "manufacturing_recipe_components",
+        "manufacturing_orders",
+        "manufacturing_order_outputs",
+        "manufacturing_order_materials",
     }.issubset(tables)
     assert connection.execute("PRAGMA user_version").fetchone()[0] == LATEST_SCHEMA_VERSION
 

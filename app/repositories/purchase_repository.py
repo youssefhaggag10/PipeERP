@@ -56,7 +56,9 @@ class PurchaseRepository:
         lines = self.database.fetch_all(
             """
             SELECT pol.id, product.code, product.name, pol.lot_number,
-                   pol.quantity, pol.unit, pol.unit_price, pol.line_total
+                   pol.quantity, pol.unit, pol.unit_price,
+                   pol.manufacturing_unit_cost, pol.purchase_loss_quantity,
+                   pol.net_quantity, pol.inventory_unit_cost, pol.line_total
             FROM purchase_order_lines pol
             JOIN products product ON product.id = pol.product_id
             WHERE pol.purchase_order_id = ?
@@ -122,12 +124,22 @@ class PurchaseRepository:
             quantity = float(line["quantity"])
             unit = str(line.get("unit", "")).strip() or "كجم"
             unit_price = float(line.get("unit_price", 0))
+            manufacturing_unit_cost = float(line.get("manufacturing_unit_cost", 0) or 0)
+            purchase_loss_quantity = float(line.get("purchase_loss_quantity", 0) or 0)
             if quantity <= 0:
                 raise ValueError(f"كمية البند رقم {line_number} يجب أن تكون أكبر من صفر")
             if unit_price < 0:
                 raise ValueError(f"سعر البند رقم {line_number} لا يمكن أن يكون سالبًا")
+            if manufacturing_unit_cost < 0:
+                raise ValueError(f"سعر تصنيع البند رقم {line_number} لا يمكن أن يكون سالبًا")
+            if purchase_loss_quantity < 0 or purchase_loss_quantity >= quantity:
+                raise ValueError(
+                    f"فقد البند رقم {line_number} يجب أن يكون صفرًا أو أقل من الكمية"
+                )
             if not lot_number:
                 raise ValueError(f"رقم الدفعة مطلوب في البند رقم {line_number}")
+            net_quantity = quantity - purchase_loss_quantity
+            line_total = quantity * (unit_price + manufacturing_unit_cost)
             normalized_lines.append(
                 {
                     "product_id": product_id,
@@ -135,7 +147,11 @@ class PurchaseRepository:
                     "quantity": quantity,
                     "unit": unit,
                     "unit_price": unit_price,
-                    "line_total": quantity * unit_price,
+                    "manufacturing_unit_cost": manufacturing_unit_cost,
+                    "purchase_loss_quantity": purchase_loss_quantity,
+                    "net_quantity": net_quantity,
+                    "inventory_unit_cost": line_total / net_quantity,
+                    "line_total": line_total,
                 }
             )
 
@@ -173,9 +189,11 @@ class PurchaseRepository:
                     """
                     INSERT INTO purchase_order_lines(
                         purchase_order_id, product_id, lot_number, quantity,
-                        unit, unit_price, line_total
+                        unit, unit_price, manufacturing_unit_cost,
+                        purchase_loss_quantity, net_quantity,
+                        inventory_unit_cost, line_total
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         order_id,
@@ -184,6 +202,10 @@ class PurchaseRepository:
                         line["quantity"],
                         line["unit"],
                         line["unit_price"],
+                        line["manufacturing_unit_cost"],
+                        line["purchase_loss_quantity"],
+                        line["net_quantity"],
+                        line["inventory_unit_cost"],
                         line["line_total"],
                     ),
                 )
@@ -223,7 +245,10 @@ class PurchaseRepository:
                 if lot is None:
                     lot_cursor = connection.execute(
                         "INSERT INTO lots(product_id, lot_number, unit_cost) VALUES (?, ?, ?)",
-                        (line["product_id"], line["lot_number"], line["unit_price"]),
+                        (
+                            line["product_id"], line["lot_number"],
+                            line["inventory_unit_cost"],
+                        ),
                     )
                     lot_id = int(lot_cursor.lastrowid)
                 else:
@@ -239,7 +264,7 @@ class PurchaseRepository:
                     """,
                     (
                         line["product_id"], order["warehouse_id"], lot_id,
-                        line["quantity"], line["unit_price"], order_id,
+                        line["net_quantity"], line["inventory_unit_cost"], order_id,
                         order["supplier_id"], order["order_number"],
                     ),
                 )

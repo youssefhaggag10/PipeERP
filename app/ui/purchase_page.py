@@ -60,8 +60,13 @@ class PurchasePage(QWidget):
         self.lot_input = QLineEdit()
         self.lot_input.setPlaceholderText("مثال: HDPE-2026-07-A")
         self.qty_input = QLineEdit()
+        self.qty_input.editingFinished.connect(self._suggest_purchase_loss)
         self.unit_input = QLineEdit("كجم")
         self.price_input = QLineEdit("0")
+        self.manufacturing_price_input = QLineEdit("0")
+        self.manufacturing_price_input.setToolTip("تكلفة التجهيز أو التصنيع لكل كجم")
+        self.loss_input = QLineEdit()
+        self.loss_input.setPlaceholderText("تلقائي: 5 كجم لكل طن")
 
         line_editor = QGridLayout()
         line_editor.addWidget(QLabel("الصنف"), 0, 0)
@@ -74,6 +79,10 @@ class PurchasePage(QWidget):
         line_editor.addWidget(self.unit_input, 1, 3)
         line_editor.addWidget(QLabel("سعر الوحدة"), 0, 4)
         line_editor.addWidget(self.price_input, 1, 4)
+        line_editor.addWidget(QLabel("تصنيع/كجم"), 0, 5)
+        line_editor.addWidget(self.manufacturing_price_input, 1, 5)
+        line_editor.addWidget(QLabel("فقد الشراء"), 0, 6)
+        line_editor.addWidget(self.loss_input, 1, 6)
 
         self.add_line_button = QPushButton("إضافة البند")
         self.add_line_button.clicked.connect(self.add_or_update_line)
@@ -90,9 +99,13 @@ class PurchasePage(QWidget):
         line_actions.addWidget(clear_line_button)
         line_actions.addStretch()
 
-        self.lines_table = QTableWidget(0, 7)
+        self.lines_table = QTableWidget(0, 11)
         self.lines_table.setHorizontalHeaderLabels(
-            ["الكود", "الصنف", "رقم الدفعة", "الكمية", "الوحدة", "سعر الوحدة", "الإجمالي"]
+            [
+                "الكود", "الصنف", "رقم الدفعة", "إجمالي الكمية", "الوحدة",
+                "سعر الشراء", "تصنيع/كجم", "الفقد", "صافي المخزن",
+                "تكلفة المخزون/وحدة", "الإجمالي",
+            ]
         )
         self.lines_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.lines_table.setSelectionMode(QTableWidget.SingleSelection)
@@ -210,18 +223,34 @@ class PurchasePage(QWidget):
         try:
             quantity = float(self.qty_input.text().strip())
             unit_price = float(self.price_input.text().strip() or 0)
+            manufacturing_unit_cost = float(
+                self.manufacturing_price_input.text().strip() or 0
+            )
+            loss_text = self.loss_input.text().strip()
+            purchase_loss_quantity = (
+                float(loss_text) if loss_text else self._default_purchase_loss(quantity)
+            )
         except ValueError:
-            QMessageBox.warning(self, "تنبيه", "الكمية والسعر يجب أن يكونا أرقامًا")
+            QMessageBox.warning(self, "تنبيه", "الكمية والأسعار والفقد يجب أن تكون أرقامًا")
             return
         lot_number = self.lot_input.text().strip()
-        if quantity <= 0 or unit_price < 0 or not lot_number:
+        if (
+            quantity <= 0
+            or unit_price < 0
+            or manufacturing_unit_cost < 0
+            or purchase_loss_quantity < 0
+            or purchase_loss_quantity >= quantity
+            or not lot_number
+        ):
             QMessageBox.warning(
                 self,
                 "تنبيه",
-                "أدخل رقم دفعة، وكمية أكبر من صفر، وسعرًا غير سالب",
+                "أدخل دفعة وكمية صحيحة وأسعارًا غير سالبة، والفقد أقل من الكمية",
             )
             return
         product = self.products[product_index]
+        net_quantity = quantity - purchase_loss_quantity
+        line_total = quantity * (unit_price + manufacturing_unit_cost)
         line = {
             "product_id": int(product["id"]),
             "code": product["code"],
@@ -230,7 +259,11 @@ class PurchasePage(QWidget):
             "quantity": quantity,
             "unit": self.unit_input.text().strip() or product["unit"],
             "unit_price": unit_price,
-            "line_total": quantity * unit_price,
+            "manufacturing_unit_cost": manufacturing_unit_cost,
+            "purchase_loss_quantity": purchase_loss_quantity,
+            "net_quantity": net_quantity,
+            "inventory_unit_cost": line_total / net_quantity,
+            "line_total": line_total,
         }
         if self.editing_line_index is None:
             self.lines.append(line)
@@ -251,6 +284,10 @@ class PurchasePage(QWidget):
         self.qty_input.setText(f"{float(line['quantity']):g}")
         self.unit_input.setText(str(line["unit"]))
         self.price_input.setText(f"{float(line['unit_price']):g}")
+        self.manufacturing_price_input.setText(
+            f"{float(line.get('manufacturing_unit_cost', 0)):g}"
+        )
+        self.loss_input.setText(f"{float(line.get('purchase_loss_quantity', 0)):g}")
         self.add_line_button.setText("تحديث البند")
 
     def delete_selected_line(self) -> None:
@@ -267,6 +304,8 @@ class PurchasePage(QWidget):
         self.lot_input.clear()
         self.qty_input.clear()
         self.price_input.setText("0")
+        self.manufacturing_price_input.setText("0")
+        self.loss_input.clear()
         self.add_line_button.setText("إضافة البند")
         self._sync_product_unit()
 
@@ -280,6 +319,10 @@ class PurchasePage(QWidget):
                 f"{float(line['quantity']):g}",
                 line["unit"],
                 f"{float(line['unit_price']):,.2f}",
+                f"{float(line.get('manufacturing_unit_cost', 0)):,.2f}",
+                f"{float(line.get('purchase_loss_quantity', 0)):g}",
+                f"{float(line.get('net_quantity', line['quantity'])):g}",
+                f"{float(line.get('inventory_unit_cost', line['unit_price'])):,.4f}",
                 f"{float(line['line_total']):,.2f}",
             ]
             for column_index, value in enumerate(values):
@@ -339,6 +382,10 @@ class PurchasePage(QWidget):
                 f"{float(line['quantity']):g}",
                 line["unit"],
                 f"{float(line['unit_price']):,.2f}",
+                f"{float(line['manufacturing_unit_cost']):,.2f}",
+                f"{float(line['purchase_loss_quantity']):g}",
+                f"{float(line['net_quantity']):g}",
+                f"{float(line['inventory_unit_cost']):,.4f}",
                 f"{float(line['line_total']):,.2f}",
             ]
             for line in order["lines"]
@@ -352,12 +399,31 @@ class PurchasePage(QWidget):
                 ("الحالة", self.status_label(order["status"])),
                 ("الملاحظات", order["notes"] or ""),
             ],
-            columns=["الكود", "الصنف", "الدفعة", "الكمية", "الوحدة", "السعر", "الإجمالي"],
+            columns=[
+                "الكود", "الصنف", "الدفعة", "الإجمالي كجم", "الوحدة",
+                "سعر الشراء", "تصنيع/كجم", "الفقد", "صافي المخزن",
+                "تكلفة المخزون", "الإجمالي",
+            ],
             rows=rows,
             total=float(order["total"]),
             parent=self,
         )
         dialog.exec()
+
+    @staticmethod
+    def _default_purchase_loss(quantity: float) -> float:
+        """Five kilograms per purchased metric ton, including partial tons."""
+        return max(0.0, quantity * 0.005)
+
+    def _suggest_purchase_loss(self) -> None:
+        if self.loss_input.text().strip():
+            return
+        try:
+            quantity = float(self.qty_input.text().strip())
+        except ValueError:
+            return
+        if quantity > 0 and self.unit_input.text().strip() in {"كجم", "kg", "KG"}:
+            self.loss_input.setText(f"{self._default_purchase_loss(quantity):g}")
 
     def _sync_product_unit(self) -> None:
         index = self.product_input.currentIndex()
