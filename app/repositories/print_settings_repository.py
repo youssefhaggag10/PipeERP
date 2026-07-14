@@ -16,6 +16,10 @@ class PrintSettingsRepository:
         "paper_width_mm": "print_paper_width_mm",
         "logo_path": "print_logo_path",
         "qr_path": "print_qr_path",
+        "watermark_enabled": "ui_watermark_enabled",
+        "watermark_opacity": "ui_watermark_opacity",
+        "watermark_size": "ui_watermark_size",
+        "watermark_path": "ui_watermark_path",
     }
 
     DEFAULTS = {
@@ -28,6 +32,10 @@ class PrintSettingsRepository:
         "paper_width_mm": "80",
         "logo_path": "",
         "qr_path": "",
+        "watermark_enabled": "0",
+        "watermark_opacity": "8",
+        "watermark_size": "35",
+        "watermark_path": "",
     }
 
     def __init__(self, database: Database) -> None:
@@ -52,6 +60,9 @@ class PrintSettingsRepository:
         result["qr_path"] = str(
             self._resolve_asset(result["qr_path"], self.default_qr_path())
         )
+        result["watermark_path"] = str(
+            self._resolve_asset(result["watermark_path"], self.default_logo_path())
+        )
         return result
 
     def save_settings(
@@ -60,6 +71,7 @@ class PrintSettingsRepository:
         *,
         logo_source: str | None = None,
         qr_source: str | None = None,
+        watermark_source: str | None = None,
     ) -> None:
         company_name = str(values.get("company_name", "")).strip()
         if not company_name:
@@ -68,16 +80,35 @@ class PrintSettingsRepository:
         normalized = {
             name: str(values.get(name, self.DEFAULTS[name])).strip()
             for name in self.KEYS
-            if name not in {"logo_path", "qr_path"}
+            if name not in {"logo_path", "qr_path", "watermark_path"}
         }
         normalized["company_name"] = company_name
         normalized["paper_width_mm"] = "80"
+
+        try:
+            opacity = int(float(normalized.get("watermark_opacity", "8")))
+            size = int(float(normalized.get("watermark_size", "35")))
+        except ValueError as error:
+            raise ValueError("شفافية وحجم العلامة المائية يجب أن يكونا أرقامًا") from error
+        if not 1 <= opacity <= 40:
+            raise ValueError("شفافية العلامة المائية يجب أن تكون بين 1% و40%")
+        if not 10 <= size <= 80:
+            raise ValueError("حجم العلامة المائية يجب أن يكون بين 10% و80%")
+        normalized["watermark_opacity"] = str(opacity)
+        normalized["watermark_size"] = str(size)
+        normalized["watermark_enabled"] = (
+            "1" if normalized.get("watermark_enabled", "0").lower() in {"1", "true", "yes", "on"} else "0"
+        )
 
         current_assets = self._stored_asset_values()
         if logo_source:
             current_assets["logo_path"] = self._copy_asset(logo_source, "logo")
         if qr_source:
             current_assets["qr_path"] = self._copy_asset(qr_source, "instapay_qr")
+        if watermark_source:
+            current_assets["watermark_path"] = self._copy_asset(
+                watermark_source, "screen_watermark"
+            )
         normalized.update(current_assets)
 
         with self.database.session() as connection:
@@ -91,7 +122,7 @@ class PrintSettingsRepository:
 
     def _stored_asset_values(self) -> dict[str, str]:
         result: dict[str, str] = {}
-        for name in ("logo_path", "qr_path"):
+        for name in ("logo_path", "qr_path", "watermark_path"):
             row = self.database.fetch_one(
                 "SELECT value FROM settings WHERE key = ?",
                 (self.KEYS[name],),
