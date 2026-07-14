@@ -7,7 +7,8 @@ EPSILON = 0.0000001
 class ScrapAwareManufacturingRepository(AdvancedManufacturingRepository):
     """Replans draft orders from the scrap quantity that is actually available."""
 
-    def replan_draft_for_available_scrap(self, order_id: int) -> dict:
+    def preview_replan_for_available_scrap(self, order_id: int) -> dict:
+        """Calculate the stock-aware plan without changing the draft order."""
         order = self.get_order(order_id)
         if order["status"] != "draft":
             raise ValueError("يمكن إعادة تخطيط أمر التصنيع وهو مسودة فقط")
@@ -36,7 +37,7 @@ class ScrapAwareManufacturingRepository(AdvancedManufacturingRepository):
                     connection, product_id, int(order["warehouse_id"])
                 )
 
-        def usable_scrap(batch_count: int) -> tuple[float, float]:
+        def scrap_weights(batch_count: int) -> tuple[float, float]:
             planned = 0.0
             usable = 0.0
             for material in order["materials"]:
@@ -48,40 +49,17 @@ class ScrapAwareManufacturingRepository(AdvancedManufacturingRepository):
                 usable += min(requested, available_by_product.get(product_id, 0.0))
             return planned, usable
 
-        planned_scrap, actual_scrap = usable_scrap(batches)
+        planned_scrap, actual_scrap = scrap_weights(batches)
         input_weight = base_batch_weight * batches + actual_scrap
         while input_weight + EPSILON < target_weight:
             batches += 1
             if batches > 1_000_000:
                 raise ValueError("تعذر حساب عدد خلطات صالح لأمر التصنيع")
-            planned_scrap, actual_scrap = usable_scrap(batches)
+            planned_scrap, actual_scrap = scrap_weights(batches)
             input_weight = base_batch_weight * batches + actual_scrap
 
-        changed = batches != old_batches
-        if changed:
-            with self.database.session(immediate=True) as connection:
-                current = connection.execute(
-                    "SELECT status FROM manufacturing_orders WHERE id = ?", (order_id,)
-                ).fetchone()
-                if current is None:
-                    raise ValueError("أمر التصنيع غير موجود")
-                if current["status"] != "draft":
-                    raise ValueError("تغيرت حالة أمر التصنيع؛ أعد تحميل الشاشة")
-                connection.execute(
-                    "UPDATE manufacturing_orders SET planned_batches = ? WHERE id = ?",
-                    (batches, order_id),
-                )
-                connection.execute(
-                    """
-                    UPDATE manufacturing_order_materials
-                    SET planned_quantity = quantity_per_batch * ?
-                    WHERE manufacturing_order_id = ?
-                    """,
-                    (batches, order_id),
-                )
-
         return {
-            "changed": changed,
+            "changed": batches != old_batches,
             "old_batches": old_batches,
             "new_batches": batches,
             "target_weight": target_weight,
@@ -90,6 +68,39 @@ class ScrapAwareManufacturingRepository(AdvancedManufacturingRepository):
             "planned_input_weight": input_weight,
             "expected_overage_weight": input_weight - target_weight,
         }
+
+    def apply_replan(self, order_id: int, target_batches: int) -> None:
+        """Persist an approved stock-aware plan to a draft order."""
+        target_batches = int(target_batches)
+        if target_batches <= 0:
+            raise ValueError("عدد الخلطات يجب أن يكون أكبر من صفر")
+        with self.database.session(immediate=True) as connection:
+            current = connection.execute(
+                "SELECT status FROM manufacturing_orders WHERE id = ?", (order_id,)
+            ).fetchone()
+            if current is None:
+                raise ValueError("أمر التصنيع غير موجود")
+            if current["status"] != "draft":
+                raise ValueError("تغيرت حالة أمر التصنيع؛ أعد تحميل الشاشة")
+            connection.execute(
+                "UPDATE manufacturing_orders SET planned_batches = ? WHERE id = ?",
+                (target_batches, order_id),
+            )
+            connection.execute(
+                """
+                UPDATE manufacturing_order_materials
+                SET planned_quantity = quantity_per_batch * ?
+                WHERE manufacturing_order_id = ?
+                """,
+                (target_batches, order_id),
+            )
+
+    def replan_draft_for_available_scrap(self, order_id: int) -> dict:
+        """Backward-compatible helper: calculate and persist the revised plan."""
+        plan = self.preview_replan_for_available_scrap(order_id)
+        if plan["changed"]:
+            self.apply_replan(order_id, int(plan["new_batches"]))
+        return plan
 
 
 __all__ = ["ScrapAwareManufacturingRepository"]
