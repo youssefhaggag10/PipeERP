@@ -32,6 +32,39 @@ class ReversibleAccountingRepository(AccountingRepository):
                 """
             )
 
+    def dashboard_summary(self) -> dict:
+        result = super().dashboard_summary()
+        row = self.database.fetch_one(
+            """
+            SELECT
+                COALESCE(SUM(CASE WHEN transaction_type = 'customer_receipt'
+                                  AND reference_id IS NULL THEN amount ELSE 0 END), 0)
+                    AS customer_unlinked,
+                COALESCE(SUM(CASE WHEN transaction_type = 'supplier_payment'
+                                  AND reference_id IS NULL THEN amount ELSE 0 END), 0)
+                    AS supplier_unlinked
+            FROM payment_transactions
+            """
+        )
+        result["customer_advances"] = float(result.get("customer_advances", 0)) + float(row["customer_unlinked"])
+        result["supplier_advances"] = float(result.get("supplier_advances", 0)) + float(row["supplier_unlinked"])
+        return result
+
+    def list_partner_balances(self, partner_type: str) -> list[dict]:
+        rows = super().list_partner_balances(partner_type)
+        transaction_type = "customer_receipt" if partner_type == "customer" else "supplier_payment"
+        for item in rows:
+            unlinked = self.database.fetch_one(
+                """
+                SELECT COALESCE(SUM(amount), 0) AS total
+                FROM payment_transactions
+                WHERE partner_id = ? AND transaction_type = ? AND reference_id IS NULL
+                """,
+                (int(item["id"]), transaction_type),
+            )
+            item["advances"] = float(item.get("advances", 0)) + float(unlinked["total"])
+        return rows
+
     def reverse_payment(self, transaction_id: int, reason: str = "") -> None:
         with self.database.session(immediate=True) as connection:
             row = connection.execute(
