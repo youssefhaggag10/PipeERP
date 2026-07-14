@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
 
 from app.database.connection import Database
 from app.models.user import User
-from app.repositories.accounting_repository import AccountingRepository
 from app.repositories.automated_inventory_repository import AutomatedInventoryRepository
 from app.repositories.base_material_scrap_cost_repository import (
     BaseMaterialScrapCostRepository,
@@ -21,6 +20,7 @@ from app.repositories.invoice_repository import InvoiceRepository
 from app.repositories.partner_repository import PartnerRepository
 from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.repositories.product_repository import ProductRepository
+from app.repositories.reversible_accounting_repository import ReversibleAccountingRepository
 from app.repositories.sales_repository import SalesRepository
 from app.repositories.supplier_cost_purchase_repository import (
     SupplierCostPurchaseRepository,
@@ -61,7 +61,7 @@ class MainWindow(QMainWindow):
         purchase_repository = SupplierCostPurchaseRepository(database)
         sales_repository = SalesRepository(database)
         warehouse_repository = WarehouseRepository(database)
-        accounting_repository = AccountingRepository(database)
+        accounting_repository = ReversibleAccountingRepository(database)
         invoice_repository = InvoiceRepository(database)
         manufacturing_repository = BaseMaterialScrapCostRepository(database)
         print_settings_repository = PrintSettingsRepository(database)
