@@ -94,11 +94,11 @@ class ReplannedAvailabilityDialog(QDialog):
 
 
 class ReplannedManufacturingPage(AdvancedManufacturingPage):
-    """Manufacturing page with stock-aware scrap replanning and finished-cost visibility."""
+    """Manufacturing page with stock-aware scrap replanning and costing visibility."""
 
     def _reload_orders(self) -> None:
         self.orders = self.repository.list_orders()
-        self.orders_table.setColumnCount(9)
+        self.orders_table.setColumnCount(10)
         self.orders_table.setHorizontalHeaderLabels(
             [
                 "رقم الأمر",
@@ -108,16 +108,21 @@ class ReplannedManufacturingPage(AdvancedManufacturingPage):
                 "الفعلي",
                 "الحالة",
                 "تكلفة الخامات",
+                "تكلفة كجم الكسر الناتج",
                 "تكلفة الإنتاج التام بعد خصم الكسر",
                 "فرق الوزن",
             ]
         )
         self.orders_table.setRowCount(len(self.orders))
         for row_index, order in enumerate(self.orders):
-            finished_cost = (
-                f"{float(order['finished_cost']):,.2f}"
-                if str(order["status"]) == "completed"
+            completed = str(order["status"]) == "completed"
+            scrap_unit_cost = (
+                f"{float(order.get('scrap_unit_cost', 0) or 0):,.4f}"
+                if completed and float(order.get("returned_scrap_quantity", 0) or 0) > 0
                 else "—"
+            )
+            finished_cost = (
+                f"{float(order['finished_cost']):,.2f}" if completed else "—"
             )
             values = [
                 order["order_number"],
@@ -127,6 +132,7 @@ class ReplannedManufacturingPage(AdvancedManufacturingPage):
                 order["actual_batches"],
                 STATUS_LABELS.get(str(order["status"]), order["status"]),
                 f"{float(order['material_cost']):,.2f}",
+                scrap_unit_cost,
                 finished_cost,
                 f"{float(order['weight_variance']):,.2f}",
             ]
