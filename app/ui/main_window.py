@@ -13,6 +13,9 @@ from app.database.connection import Database
 from app.models.user import User
 from app.repositories.accounting_repository import AccountingRepository
 from app.repositories.automated_inventory_repository import AutomatedInventoryRepository
+from app.repositories.base_material_scrap_cost_repository import (
+    BaseMaterialScrapCostRepository,
+)
 from app.repositories.crm_repository import CRMRepository
 from app.repositories.invoice_repository import InvoiceRepository
 from app.repositories.partner_repository import PartnerRepository
@@ -20,9 +23,6 @@ from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.repositories.product_repository import ProductRepository
 from app.repositories.purchase_repository import PurchaseRepository
 from app.repositories.sales_repository import SalesRepository
-from app.repositories.scrap_aware_manufacturing_repository import (
-    ScrapAwareManufacturingRepository,
-)
 from app.repositories.system_admin_repository import SystemAdminRepository
 from app.repositories.warehouse_repository import WarehouseRepository
 from app.services.crm_customer_sync import CRMCustomerSync
@@ -61,7 +61,7 @@ class MainWindow(QMainWindow):
         warehouse_repository = WarehouseRepository(database)
         accounting_repository = AccountingRepository(database)
         invoice_repository = InvoiceRepository(database)
-        manufacturing_repository = ScrapAwareManufacturingRepository(database)
+        manufacturing_repository = BaseMaterialScrapCostRepository(database)
         print_settings_repository = PrintSettingsRepository(database)
         crm_repository = CRMRepository(database, current_user)
         self.crm_sync = CRMCustomerSync(database, current_user)
