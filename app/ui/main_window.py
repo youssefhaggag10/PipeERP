@@ -12,10 +12,10 @@ from PySide6.QtWidgets import (
 from app.database.connection import Database
 from app.models.user import User
 from app.repositories.accounting_repository import AccountingRepository
-from app.repositories.crm_repository import CRMRepository
-from app.repositories.enhanced_manufacturing_repository import (
-    EnhancedManufacturingRepository,
+from app.repositories.advanced_manufacturing_repository import (
+    AdvancedManufacturingRepository,
 )
+from app.repositories.crm_repository import CRMRepository
 from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.invoice_repository import InvoiceRepository
 from app.repositories.partner_repository import PartnerRepository
@@ -27,9 +27,9 @@ from app.repositories.system_admin_repository import SystemAdminRepository
 from app.repositories.warehouse_repository import WarehouseRepository
 from app.services.crm_customer_sync import CRMCustomerSync
 from app.ui.accounting_order_pages import PurchaseAccountingPage
+from app.ui.advanced_manufacturing_page import AdvancedManufacturingPage
 from app.ui.crm_page import CRMPage
 from app.ui.dashboard import DashboardPage
-from app.ui.enhanced_manufacturing_page import EnhancedManufacturingPage
 from app.ui.inventory_page import InventoryPage
 from app.ui.lot_balances_page import LotBalancesPage
 from app.ui.partners_page import PartnersPage
@@ -61,7 +61,7 @@ class MainWindow(QMainWindow):
         warehouse_repository = WarehouseRepository(database)
         accounting_repository = AccountingRepository(database)
         invoice_repository = InvoiceRepository(database)
-        manufacturing_repository = EnhancedManufacturingRepository(database)
+        manufacturing_repository = AdvancedManufacturingRepository(database)
         print_settings_repository = PrintSettingsRepository(database)
         crm_repository = CRMRepository(database, current_user)
         self.crm_sync = CRMCustomerSync(database, current_user)
@@ -119,7 +119,7 @@ class MainWindow(QMainWindow):
         if admin_repository.has_permission("manufacturing"):
             self.add_page(
                 "التصنيع",
-                EnhancedManufacturingPage(
+                AdvancedManufacturingPage(
                     manufacturing_repository,
                     product_repository,
                     warehouse_repository,
