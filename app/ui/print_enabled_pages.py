@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMessageBox, QPushButton
+from PySide6.QtWidgets import QHBoxLayout, QInputDialog, QMessageBox, QPushButton
 
 from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.services.a4_print_service import A4PrintService
@@ -69,6 +69,54 @@ class AccountsPageWithPrint(AccountsPage):
             actions_layout.insertWidget(max(0, actions_layout.count() - 1), print_button)
         else:
             self.sales_invoices_tab.layout().insertWidget(2, print_button)
+
+        reverse_button = QPushButton("عكس الحركة المالية المحددة")
+        reverse_button.setObjectName("dangerButton")
+        reverse_button.clicked.connect(self.reverse_selected_payment)
+        reverse_actions = QHBoxLayout()
+        reverse_actions.addWidget(reverse_button)
+        reverse_actions.addStretch()
+        transactions_widget = self.transactions_table.parentWidget()
+        if transactions_widget is not None and transactions_widget.layout() is not None:
+            transactions_widget.layout().insertLayout(2, reverse_actions)
+
+    def reverse_selected_payment(self) -> None:
+        row_index = self.transactions_table.currentRow()
+        if row_index < 0:
+            QMessageBox.warning(self, "تنبيه", "اختر حركة مالية من الجدول")
+            return
+        rows = self.accounting_repository.list_transactions()
+        if row_index >= len(rows):
+            QMessageBox.warning(self, "تنبيه", "تعذر تحديد الحركة المختارة")
+            return
+        row = rows[row_index]
+        transaction_id = int(row.get("id", 0))
+        if transaction_id <= 0:
+            QMessageBox.information(self, "تنبيه", "الحركة المختارة هي حركة عكس بالفعل")
+            return
+
+        reason, accepted = QInputDialog.getText(
+            self,
+            "سبب عكس الحركة",
+            "اكتب سبب العكس أو التصحيح:",
+        )
+        if not accepted:
+            return
+        answer = QMessageBox.question(
+            self,
+            "تأكيد عكس الحركة",
+            f"سيتم عكس الحركة {row.get('transaction_number', '')} بقيمة "
+            f"{float(row.get('amount', 0)):,.2f} مع الاحتفاظ بسجلها. هل تريد المتابعة؟",
+        )
+        if answer != QMessageBox.Yes:
+            return
+        try:
+            self.accounting_repository.reverse_payment(transaction_id, reason)
+        except ValueError as error:
+            QMessageBox.warning(self, "تنبيه", str(error))
+            return
+        self.reload()
+        QMessageBox.information(self, "تم", "تم عكس الحركة وتحديث الأرصدة والفواتير")
 
     def preview_selected_sales_invoice(self) -> None:
         row = self.sales_invoices_tab._selected()
