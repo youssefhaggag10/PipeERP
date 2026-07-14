@@ -15,8 +15,8 @@ from app.repositories.accounting_repository import AccountingRepository
 from app.repositories.advanced_manufacturing_repository import (
     AdvancedManufacturingRepository,
 )
+from app.repositories.automated_inventory_repository import AutomatedInventoryRepository
 from app.repositories.crm_repository import CRMRepository
-from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.invoice_repository import InvoiceRepository
 from app.repositories.partner_repository import PartnerRepository
 from app.repositories.print_settings_repository import PrintSettingsRepository
@@ -26,8 +26,8 @@ from app.repositories.sales_repository import SalesRepository
 from app.repositories.system_admin_repository import SystemAdminRepository
 from app.repositories.warehouse_repository import WarehouseRepository
 from app.services.crm_customer_sync import CRMCustomerSync
-from app.ui.accounting_order_pages import PurchaseAccountingPage
 from app.ui.advanced_manufacturing_page import AdvancedManufacturingPage
+from app.ui.automated_purchase_page import AutomatedPurchaseAccountingPage
 from app.ui.crm_page import CRMPage
 from app.ui.dashboard import DashboardPage
 from app.ui.inventory_page import InventoryPage
@@ -54,7 +54,7 @@ class MainWindow(QMainWindow):
 
         admin_repository = SystemAdminRepository(database, current_user)
         product_repository = ProductRepository(database)
-        inventory_repository = InventoryRepository(database)
+        inventory_repository = AutomatedInventoryRepository(database)
         partner_repository = PartnerRepository(database)
         purchase_repository = PurchaseRepository(database)
         sales_repository = SalesRepository(database)
@@ -88,7 +88,7 @@ class MainWindow(QMainWindow):
         if admin_repository.has_permission("purchases"):
             self.add_page(
                 "المشتريات",
-                PurchaseAccountingPage(
+                AutomatedPurchaseAccountingPage(
                     purchase_repository,
                     partner_repository,
                     product_repository,
