@@ -42,6 +42,7 @@ from app.ui.reports_page import ReportsPage
 from app.ui.stock_card_page import StockCardPage
 from app.ui.table_readability import configure_tables_in_widget
 from app.ui.warehouse_page import WarehousePage
+from app.ui.watermark_overlay import WatermarkOverlay
 
 
 class MainWindow(QMainWindow):
@@ -65,11 +66,13 @@ class MainWindow(QMainWindow):
         accounting_repository = ReversibleAccountingRepository(database)
         invoice_repository = InvoiceRepository(database)
         manufacturing_repository = BaseMaterialScrapCostRepository(database)
-        print_settings_repository = PrintSettingsRepository(database)
+        self.print_settings_repository = PrintSettingsRepository(database)
         crm_repository = CRMRepository(database, current_user)
         self.crm_sync = CRMCustomerSync(database, current_user)
 
         self.pages = QStackedWidget()
+        self.watermark_overlay = WatermarkOverlay(self.pages)
+        self._refresh_watermark()
 
         if admin_repository.has_permission("dashboard"):
             self.add_page("الرئيسية", DashboardPage(product_repository, inventory_repository))
@@ -131,10 +134,11 @@ class MainWindow(QMainWindow):
         if admin_repository.has_permission("reports"):
             self.add_page("التقارير", ReportsPage(accounting_repository, partner_repository))
         if admin_repository.has_permission("settings"):
-            self.add_page(
-                "الإعدادات",
-                PrintSettingsPage(print_settings_repository, admin_repository),
+            settings_page = PrintSettingsPage(
+                self.print_settings_repository, admin_repository
             )
+            settings_page.watermark_settings_changed.connect(self._refresh_watermark)
+            self.add_page("الإعدادات", settings_page)
 
         if self.pages.count() == 0:
             empty_page = QWidget()
@@ -159,10 +163,16 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(container)
         self.navigation.setCurrentRow(0)
 
+    def _refresh_watermark(self) -> None:
+        self.watermark_overlay.apply_settings(
+            self.print_settings_repository.get_settings()
+        )
+
     def add_page(self, title: str, page: QWidget) -> None:
         configure_tables_in_widget(page)
         self.navigation.addItem(title)
         self.pages.addWidget(page)
+        self.watermark_overlay.raise_()
 
     def pages_changed(self, index: int) -> None:
         if index < 0:
@@ -174,3 +184,7 @@ class MainWindow(QMainWindow):
             page.reload()
         configure_tables_in_widget(page)
         self.pages.setCurrentIndex(index)
+        self.watermark_overlay.raise_()
+
+
+__all__ = ["MainWindow"]
