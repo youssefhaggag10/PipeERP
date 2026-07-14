@@ -19,12 +19,7 @@ class SupplierCostPurchaseRepository(PurchaseRepository):
         self._repair_existing_supplier_totals()
 
     def _repair_existing_supplier_totals(self) -> None:
-        """Repair legacy supplier totals without changing inventory unit costs.
-
-        Existing lot and inventory-move costs remain untouched because they already
-        include internal processing cost and purchase loss correctly. Only supplier
-        order/invoice totals are corrected.
-        """
+        """Repair supplier totals and move legacy excess payments to advances."""
         with self.database.session(immediate=True) as connection:
             connection.execute(
                 """
@@ -44,6 +39,63 @@ class SupplierCostPurchaseRepository(PurchaseRepository):
                 ), 0)
                 """
             )
+            self._split_legacy_overpayments(connection)
+
+    def _split_legacy_overpayments(self, connection) -> None:
+        invoices = connection.execute(
+            """
+            SELECT id, purchase_order_id, supplier_id, invoice_number, total
+            FROM purchase_invoices
+            WHERE status = 'posted'
+            ORDER BY id
+            """
+        ).fetchall()
+        for invoice in invoices:
+            transactions = connection.execute(
+                """
+                SELECT id, amount, payment_method, COALESCE(notes, '') AS notes
+                FROM payment_transactions
+                WHERE purchase_invoice_id = ?
+                ORDER BY id DESC
+                """,
+                (invoice["id"],),
+            ).fetchall()
+            paid = sum(float(item["amount"]) for item in transactions)
+            excess = paid - float(invoice["total"])
+            if excess <= EPSILON:
+                continue
+
+            for transaction in transactions:
+                if excess <= EPSILON:
+                    break
+                amount = float(transaction["amount"])
+                moved = min(amount, excess)
+                remaining = amount - moved
+                if remaining > EPSILON:
+                    connection.execute(
+                        "UPDATE payment_transactions SET amount = ? WHERE id = ?",
+                        (remaining, transaction["id"]),
+                    )
+                else:
+                    connection.execute(
+                        "DELETE FROM payment_transactions WHERE id = ?",
+                        (transaction["id"],),
+                    )
+
+                post_order_payment(
+                    connection,
+                    transaction_type="supplier_payment",
+                    partner_id=int(invoice["supplier_id"]),
+                    amount=moved,
+                    reference_type=None,
+                    reference_id=None,
+                    payment_method=str(transaction["payment_method"] or "نقدي"),
+                    notes=(
+                        f"دفعة مقدمة محولة تلقائيًا من زيادة سداد الفاتورة "
+                        f"{invoice['invoice_number']}"
+                    ),
+                )
+                excess -= moved
 
     def create_order_with_lines(
         self,
