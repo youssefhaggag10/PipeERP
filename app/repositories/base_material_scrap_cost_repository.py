@@ -15,21 +15,34 @@ class BaseMaterialScrapCostRepository(ScrapAwareManufacturingRepository):
 
     def list_orders(self) -> list[dict]:
         rows = super().list_orders()
-        scrap_cost_by_order = {
-            int(row["reference_id"]): float(row["unit_cost"] or 0)
-            for row in self.database.fetch_all(
-                """
-                SELECT reference_id, unit_cost
-                FROM inventory_moves
-                WHERE reference_type = 'manufacturing_scrap'
-                  AND quantity_in > 0
-                  AND reference_id IS NOT NULL
-                ORDER BY id
-                """
-            )
+        scrap_rows = self.database.fetch_all(
+            """
+            SELECT mo.id AS order_id, mo.returned_scrap_quantity,
+                   COALESCE((
+                       SELECT im.unit_cost
+                       FROM inventory_moves im
+                       WHERE im.reference_type = 'manufacturing_scrap'
+                         AND im.reference_id = mo.id
+                         AND im.quantity_in > 0
+                       ORDER BY im.id DESC
+                       LIMIT 1
+                   ), 0) AS scrap_unit_cost
+            FROM manufacturing_orders mo
+            """
+        )
+        scrap_data = {
+            int(row["order_id"]): {
+                "returned_scrap_quantity": float(row["returned_scrap_quantity"] or 0),
+                "scrap_unit_cost": float(row["scrap_unit_cost"] or 0),
+            }
+            for row in scrap_rows
         }
         for row in rows:
-            row["scrap_unit_cost"] = scrap_cost_by_order.get(int(row["id"]), 0.0)
+            values = scrap_data.get(
+                int(row["id"]),
+                {"returned_scrap_quantity": 0.0, "scrap_unit_cost": 0.0},
+            )
+            row.update(values)
         return rows
 
     def complete_order(
