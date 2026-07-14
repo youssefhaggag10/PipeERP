@@ -40,6 +40,7 @@ from app.ui.products_page import ProductsPage
 from app.ui.replanned_manufacturing_page import ReplannedManufacturingPage
 from app.ui.reports_page import ReportsPage
 from app.ui.stock_card_page import StockCardPage
+from app.ui.table_readability import configure_tables_in_widget
 from app.ui.warehouse_page import WarehousePage
 
 
@@ -159,6 +160,7 @@ class MainWindow(QMainWindow):
         self.navigation.setCurrentRow(0)
 
     def add_page(self, title: str, page: QWidget) -> None:
+        configure_tables_in_widget(page)
         self.navigation.addItem(title)
         self.pages.addWidget(page)
 
@@ -170,4 +172,5 @@ class MainWindow(QMainWindow):
             self.crm_sync.sync()
         if hasattr(page, "reload"):
             page.reload()
+        configure_tables_in_widget(page)
         self.pages.setCurrentIndex(index)
