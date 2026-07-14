@@ -38,12 +38,51 @@ class BaseMaterialScrapCostRepository(ScrapAwareManufacturingRepository):
             for row in scrap_rows
         }
         for row in rows:
-            values = scrap_data.get(
-                int(row["id"]),
-                {"returned_scrap_quantity": 0.0, "scrap_unit_cost": 0.0},
+            row.update(
+                scrap_data.get(
+                    int(row["id"]),
+                    {"returned_scrap_quantity": 0.0, "scrap_unit_cost": 0.0},
+                )
             )
-            row.update(values)
         return rows
+
+    def complete_order_with_batches(
+        self,
+        order_id: int,
+        *,
+        actual_batches: int,
+        actual_outputs: dict[int, float],
+        returned_scrap_quantity: float,
+    ) -> dict:
+        order = self.get_order(order_id)
+        if order["status"] != "in_progress":
+            raise ValueError("يمكن إتمام أمر تصنيع جارٍ فقط")
+
+        current_batches = int(order["actual_batches"])
+        actual_batches = int(actual_batches)
+        if actual_batches < current_batches:
+            raise ValueError(
+                f"عدد الخلطات الفعلي لا يمكن أن يقل عن الخلطات المصروفة ({current_batches})"
+            )
+
+        if actual_batches > current_batches:
+            shortages = self.blocking_shortages(
+                self.material_availability(
+                    order_id,
+                    target_batches=actual_batches,
+                    additional_only=True,
+                )
+            )
+            if shortages:
+                raise ValueError("الخامات غير كافية لصرف الخلطات الإضافية")
+            for _ in range(actual_batches - current_batches):
+                super().add_batch(order_id)
+
+        return self.complete_order(
+            order_id,
+            actual_outputs=actual_outputs,
+            returned_scrap_quantity=returned_scrap_quantity,
+        )
 
     def complete_order(
         self,
