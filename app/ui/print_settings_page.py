@@ -1,8 +1,12 @@
-from PySide6.QtCore import Qt
+from pathlib import Path
+
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtPrintSupport import QPrinterInfo
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
+    QFileDialog,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -11,6 +15,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -22,6 +27,8 @@ from app.utils.print_phone_utils import normalized_phone_numbers
 
 
 class PrintSettingsPage(SettingsPage):
+    watermark_settings_changed = Signal()
+
     def __init__(
         self,
         print_repository: PrintSettingsRepository,
@@ -29,8 +36,10 @@ class PrintSettingsPage(SettingsPage):
     ) -> None:
         self.print_repository = print_repository
         self._preserved_settings: dict[str, str] = {}
+        self._watermark_source: str | None = None
         super().__init__(admin_repository)
         self.tabs.insertTab(0, self._build_print_tab(), "الطباعة")
+        self.tabs.insertTab(1, self._build_watermark_tab(), "العلامة المائية")
         self.tabs.setCurrentIndex(0)
         self._reload_print_settings()
 
@@ -116,6 +125,64 @@ class PrintSettingsPage(SettingsPage):
         layout.addStretch()
         return tab
 
+    def _build_watermark_tab(self) -> QWidget:
+        tab = QWidget()
+        self.watermark_enabled = QCheckBox("إظهار شعار 3A PIPES كعلامة مائية في كل الشاشات")
+
+        self.watermark_path_label = QLineEdit()
+        self.watermark_path_label.setReadOnly(True)
+        self.watermark_path_label.setPlaceholderText("سيُستخدم شعار النظام الافتراضي")
+        choose_button = QPushButton("اختيار صورة اللوجو")
+        choose_button.clicked.connect(self._choose_watermark)
+        clear_button = QPushButton("استخدام شعار النظام الافتراضي")
+        clear_button.setObjectName("secondaryButton")
+        clear_button.clicked.connect(self._clear_watermark_source)
+
+        image_actions = QHBoxLayout()
+        image_actions.addWidget(self.watermark_path_label, 1)
+        image_actions.addWidget(choose_button)
+        image_actions.addWidget(clear_button)
+        image_editor = QWidget()
+        image_editor.setLayout(image_actions)
+
+        self.watermark_opacity = QSpinBox()
+        self.watermark_opacity.setRange(1, 40)
+        self.watermark_opacity.setSuffix(" %")
+        self.watermark_size = QSpinBox()
+        self.watermark_size.setRange(10, 80)
+        self.watermark_size.setSuffix(" % من مساحة الشاشة")
+
+        group = QGroupBox("إعدادات العلامة المائية")
+        form = QFormLayout(group)
+        form.addRow("تشغيل", self.watermark_enabled)
+        form.addRow("صورة العلامة", image_editor)
+        form.addRow("الشفافية", self.watermark_opacity)
+        form.addRow("الحجم", self.watermark_size)
+
+        note = QLabel(
+            "العلامة المائية تظهر في منتصف كل شاشة بطبقة شفافة ولا تمنع الضغط على "
+            "الأزرار أو التعامل مع الجداول. يفضل استخدام PNG بخلفية شفافة."
+        )
+        note.setWordWrap(True)
+        note.setObjectName("subtitleLabel")
+
+        save_button = QPushButton("حفظ وتطبيق العلامة المائية")
+        save_button.clicked.connect(self.save_watermark_settings)
+        reload_button = QPushButton("إلغاء التعديلات وإعادة التحميل")
+        reload_button.setObjectName("secondaryButton")
+        reload_button.clicked.connect(self._reload_print_settings)
+        actions = QHBoxLayout()
+        actions.addWidget(save_button)
+        actions.addWidget(reload_button)
+        actions.addStretch()
+
+        layout = QVBoxLayout(tab)
+        layout.addWidget(group)
+        layout.addWidget(note)
+        layout.addLayout(actions)
+        layout.addStretch()
+        return tab
+
     def reload(self) -> None:
         super().reload()
         if hasattr(self, "company_name_input"):
@@ -131,6 +198,12 @@ class PrintSettingsPage(SettingsPage):
         self.new_phone_input.clear()
         self._reload_printers(values["printer_name"])
 
+        self._watermark_source = None
+        self.watermark_enabled.setChecked(values.get("watermark_enabled", "0") == "1")
+        self.watermark_opacity.setValue(int(float(values.get("watermark_opacity", "8"))))
+        self.watermark_size.setValue(int(float(values.get("watermark_size", "35"))))
+        self.watermark_path_label.setText(values.get("watermark_path", ""))
+
     def _reload_printers(self, configured_name: str) -> None:
         names = [printer.printerName() for printer in QPrinterInfo.availablePrinters()]
         if configured_name and configured_name not in names:
@@ -139,6 +212,24 @@ class PrintSettingsPage(SettingsPage):
         self.printer_input.addItems(names)
         if configured_name:
             self.printer_input.setCurrentText(configured_name)
+
+    def _choose_watermark(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "اختيار صورة العلامة المائية",
+            str(Path.home()),
+            "Images (*.png *.jpg *.jpeg *.webp *.bmp)",
+        )
+        if not path:
+            return
+        self._watermark_source = path
+        self.watermark_path_label.setText(path)
+
+    def _clear_watermark_source(self) -> None:
+        self._watermark_source = None
+        self.watermark_path_label.setText(
+            str(self.print_repository.default_logo_path())
+        )
 
     def _add_phone(self) -> None:
         phone = self.new_phone_input.text().strip()
@@ -165,24 +256,44 @@ class PrintSettingsPage(SettingsPage):
             if self.phones_list.item(index).text().strip()
         )
 
+    def _current_values(self) -> dict[str, str]:
+        values = dict(self._preserved_settings)
+        values.update(
+            {
+                "company_name": self.company_name_input.text(),
+                "address": self.address_input.text(),
+                "phones": self._phone_values(),
+                "footer": self._preserved_settings.get("footer", ""),
+                "instapay_handle": self._preserved_settings.get("instapay_handle", ""),
+                "printer_name": self.printer_input.currentText(),
+                "paper_width_mm": self._preserved_settings.get("paper_width_mm", "80"),
+                "watermark_enabled": "1" if self.watermark_enabled.isChecked() else "0",
+                "watermark_opacity": str(self.watermark_opacity.value()),
+                "watermark_size": str(self.watermark_size.value()),
+            }
+        )
+        return values
+
     def save_print_settings(self) -> None:
         try:
-            self.print_repository.save_settings(
-                {
-                    "company_name": self.company_name_input.text(),
-                    "address": self.address_input.text(),
-                    "phones": self._phone_values(),
-                    "footer": self._preserved_settings.get("footer", ""),
-                    "instapay_handle": self._preserved_settings.get("instapay_handle", ""),
-                    "printer_name": self.printer_input.currentText(),
-                    "paper_width_mm": self._preserved_settings.get("paper_width_mm", "80"),
-                }
-            )
+            self.print_repository.save_settings(self._current_values())
         except ValueError as error:
             QMessageBox.warning(self, "تنبيه", str(error))
             return
         self._reload_print_settings()
         QMessageBox.information(self, "تم", "تم حفظ بيانات الفاتورة والطابعة")
+
+    def save_watermark_settings(self) -> None:
+        try:
+            self.print_repository.save_settings(
+                self._current_values(), watermark_source=self._watermark_source
+            )
+        except ValueError as error:
+            QMessageBox.warning(self, "تنبيه", str(error))
+            return
+        self._reload_print_settings()
+        self.watermark_settings_changed.emit()
+        QMessageBox.information(self, "تم", "تم حفظ وتطبيق العلامة المائية")
 
 
 __all__ = ["PrintSettingsPage"]
