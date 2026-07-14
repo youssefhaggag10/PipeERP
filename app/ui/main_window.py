@@ -21,8 +21,10 @@ from app.repositories.invoice_repository import InvoiceRepository
 from app.repositories.partner_repository import PartnerRepository
 from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.repositories.product_repository import ProductRepository
-from app.repositories.purchase_repository import PurchaseRepository
 from app.repositories.sales_repository import SalesRepository
+from app.repositories.supplier_cost_purchase_repository import (
+    SupplierCostPurchaseRepository,
+)
 from app.repositories.system_admin_repository import SystemAdminRepository
 from app.repositories.warehouse_repository import WarehouseRepository
 from app.services.crm_customer_sync import CRMCustomerSync
@@ -56,7 +58,7 @@ class MainWindow(QMainWindow):
         product_repository = ProductRepository(database)
         inventory_repository = AutomatedInventoryRepository(database)
         partner_repository = PartnerRepository(database)
-        purchase_repository = PurchaseRepository(database)
+        purchase_repository = SupplierCostPurchaseRepository(database)
         sales_repository = SalesRepository(database)
         warehouse_repository = WarehouseRepository(database)
         accounting_repository = AccountingRepository(database)
