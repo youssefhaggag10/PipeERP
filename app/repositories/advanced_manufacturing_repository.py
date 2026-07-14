@@ -2,104 +2,8 @@ from app.repositories.enhanced_manufacturing_repository import EnhancedManufactu
 from app.services.manufacturing_planning_service import ProductionTarget, calculate_batch_plan
 
 
-EPSILON = 0.0000001
-
-
 class AdvancedManufacturingRepository(EnhancedManufacturingRepository):
-    """Safer manufacturing workflow with availability checks and automatic replanning."""
-
-    def replan_draft_for_available_scrap(self, order_id: int) -> dict:
-        """Increase draft batches when optional scrap stock is below the planned amount.
-
-        The smallest batch count is selected where fixed recipe materials plus the scrap
-        that can actually be issued cover the requested finished-product weight.
-        """
-        order = self.get_order(order_id)
-        if order["status"] != "draft":
-            raise ValueError("يمكن إعادة تخطيط أمر التصنيع وهو مسودة فقط")
-
-        target_weight = sum(
-            float(row["planned_quantity"]) * float(row["standard_weight_kg"])
-            for row in order["outputs"]
-        )
-        base_batch_weight = sum(
-            float(row["quantity_per_batch"])
-            for row in order["materials"]
-            if row["component_kind"] == "material"
-        )
-        if target_weight <= 0:
-            raise ValueError("أمر التصنيع لا يحتوي على وزن إنتاج مطلوب")
-        if base_batch_weight <= 0:
-            raise ValueError("الخلطة لا تحتوي على وزن خامات أساسية صالح")
-
-        old_batches = int(order["planned_batches"])
-        batches = max(1, old_batches)
-        scrap_available: dict[int, float] = {}
-        with self.database.session() as connection:
-            for material in order["materials"]:
-                if material["component_kind"] != "scrap":
-                    continue
-                product_id = int(material["product_id"])
-                scrap_available[product_id] = self.costing.available_quantity(
-                    connection, product_id, int(order["warehouse_id"])
-                )
-
-        def scrap_weights(batch_count: int) -> tuple[float, float]:
-            planned = 0.0
-            usable = 0.0
-            for material in order["materials"]:
-                if material["component_kind"] != "scrap":
-                    continue
-                product_id = int(material["product_id"])
-                requested = float(material["quantity_per_batch"]) * batch_count
-                planned += requested
-                usable += min(requested, scrap_available.get(product_id, 0.0))
-            return planned, usable
-
-        max_batches = 1_000_000
-        planned_scrap, usable_scrap = scrap_weights(batches)
-        planned_input = base_batch_weight * batches + usable_scrap
-        while planned_input + EPSILON < target_weight:
-            batches += 1
-            if batches > max_batches:
-                raise ValueError("تعذر حساب عدد خلطات صالح لأمر التصنيع")
-            planned_scrap, usable_scrap = scrap_weights(batches)
-            planned_input = base_batch_weight * batches + usable_scrap
-
-        changed = batches != old_batches
-        if changed:
-            with self.database.session(immediate=True) as connection:
-                current = connection.execute(
-                    "SELECT status FROM manufacturing_orders WHERE id = ?", (order_id,)
-                ).fetchone()
-                if current is None:
-                    raise ValueError("أمر التصنيع غير موجود")
-                if current["status"] != "draft":
-                    raise ValueError("تغيرت حالة أمر التصنيع؛ أعد تحميل الشاشة")
-                connection.execute(
-                    "UPDATE manufacturing_orders SET planned_batches = ? WHERE id = ?",
-                    (batches, order_id),
-                )
-                connection.execute(
-                    """
-                    UPDATE manufacturing_order_materials
-                    SET planned_quantity = quantity_per_batch * ?
-                    WHERE manufacturing_order_id = ?
-                    """,
-                    (batches, order_id),
-                )
-
-        return {
-            "changed": changed,
-            "old_batches": old_batches,
-            "new_batches": batches,
-            "target_weight": target_weight,
-            "base_batch_weight": base_batch_weight,
-            "planned_scrap": planned_scrap,
-            "usable_scrap": usable_scrap,
-            "planned_input_weight": planned_input,
-            "expected_overage_weight": planned_input - target_weight,
-        }
+    """Safer manufacturing workflow with full availability checks and draft editing."""
 
     def material_availability(
         self,
@@ -136,9 +40,8 @@ class AdvancedManufacturingRepository(EnhancedManufacturingRepository):
                         "component_kind": str(material["component_kind"]),
                         "required": required,
                         "available": available,
-                        "will_issue": min(required, available) if is_optional else required,
                         "shortage": shortage,
-                        "blocks_start": shortage > EPSILON and not is_optional,
+                        "blocks_start": shortage > 0.0000001 and not is_optional,
                     }
                 )
         return rows
@@ -275,7 +178,6 @@ class AdvancedManufacturingRepository(EnhancedManufacturingRepository):
             )
 
     def start_order(self, order_id: int) -> None:
-        self.replan_draft_for_available_scrap(order_id)
         shortages = self.blocking_shortages(self.material_availability(order_id))
         if shortages:
             raise ValueError("يوجد عجز في خامات أمر التصنيع")
