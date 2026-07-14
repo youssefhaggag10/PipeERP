@@ -26,7 +26,6 @@ from app.repositories.sales_repository import SalesRepository
 from app.repositories.system_admin_repository import SystemAdminRepository
 from app.repositories.warehouse_repository import WarehouseRepository
 from app.services.crm_customer_sync import CRMCustomerSync
-from app.ui.advanced_manufacturing_page import AdvancedManufacturingPage
 from app.ui.automated_purchase_page import AutomatedPurchaseAccountingPage
 from app.ui.crm_page import CRMPage
 from app.ui.dashboard import DashboardPage
@@ -36,6 +35,7 @@ from app.ui.partners_page import PartnersPage
 from app.ui.print_enabled_pages import AccountsPageWithPrint, SalesAccountingPageWithPrint
 from app.ui.print_settings_page import PrintSettingsPage
 from app.ui.products_page import ProductsPage
+from app.ui.replanned_manufacturing_page import ReplannedManufacturingPage
 from app.ui.reports_page import ReportsPage
 from app.ui.stock_card_page import StockCardPage
 from app.ui.warehouse_page import WarehousePage
@@ -119,7 +119,7 @@ class MainWindow(QMainWindow):
         if admin_repository.has_permission("manufacturing"):
             self.add_page(
                 "التصنيع",
-                AdvancedManufacturingPage(
+                ReplannedManufacturingPage(
                     manufacturing_repository,
                     product_repository,
                     warehouse_repository,
