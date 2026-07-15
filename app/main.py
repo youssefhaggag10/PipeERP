@@ -1,12 +1,13 @@
 import sys
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from app.core.config import AppConfig
 from app.database.connection import Database
 from app.database.schema import initialize_database
 from app.services.auth_service import AuthService
+from app.services.backup_service import BackupService
 from app.ui.login_dialog import LoginDialog
 from app.ui.main_window import MainWindow
 from app.ui.styles import APP_STYLESHEET
@@ -20,6 +21,16 @@ def main() -> int:
 
     database = Database(AppConfig.database_path())
     initialize_database(database)
+
+    try:
+        BackupService(database.path).create_automatic_backup_if_due()
+    except ValueError as error:
+        QMessageBox.warning(
+            None,
+            "تنبيه النسخ الاحتياطي",
+            "تعذر إنشاء النسخة الاحتياطية التلقائية اليوم، لكن يمكن متابعة "
+            f"استخدام البرنامج.\n\n{error}",
+        )
 
     auth_service = AuthService(database)
     login_dialog = LoginDialog(auth_service)
