@@ -19,9 +19,9 @@ from app.repositories.crm_repository import CRMRepository
 from app.repositories.partner_repository import PartnerRepository
 from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.repositories.product_repository import ProductRepository
+from app.repositories.return_aware_treasury_repository import ReturnAwareTreasuryRepository
 from app.repositories.return_invoice_repository import ReturnInvoiceRepository
 from app.repositories.sales_repository import SalesRepository
-from app.repositories.strict_treasury_repository import StrictTreasuryRepository
 from app.repositories.supplier_cost_purchase_repository import (
     SupplierCostPurchaseRepository,
 )
@@ -66,7 +66,7 @@ class MainWindow(QMainWindow):
         purchase_repository = SupplierCostPurchaseRepository(database)
         sales_repository = SalesRepository(database)
         warehouse_repository = WarehouseRepository(database)
-        accounting_repository = StrictTreasuryRepository(database)
+        accounting_repository = ReturnAwareTreasuryRepository(database)
         invoice_repository = ReturnInvoiceRepository(database)
         manufacturing_repository = BaseMaterialScrapCostRepository(database)
         self.print_settings_repository = PrintSettingsRepository(database)
