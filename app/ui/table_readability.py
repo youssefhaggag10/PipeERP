@@ -1,6 +1,5 @@
 from PySide6.QtCore import QObject, QEvent, Qt
 from PySide6.QtWidgets import (
-    QApplication,
     QDialog,
     QDialogButtonBox,
     QHeaderView,
@@ -18,12 +17,22 @@ class _TableReadabilityFilter(QObject):
         self.table = table
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
-        if watched is self.table.viewport() and event.type() == QEvent.MouseMove:
-            item = self.table.itemAt(event.position().toPoint())
-            if item is None or not item.text().strip():
-                QToolTip.hideText()
-            else:
-                QToolTip.showText(event.globalPosition().toPoint(), item.text(), self.table)
+        try:
+            viewport = self.table.viewport()
+            if watched is viewport and event.type() == QEvent.MouseMove:
+                item = self.table.itemAt(event.position().toPoint())
+                if item is None or not item.text().strip():
+                    QToolTip.hideText()
+                else:
+                    QToolTip.showText(
+                        event.globalPosition().toPoint(),
+                        item.text(),
+                        self.table,
+                    )
+        except RuntimeError:
+            # Qt may dispatch a final event while the parent table is already
+            # being destroyed during application shutdown or failed startup.
+            return False
         return super().eventFilter(watched, event)
 
 
