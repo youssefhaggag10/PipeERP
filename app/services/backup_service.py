@@ -168,16 +168,22 @@ class BackupService:
 
         try:
             temporary.replace(self.database_path)
+            self._remove_sqlite_sidecars()
         except OSError as error:
             temporary.unlink(missing_ok=True)
             raise ValueError(f"فشل استبدال قاعدة البيانات: {error}") from error
 
         if not self.database_is_healthy():
             copy2(safety_backup, self.database_path)
+            self._remove_sqlite_sidecars()
             raise ValueError(
                 "فشل فحص قاعدة البيانات بعد الاسترجاع وتمت إعادة نسخة الأمان"
             )
         return safety_backup
+
+    def _remove_sqlite_sidecars(self) -> None:
+        for suffix in ("-wal", "-shm", "-journal"):
+            Path(f"{self.database_path}{suffix}").unlink(missing_ok=True)
 
 
 __all__ = ["BackupInfo", "BackupService"]
