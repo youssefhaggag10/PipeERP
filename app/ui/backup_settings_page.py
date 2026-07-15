@@ -20,9 +20,14 @@ from app.ui.print_settings_page import PrintSettingsPage
 
 
 class BackupPrintSettingsPage(PrintSettingsPage):
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self.backup_service = BackupService(self.print_repository.database.path)
+    def __init__(
+        self,
+        print_repository,
+        admin_repository,
+        database_path: Path,
+    ) -> None:
+        super().__init__(print_repository, admin_repository)
+        self.backup_service = BackupService(Path(database_path))
         self.tabs.insertTab(2, self._build_backup_tab(), "النسخ الاحتياطي")
         self._reload_backups()
 
