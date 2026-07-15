@@ -1,6 +1,5 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QComboBox,
     QGroupBox,
     QHBoxLayout,
     QInputDialog,
@@ -17,14 +16,14 @@ class StrictTreasuryAccountsPage(TreasuryAccountsPage):
     """Central receipts/payments screen plus simple treasury account maintenance."""
 
     def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
         self._account_rows: list[dict] = []
+        super().__init__(*args, **kwargs)
         self._hide_transfer_section()
         self._add_account_management_actions()
         self.method_input.currentIndexChanged.connect(self._filter_payment_accounts)
         self.order_input.currentIndexChanged.connect(self._fill_selected_remaining)
         self.transaction_type.currentIndexChanged.connect(self._refresh_payment_form)
-        self._refresh_payment_form()
+        self.reload()
 
     def _hide_transfer_section(self) -> None:
         for group in self.findChildren(QGroupBox):
@@ -145,6 +144,8 @@ class StrictTreasuryAccountsPage(TreasuryAccountsPage):
         self.financial_account_input.blockSignals(False)
 
     def _fill_financial_accounts(self) -> None:
+        from PySide6.QtWidgets import QTableWidgetItem
+
         self._account_rows = self.accounting_repository.list_financial_accounts()
         self.accounts_table.setRowCount(len(self._account_rows))
         for row_index, row in enumerate(self._account_rows):
@@ -157,7 +158,6 @@ class StrictTreasuryAccountsPage(TreasuryAccountsPage):
                 "نعم" if bool(row["is_default"]) else "لا",
                 row["notes"],
             ]
-            from PySide6.QtWidgets import QTableWidgetItem
             for column, value in enumerate(values):
                 self.accounts_table.setItem(row_index, column, QTableWidgetItem(str(value)))
 
