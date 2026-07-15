@@ -15,6 +15,10 @@ from PySide6.QtWidgets import (
 
 from app.repositories.invoice_repository import InvoiceRepository
 from app.services.invoice_service import INVOICE_STATUS_LABELS, PAYMENT_STATUS_LABELS
+from app.ui.payment_account_selector import (
+    choose_financial_account,
+    choose_payment_method,
+)
 from app.utils.datetime_utils import format_egypt_datetime
 
 INVOICE_COLORS = {
@@ -249,21 +253,33 @@ class InvoicesTab(QWidget):
         )
         if not accepted:
             return
-        methods = ["نقدي", "تحويل بنكي", "شيك", "محفظة إلكترونية"]
-        method, accepted = QInputDialog.getItem(
-            self, "طريقة الدفع", "اختر طريقة الدفع:", methods, 0, False
-        )
-        if not accepted:
+        method = choose_payment_method(self)
+        if method is None:
+            return
+        if not hasattr(self.repository, "list_financial_accounts"):
+            QMessageBox.warning(
+                self,
+                "تنبيه",
+                "مسار الخزينة والبنوك غير مفعل لهذه الفاتورة",
+            )
+            return
+        account_id = choose_financial_account(self, self.repository, method)
+        if account_id is None:
             return
         try:
             self.repository.record_invoice_payment(
                 invoice_type=self.invoice_type,
                 invoice_id=int(row["id"]),
                 amount=float(amount),
-                payment_method=str(method),
+                payment_method=method,
+                financial_account_id=account_id,
             )
         except ValueError as error:
             QMessageBox.warning(self, "تنبيه", str(error))
             return
         self.reload()
-        QMessageBox.information(self, "تم", "تم تسجيل الحركة المالية وتحديث حالة الدفع")
+        QMessageBox.information(
+            self,
+            "تم",
+            "تم تسجيل الحركة على الحساب المالي المحدد وتحديث حالة الدفع",
+        )
