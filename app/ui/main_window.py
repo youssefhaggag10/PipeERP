@@ -20,12 +20,12 @@ from app.repositories.invoice_repository import InvoiceRepository
 from app.repositories.partner_repository import PartnerRepository
 from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.repositories.product_repository import ProductRepository
-from app.repositories.reversible_accounting_repository import ReversibleAccountingRepository
 from app.repositories.sales_repository import SalesRepository
 from app.repositories.supplier_cost_purchase_repository import (
     SupplierCostPurchaseRepository,
 )
 from app.repositories.system_admin_repository import SystemAdminRepository
+from app.repositories.treasury_repository import TreasuryRepository
 from app.repositories.warehouse_repository import WarehouseRepository
 from app.services.crm_customer_sync import CRMCustomerSync
 from app.ui.automated_purchase_page import AutomatedPurchaseAccountingPage
@@ -34,13 +34,14 @@ from app.ui.dashboard import DashboardPage
 from app.ui.inventory_page import InventoryPage
 from app.ui.lot_balances_page import LotBalancesPage
 from app.ui.partners_page import PartnersPage
-from app.ui.print_enabled_pages import AccountsPageWithPrint, SalesAccountingPageWithPrint
+from app.ui.print_enabled_pages import SalesAccountingPageWithPrint
 from app.ui.print_settings_page import PrintSettingsPage
 from app.ui.products_page import ProductsPage
 from app.ui.replanned_manufacturing_page import ReplannedManufacturingPage
 from app.ui.reports_page import ReportsPage
 from app.ui.stock_card_page import StockCardPage
 from app.ui.table_readability import configure_tables_in_widget
+from app.ui.treasury_accounts_page import TreasuryAccountsPage
 from app.ui.warehouse_page import WarehousePage
 from app.ui.watermark_overlay import WatermarkOverlay
 
@@ -63,7 +64,7 @@ class MainWindow(QMainWindow):
         purchase_repository = SupplierCostPurchaseRepository(database)
         sales_repository = SalesRepository(database)
         warehouse_repository = WarehouseRepository(database)
-        accounting_repository = ReversibleAccountingRepository(database)
+        accounting_repository = TreasuryRepository(database)
         invoice_repository = InvoiceRepository(database)
         manufacturing_repository = BaseMaterialScrapCostRepository(database)
         self.print_settings_repository = PrintSettingsRepository(database)
@@ -114,7 +115,7 @@ class MainWindow(QMainWindow):
         if admin_repository.has_permission("accounts"):
             self.add_page(
                 "الحسابات",
-                AccountsPageWithPrint(
+                TreasuryAccountsPage(
                     accounting_repository,
                     partner_repository,
                     invoice_repository,
