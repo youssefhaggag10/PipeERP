@@ -1,4 +1,8 @@
 from app.repositories.invoice_repository import InvoiceRepository
+from app.services.payment_account_rules import (
+    account_matches_payment_method,
+    expected_account_label,
+)
 from app.services.payment_service import post_order_payment
 
 
@@ -22,7 +26,7 @@ class TreasuryInvoiceRepository(InvoiceRepository):
                      WHERE t.from_account_id = fa.id), 0) AS current_balance
             FROM financial_accounts fa
             WHERE fa.is_active = 1
-            ORDER BY fa.is_default DESC, fa.name
+            ORDER BY fa.name
             """
         )
         return [dict(row) for row in rows]
@@ -39,6 +43,24 @@ class TreasuryInvoiceRepository(InvoiceRepository):
     ) -> int:
         if amount <= 0:
             raise ValueError("المبلغ يجب أن يكون أكبر من صفر")
+        if financial_account_id is None:
+            raise ValueError("اختر حساب الخزينة أو البنك المستخدم في الحركة")
+
+        account = self.database.fetch_one(
+            """
+            SELECT id, account_type
+            FROM financial_accounts
+            WHERE id = ? AND is_active = 1
+            """,
+            (int(financial_account_id),),
+        )
+        if account is None:
+            raise ValueError("حساب الخزينة أو البنك غير موجود أو غير نشط")
+        if not account_matches_payment_method(payment_method, str(account["account_type"])):
+            raise ValueError(
+                f"طريقة الدفع «{payment_method}» تتطلب {expected_account_label(payment_method)}"
+            )
+
         if invoice_type == "sales":
             table = "sales_invoices"
             partner_column = "customer_id"
@@ -74,6 +96,28 @@ class TreasuryInvoiceRepository(InvoiceRepository):
             remaining = float(invoice["total"]) - paid
             if amount - remaining > 0.000001:
                 raise ValueError(f"المبلغ أكبر من المتبقي على الفاتورة ({remaining:,.2f})")
+
+            if transaction_type == "supplier_payment":
+                balance_row = connection.execute(
+                    """
+                    SELECT fa.opening_balance
+                           + COALESCE((SELECT SUM(CASE
+                               WHEN pt.transaction_type = 'customer_receipt' THEN pt.amount
+                               WHEN pt.transaction_type = 'supplier_payment' THEN -pt.amount
+                               ELSE 0 END)
+                             FROM payment_transactions pt
+                             WHERE pt.financial_account_id = fa.id), 0)
+                           + COALESCE((SELECT SUM(t.amount) FROM financial_account_transfers t
+                             WHERE t.to_account_id = fa.id), 0)
+                           - COALESCE((SELECT SUM(t.amount) FROM financial_account_transfers t
+                             WHERE t.from_account_id = fa.id), 0) AS balance
+                    FROM financial_accounts fa WHERE fa.id = ?
+                    """,
+                    (int(financial_account_id),),
+                ).fetchone()
+                if balance_row is None or float(balance_row["balance"]) + 0.000001 < float(amount):
+                    raise ValueError("رصيد حساب السداد غير كافٍ")
+
             transaction_id = post_order_payment(
                 connection,
                 transaction_type=transaction_type,
@@ -83,7 +127,7 @@ class TreasuryInvoiceRepository(InvoiceRepository):
                 reference_id=int(invoice["order_id"]),
                 notes=notes or f"دفعة على الفاتورة {invoice['invoice_number']}",
                 payment_method=payment_method,
-                financial_account_id=financial_account_id,
+                financial_account_id=int(financial_account_id),
             )
             connection.execute(
                 f"UPDATE payment_transactions SET {invoice_column} = ? WHERE id = ?",
