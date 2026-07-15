@@ -1,1 +1,0 @@
-Payment-at-order-entry fields are removed from purchase and sales order forms. Payments must be posted through the controlled payment workflow.
