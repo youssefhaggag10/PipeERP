@@ -28,12 +28,12 @@ from app.repositories.system_admin_repository import SystemAdminRepository
 from app.repositories.treasury_invoice_repository import TreasuryInvoiceRepository
 from app.repositories.warehouse_repository import WarehouseRepository
 from app.services.crm_customer_sync import CRMCustomerSync
+from app.ui.backup_settings_page import BackupPrintSettingsPage
 from app.ui.crm_page import CRMPage
 from app.ui.dashboard import DashboardPage
 from app.ui.inventory_page import InventoryPage
 from app.ui.lot_balances_page import LotBalancesPage
 from app.ui.partners_page import PartnersPage
-from app.ui.print_settings_page import PrintSettingsPage
 from app.ui.products_page import ProductsPage
 from app.ui.replanned_manufacturing_page import ReplannedManufacturingPage
 from app.ui.reports_page import ReportsPage
@@ -137,7 +137,7 @@ class MainWindow(QMainWindow):
         if admin_repository.has_permission("reports"):
             self.add_page("التقارير", ReportsPage(accounting_repository, partner_repository))
         if admin_repository.has_permission("settings"):
-            settings_page = PrintSettingsPage(
+            settings_page = BackupPrintSettingsPage(
                 self.print_settings_repository, admin_repository
             )
             settings_page.watermark_settings_changed.connect(self._refresh_watermark)
