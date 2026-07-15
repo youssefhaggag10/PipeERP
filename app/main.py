@@ -29,5 +29,9 @@ def main() -> int:
         return 0
 
     window = MainWindow(login_dialog.current_user, database)
-    window.show()
+    window.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, True)
+    window.setWindowFlag(Qt.WindowType.WindowMinimizeButtonHint, True)
+    window.setMinimumSize(900, 600)
+    window.setMaximumSize(16777215, 16777215)
+    window.showMaximized()
     return app.exec()
