@@ -19,13 +19,13 @@ from app.repositories.crm_repository import CRMRepository
 from app.repositories.partner_repository import PartnerRepository
 from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.repositories.product_repository import ProductRepository
+from app.repositories.return_invoice_repository import ReturnInvoiceRepository
 from app.repositories.sales_repository import SalesRepository
 from app.repositories.strict_treasury_repository import StrictTreasuryRepository
 from app.repositories.supplier_cost_purchase_repository import (
     SupplierCostPurchaseRepository,
 )
 from app.repositories.system_admin_repository import SystemAdminRepository
-from app.repositories.treasury_invoice_repository import TreasuryInvoiceRepository
 from app.repositories.warehouse_repository import WarehouseRepository
 from app.services.crm_customer_sync import CRMCustomerSync
 from app.ui.backup_settings_page import BackupPrintSettingsPage
@@ -67,7 +67,7 @@ class MainWindow(QMainWindow):
         sales_repository = SalesRepository(database)
         warehouse_repository = WarehouseRepository(database)
         accounting_repository = StrictTreasuryRepository(database)
-        invoice_repository = TreasuryInvoiceRepository(database)
+        invoice_repository = ReturnInvoiceRepository(database)
         manufacturing_repository = BaseMaterialScrapCostRepository(database)
         self.print_settings_repository = PrintSettingsRepository(database)
         crm_repository = CRMRepository(database, current_user)
@@ -138,7 +138,9 @@ class MainWindow(QMainWindow):
             self.add_page("التقارير", ReportsPage(accounting_repository, partner_repository))
         if admin_repository.has_permission("settings"):
             settings_page = BackupPrintSettingsPage(
-                self.print_settings_repository, admin_repository
+                self.print_settings_repository,
+                admin_repository,
+                database.path,
             )
             settings_page.watermark_settings_changed.connect(self._refresh_watermark)
             self.add_page("الإعدادات", settings_page)
