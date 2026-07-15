@@ -19,8 +19,8 @@ from app.repositories.crm_repository import CRMRepository
 from app.repositories.partner_repository import PartnerRepository
 from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.repositories.product_repository import ProductRepository
-from app.repositories.return_aware_treasury_repository import ReturnAwareTreasuryRepository
 from app.repositories.return_invoice_repository import ReturnInvoiceRepository
+from app.repositories.return_refund_repository import ReturnRefundRepository
 from app.repositories.sales_repository import SalesRepository
 from app.repositories.supplier_cost_purchase_repository import (
     SupplierCostPurchaseRepository,
@@ -37,8 +37,8 @@ from app.ui.partners_page import PartnersPage
 from app.ui.products_page import ProductsPage
 from app.ui.replanned_manufacturing_page import ReplannedManufacturingPage
 from app.ui.reports_page import ReportsPage
+from app.ui.return_refund_accounts_page import ReturnRefundAccountsPage
 from app.ui.stock_card_page import StockCardPage
-from app.ui.strict_treasury_accounts_page import StrictTreasuryAccountsPage
 from app.ui.table_readability import configure_tables_in_widget
 from app.ui.treasury_order_pages import (
     TreasuryPurchaseAccountingPage,
@@ -66,7 +66,7 @@ class MainWindow(QMainWindow):
         purchase_repository = SupplierCostPurchaseRepository(database)
         sales_repository = SalesRepository(database)
         warehouse_repository = WarehouseRepository(database)
-        accounting_repository = ReturnAwareTreasuryRepository(database)
+        accounting_repository = ReturnRefundRepository(database)
         invoice_repository = ReturnInvoiceRepository(database)
         manufacturing_repository = BaseMaterialScrapCostRepository(database)
         self.print_settings_repository = PrintSettingsRepository(database)
@@ -117,7 +117,7 @@ class MainWindow(QMainWindow):
         if admin_repository.has_permission("accounts"):
             self.add_page(
                 "الحسابات",
-                StrictTreasuryAccountsPage(
+                ReturnRefundAccountsPage(
                     accounting_repository,
                     partner_repository,
                     invoice_repository,
