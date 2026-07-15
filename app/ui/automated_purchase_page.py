@@ -12,6 +12,14 @@ class AutomatedPurchaseAccountingPage(PurchaseAccountingPage):
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
+
+        # Payments must go through the controlled invoice/payment workflow so the
+        # user explicitly chooses payment method and treasury/bank account.
+        self.paid_input.setText("0")
+        payment_container = self.paid_input.parentWidget()
+        if payment_container is not None:
+            payment_container.hide()
+
         self.lot_input.setPlaceholderText("سيُنشئ النظام رقم الدفعة تلقائيًا")
         self.lot_input.setToolTip(
             "اترك الحقل فارغًا ليُنشئ النظام رقم Lot فريدًا تلقائيًا، أو أدخل رقم المورد عند الحاجة."
