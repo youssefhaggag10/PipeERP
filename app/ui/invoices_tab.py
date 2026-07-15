@@ -1,6 +1,7 @@
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QDialog,
     QHBoxLayout,
     QHeaderView,
     QInputDialog,
@@ -15,6 +16,7 @@ from PySide6.QtWidgets import (
 
 from app.repositories.invoice_repository import InvoiceRepository
 from app.services.invoice_service import INVOICE_STATUS_LABELS, PAYMENT_STATUS_LABELS
+from app.ui.invoice_return_dialog import InvoiceReturnDialog
 from app.ui.payment_account_selector import (
     choose_financial_account,
     choose_payment_method,
@@ -25,6 +27,13 @@ INVOICE_COLORS = {
     "draft": QColor("#64748B"),
     "posted": QColor("#2563EB"),
     "cancelled": QColor("#DC2626"),
+}
+
+RETURN_COLORS = {
+    "مستلمة": QColor("#2563EB"),
+    "مُسلَّمة": QColor("#2563EB"),
+    "مرتجع جزئي": QColor("#D97706"),
+    "مرتجع كلي": QColor("#DC2626"),
 }
 
 PAYMENT_COLORS = {
@@ -49,7 +58,7 @@ class InvoicesTab(QWidget):
         )
         self.search_input.textChanged.connect(self._apply_search)
 
-        self.table = QTableWidget(0, 11)
+        self.table = QTableWidget(0, 14)
         partner_label = "العميل" if invoice_type == "sales" else "المورد"
         self.table.setHorizontalHeaderLabels(
             [
@@ -58,11 +67,14 @@ class InvoicesTab(QWidget):
                 "الوقت",
                 partner_label,
                 "الهاتف",
-                "الإجمالي",
+                "الإجمالي الأصلي",
+                "المرتجع",
+                "صافي الفاتورة",
                 "المدفوع",
                 "طريقة الدفع",
                 "المتبقي",
                 "حالة الفاتورة",
+                "حالة التسليم / المرتجع",
                 "حالة الدفع",
             ]
         )
@@ -77,6 +89,8 @@ class InvoicesTab(QWidget):
             "تسجيل تحصيل" if invoice_type == "sales" else "تسجيل سداد"
         )
         payment_button.clicked.connect(self.pay_selected)
+        return_button = QPushButton("إنشاء مرتجع")
+        return_button.clicked.connect(self.return_selected)
         cancel_button = QPushButton("إلغاء الفاتورة")
         cancel_button.setObjectName("dangerButton")
         cancel_button.clicked.connect(self.cancel_selected)
@@ -87,6 +101,7 @@ class InvoicesTab(QWidget):
         actions = QHBoxLayout()
         actions.addWidget(post_button)
         actions.addWidget(payment_button)
+        actions.addWidget(return_button)
         actions.addWidget(cancel_button)
         actions.addWidget(refresh_button)
         actions.addStretch()
@@ -135,20 +150,20 @@ class InvoicesTab(QWidget):
                     """,
                     (int(row["id"]),),
                 )
-
-            row["partner_phone"] = (
-                "" if details_row is None else str(details_row["phone"] or "")
-            )
-            raw_methods = (
-                "" if details_row is None else str(details_row["payment_methods"] or "")
-            )
+            row["partner_phone"] = "" if details_row is None else str(details_row["phone"] or "")
+            raw_methods = "" if details_row is None else str(details_row["payment_methods"] or "")
             methods = [method.strip() for method in raw_methods.split(",") if method.strip()]
-            if methods:
-                row["payment_methods"] = "، ".join(methods)
-            elif float(row["paid"]) > 0.000001:
-                row["payment_methods"] = "غير محددة"
-            else:
-                row["payment_methods"] = "—"
+            row["payment_methods"] = (
+                "، ".join(methods)
+                if methods
+                else ("غير محددة" if float(row["paid"]) > 0.000001 else "—")
+            )
+            row.setdefault("returned_total", 0.0)
+            row.setdefault("net_total", float(row["total"]))
+            row.setdefault(
+                "return_status",
+                "مُسلَّمة" if self.invoice_type == "sales" else "مستلمة",
+            )
 
         self.table.setRowCount(len(self.rows))
         for row_index, row in enumerate(self.rows):
@@ -159,10 +174,13 @@ class InvoicesTab(QWidget):
                 row["partner_name"],
                 row["partner_phone"],
                 f"{float(row['total']):,.2f}",
+                f"{float(row['returned_total']):,.2f}",
+                f"{float(row['net_total']):,.2f}",
                 f"{float(row['paid']):,.2f}",
                 row["payment_methods"],
                 f"{float(row['remaining']):,.2f}",
                 INVOICE_STATUS_LABELS.get(str(row["status"]), str(row["status"])),
+                row["return_status"],
                 PAYMENT_STATUS_LABELS.get(
                     str(row["payment_status"]), str(row["payment_status"])
                 ),
@@ -170,10 +188,13 @@ class InvoicesTab(QWidget):
             for column_index, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
                 item.setTextAlignment(Qt.AlignCenter)
-                if column_index == 9:
+                if column_index == 11:
                     item.setBackground(INVOICE_COLORS.get(str(row["status"]), QColor("#64748B")))
                     item.setForeground(QColor("white"))
-                elif column_index == 10:
+                elif column_index == 12:
+                    item.setBackground(RETURN_COLORS.get(str(row["return_status"]), QColor("#64748B")))
+                    item.setForeground(QColor("white"))
+                elif column_index == 13:
                     item.setBackground(
                         PAYMENT_COLORS.get(str(row["payment_status"]), QColor("#64748B"))
                     )
@@ -192,6 +213,7 @@ class InvoicesTab(QWidget):
                     "partner_name",
                     "partner_phone",
                     "payment_methods",
+                    "return_status",
                 )
             ).casefold()
             self.table.setRowHidden(row_index, bool(query) and query not in haystack)
@@ -202,6 +224,40 @@ class InvoicesTab(QWidget):
             QMessageBox.warning(self, "تنبيه", "اختر فاتورة من الجدول")
             return None
         return self.rows[row_index]
+
+    def return_selected(self) -> None:
+        row = self._selected()
+        if row is None:
+            return
+        if str(row["status"]) != "posted":
+            QMessageBox.warning(self, "تنبيه", "يمكن عمل مرتجع لفاتورة معتمدة فقط")
+            return
+        if not hasattr(self.repository, "get_returnable_lines"):
+            QMessageBox.warning(self, "تنبيه", "ميزة المرتجعات غير مفعلة")
+            return
+        try:
+            lines = self.repository.get_returnable_lines(self.invoice_type, int(row["id"]))
+        except ValueError as error:
+            QMessageBox.warning(self, "تنبيه", str(error))
+            return
+        if not any(float(line["remaining_quantity"]) > 0.000001 for line in lines):
+            QMessageBox.information(self, "تنبيه", "تم إرجاع جميع بنود الفاتورة بالكامل")
+            return
+        dialog = InvoiceReturnDialog(lines, self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        try:
+            self.repository.create_return(
+                invoice_type=self.invoice_type,
+                invoice_id=int(row["id"]),
+                quantities=dialog.quantities(),
+                reason=dialog.reason(),
+            )
+        except ValueError as error:
+            QMessageBox.warning(self, "تنبيه", str(error))
+            return
+        self.reload()
+        QMessageBox.information(self, "تم", "تم إنشاء مستند المرتجع وتحديث المخزون وصافي الفاتورة")
 
     def post_selected(self) -> None:
         row = self._selected()
@@ -240,7 +296,7 @@ class InvoicesTab(QWidget):
             return
         remaining = float(row["remaining"])
         if remaining <= 0.000001:
-            QMessageBox.information(self, "تنبيه", "الفاتورة مدفوعة بالكامل")
+            QMessageBox.information(self, "تنبيه", "لا يوجد مبلغ متبقٍ على الفاتورة")
             return
         amount, accepted = QInputDialog.getDouble(
             self,
@@ -257,11 +313,7 @@ class InvoicesTab(QWidget):
         if method is None:
             return
         if not hasattr(self.repository, "list_financial_accounts"):
-            QMessageBox.warning(
-                self,
-                "تنبيه",
-                "مسار الخزينة والبنوك غير مفعل لهذه الفاتورة",
-            )
+            QMessageBox.warning(self, "تنبيه", "مسار الخزينة والبنوك غير مفعل لهذه الفاتورة")
             return
         account_id = choose_financial_account(self, self.repository, method)
         if account_id is None:
@@ -278,8 +330,4 @@ class InvoicesTab(QWidget):
             QMessageBox.warning(self, "تنبيه", str(error))
             return
         self.reload()
-        QMessageBox.information(
-            self,
-            "تم",
-            "تم تسجيل الحركة على الحساب المالي المحدد وتحديث حالة الدفع",
-        )
+        QMessageBox.information(self, "تم", "تم تسجيل الحركة على الحساب المالي المحدد وتحديث حالة الدفع")
