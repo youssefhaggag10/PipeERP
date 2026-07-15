@@ -23,7 +23,10 @@ class TreasuryInvoiceRepository(InvoiceRepository):
                      WHERE t.to_account_id = fa.id), 0)
                    - COALESCE((SELECT SUM(t.amount)
                      FROM financial_account_transfers t
-                     WHERE t.from_account_id = fa.id), 0) AS current_balance
+                     WHERE t.from_account_id = fa.id), 0)
+                   + COALESCE((SELECT SUM(a.amount)
+                     FROM financial_account_adjustments a
+                     WHERE a.financial_account_id = fa.id), 0) AS current_balance
             FROM financial_accounts fa
             WHERE fa.is_active = 1
             ORDER BY fa.name
@@ -96,27 +99,6 @@ class TreasuryInvoiceRepository(InvoiceRepository):
             remaining = float(invoice["total"]) - paid
             if amount - remaining > 0.000001:
                 raise ValueError(f"المبلغ أكبر من المتبقي على الفاتورة ({remaining:,.2f})")
-
-            if transaction_type == "supplier_payment":
-                balance_row = connection.execute(
-                    """
-                    SELECT fa.opening_balance
-                           + COALESCE((SELECT SUM(CASE
-                               WHEN pt.transaction_type = 'customer_receipt' THEN pt.amount
-                               WHEN pt.transaction_type = 'supplier_payment' THEN -pt.amount
-                               ELSE 0 END)
-                             FROM payment_transactions pt
-                             WHERE pt.financial_account_id = fa.id), 0)
-                           + COALESCE((SELECT SUM(t.amount) FROM financial_account_transfers t
-                             WHERE t.to_account_id = fa.id), 0)
-                           - COALESCE((SELECT SUM(t.amount) FROM financial_account_transfers t
-                             WHERE t.from_account_id = fa.id), 0) AS balance
-                    FROM financial_accounts fa WHERE fa.id = ?
-                    """,
-                    (int(financial_account_id),),
-                ).fetchone()
-                if balance_row is None or float(balance_row["balance"]) + 0.000001 < float(amount):
-                    raise ValueError("رصيد حساب السداد غير كافٍ")
 
             transaction_id = post_order_payment(
                 connection,
