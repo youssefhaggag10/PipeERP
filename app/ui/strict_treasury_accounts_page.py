@@ -1,19 +1,56 @@
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import (
+    QComboBox,
+    QGroupBox,
+    QHBoxLayout,
+    QInputDialog,
+    QMessageBox,
+    QPushButton,
+    QTabWidget,
+)
 
 from app.services.payment_account_rules import allowed_account_types
-from app.ui.treasury_accounts_page import TreasuryAccountsPage
+from app.ui.treasury_accounts_page import ACCOUNT_TYPES, TreasuryAccountsPage
 
 
 class StrictTreasuryAccountsPage(TreasuryAccountsPage):
-    """Operational receipts/payments screen with explicit party, document and account selection."""
+    """Central receipts/payments screen plus simple treasury account maintenance."""
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
+        self._account_rows: list[dict] = []
+        self._hide_transfer_section()
+        self._add_account_management_actions()
         self.method_input.currentIndexChanged.connect(self._filter_payment_accounts)
         self.order_input.currentIndexChanged.connect(self._fill_selected_remaining)
         self.transaction_type.currentIndexChanged.connect(self._refresh_payment_form)
         self._refresh_payment_form()
+
+    def _hide_transfer_section(self) -> None:
+        for group in self.findChildren(QGroupBox):
+            if group.title().strip() == "تحويل بين الخزائن والبنوك":
+                group.hide()
+
+    def _add_account_management_actions(self) -> None:
+        tabs = self.findChild(QTabWidget)
+        if tabs is None or tabs.count() == 0:
+            return
+        treasury_widget = tabs.widget(tabs.count() - 1)
+        if treasury_widget is None or treasury_widget.layout() is None:
+            return
+
+        edit_button = QPushButton("تعديل الحساب المحدد")
+        edit_button.setObjectName("secondaryButton")
+        edit_button.clicked.connect(self.edit_selected_financial_account)
+
+        adjust_button = QPushButton("تسوية رصيد الحساب المحدد")
+        adjust_button.clicked.connect(self.adjust_selected_financial_account)
+
+        actions = QHBoxLayout()
+        actions.addWidget(edit_button)
+        actions.addWidget(adjust_button)
+        actions.addStretch()
+        treasury_widget.layout().insertLayout(3, actions)
 
     def reload(self) -> None:
         super().reload()
@@ -55,7 +92,7 @@ class StrictTreasuryAccountsPage(TreasuryAccountsPage):
         )
         self.order_input.blockSignals(True)
         self.order_input.clear()
-        self.order_input.addItem("بدون ربط بمستند محدد — دفعة مقدمة", None)
+        self.order_input.addItem("بدون ربط بفاتورة أو أمر — دفعة مقدمة", None)
         self.order_input.setItemData(0, 0.0, Qt.UserRole + 1)
         if partner_id is not None:
             for order in self.accounting_repository.list_open_orders(
@@ -81,28 +118,6 @@ class StrictTreasuryAccountsPage(TreasuryAccountsPage):
             self.amount_input.setText(f"{float(remaining):.2f}")
 
     def _reload_financial_accounts(self) -> None:
-        accounts = self.accounting_repository.list_financial_accounts()
-
-        for control in (
-            getattr(self, "transfer_from_input", None),
-            getattr(self, "transfer_to_input", None),
-        ):
-            if control is None:
-                continue
-            selected = control.currentData()
-            control.blockSignals(True)
-            control.clear()
-            for account in accounts:
-                control.addItem(
-                    f"{account['name']} — رصيد {float(account['current_balance']):,.2f}",
-                    int(account["id"]),
-                )
-            if selected is not None:
-                index = control.findData(selected)
-                if index >= 0:
-                    control.setCurrentIndex(index)
-            control.blockSignals(False)
-
         self._filter_payment_accounts()
 
     def _filter_payment_accounts(self) -> None:
@@ -128,6 +143,120 @@ class StrictTreasuryAccountsPage(TreasuryAccountsPage):
             if index >= 0:
                 self.financial_account_input.setCurrentIndex(index)
         self.financial_account_input.blockSignals(False)
+
+    def _fill_financial_accounts(self) -> None:
+        self._account_rows = self.accounting_repository.list_financial_accounts()
+        self.accounts_table.setRowCount(len(self._account_rows))
+        for row_index, row in enumerate(self._account_rows):
+            values = [
+                row["code"],
+                row["name"],
+                ACCOUNT_TYPES.get(str(row["account_type"]), str(row["account_type"])),
+                f"{float(row['opening_balance']):,.2f}",
+                f"{float(row['current_balance']):,.2f}",
+                "نعم" if bool(row["is_default"]) else "لا",
+                row["notes"],
+            ]
+            from PySide6.QtWidgets import QTableWidgetItem
+            for column, value in enumerate(values):
+                self.accounts_table.setItem(row_index, column, QTableWidgetItem(str(value)))
+
+    def _selected_account(self) -> dict | None:
+        row_index = self.accounts_table.currentRow()
+        if row_index < 0 or row_index >= len(self._account_rows):
+            QMessageBox.warning(self, "تنبيه", "اختر حسابًا من جدول الخزائن والبنوك")
+            return None
+        return self._account_rows[row_index]
+
+    def edit_selected_financial_account(self) -> None:
+        account = self._selected_account()
+        if account is None:
+            return
+
+        code, accepted = QInputDialog.getText(
+            self, "تعديل الحساب", "كود الحساب:", text=str(account["code"])
+        )
+        if not accepted:
+            return
+        name, accepted = QInputDialog.getText(
+            self, "تعديل الحساب", "اسم الحساب:", text=str(account["name"])
+        )
+        if not accepted:
+            return
+
+        type_codes = list(ACCOUNT_TYPES.keys())
+        type_labels = [ACCOUNT_TYPES[code] for code in type_codes]
+        current_index = type_codes.index(str(account["account_type"]))
+        type_label, accepted = QInputDialog.getItem(
+            self,
+            "تعديل الحساب",
+            "نوع الحساب:",
+            type_labels,
+            current_index,
+            False,
+        )
+        if not accepted:
+            return
+        account_type = type_codes[type_labels.index(type_label)]
+
+        notes, accepted = QInputDialog.getText(
+            self, "تعديل الحساب", "ملاحظات:", text=str(account["notes"] or "")
+        )
+        if not accepted:
+            return
+
+        try:
+            self.accounting_repository.update_financial_account(
+                int(account["id"]),
+                code=code,
+                name=name,
+                account_type=account_type,
+                notes=notes,
+            )
+        except ValueError as error:
+            QMessageBox.warning(self, "تنبيه", str(error))
+            return
+        self.reload()
+        QMessageBox.information(self, "تم", "تم تعديل بيانات الحساب المالي")
+
+    def adjust_selected_financial_account(self) -> None:
+        account = self._selected_account()
+        if account is None:
+            return
+        current_balance = float(account["current_balance"])
+        target_balance, accepted = QInputDialog.getDouble(
+            self,
+            "تسوية رصيد الحساب",
+            f"الرصيد الدفتري الحالي: {current_balance:,.2f}\nأدخل الرصيد الفعلي الجديد:",
+            value=current_balance,
+            minValue=-999999999999.99,
+            maxValue=999999999999.99,
+            decimals=2,
+        )
+        if not accepted:
+            return
+        reason, accepted = QInputDialog.getText(
+            self,
+            "سبب التسوية",
+            "اكتب سبب التسوية أو مرجع كشف الحساب:",
+        )
+        if not accepted:
+            return
+        try:
+            self.accounting_repository.adjust_financial_account_balance(
+                int(account["id"]),
+                target_balance=float(target_balance),
+                notes=reason,
+            )
+        except ValueError as error:
+            QMessageBox.warning(self, "تنبيه", str(error))
+            return
+        self.reload()
+        QMessageBox.information(
+            self,
+            "تم",
+            f"تمت تسوية رصيد {account['name']} إلى {target_balance:,.2f}",
+        )
 
     def save_payment(self) -> None:
         if self.partner_input.currentData() is None:
