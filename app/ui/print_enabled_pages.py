@@ -9,6 +9,14 @@ from app.ui.accounts_page import AccountsPage
 class SalesAccountingPageWithPrint(SalesAccountingPage):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
+
+        # Collections must be recorded through the controlled invoice/payment
+        # workflow so the payment method and treasury/bank account are explicit.
+        self.paid_input.setText("0")
+        payment_container = self.paid_input.parentWidget()
+        if payment_container is not None:
+            payment_container.hide()
+
         self._invoice_print_service = A4PrintService()
 
         print_button = QPushButton("معاينة وطباعة فاتورة المبيعات A4")
