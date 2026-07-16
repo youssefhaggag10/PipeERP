@@ -192,5 +192,17 @@ class MainWindow(QMainWindow):
         self.pages.setCurrentIndex(index)
         self.watermark_overlay.raise_()
 
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_F11:
+            if self.isFullScreen():
+                self.showMaximized()
+            else:
+                self.showFullScreen()
+            return
+        if event.key() == Qt.Key.Key_Escape and self.isFullScreen():
+            self.showMaximized()
+            return
+        super().keyPressEvent(event)
+
 
 __all__ = ["MainWindow"]
