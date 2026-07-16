@@ -40,7 +40,6 @@ jobs:
         run: >-
           ruff check
           app/core/config.py
-          app/core/paths.py
-          app/core/logging_config.py
-          app/main.py
+          app/core/app_paths.py
+          app/core/logging_setup.py
           tests/test_recent_regressions.py
