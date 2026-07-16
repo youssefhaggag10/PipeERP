@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import logging
+import logging.handlers
 import sys
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from app.core.app_paths import AppPaths
@@ -20,12 +20,12 @@ def setup_logging() -> Path:
 
     target = str(log_path.resolve())
     exists = any(
-        isinstance(handler, RotatingFileHandler)
+        isinstance(handler, logging.handlers.RotatingFileHandler)
         and str(Path(handler.baseFilename).resolve()) == target
         for handler in root_logger.handlers
     )
     if not exists:
-        handler = RotatingFileHandler(
+        handler = logging.handlers.RotatingFileHandler(
             log_path,
             maxBytes=MAX_LOG_BYTES,
             backupCount=BACKUP_LOG_COUNT,
