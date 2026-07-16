@@ -18,6 +18,7 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 OutputDir=..\dist\installer
 OutputBaseFilename=PipeERP-Setup-{#MyAppVersion}
+SetupIconFile=..\build\PipeERP.ico
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
