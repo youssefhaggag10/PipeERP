@@ -12,6 +12,7 @@ class AppPaths:
     APP_DIR_NAME = "PipeERP"
     DATA_OVERRIDE_ENV = "PIPEERP_DATA_DIR"
     PORTABLE_MODE_ENV = "PIPEERP_PORTABLE_MODE"
+    MIGRATION_MARKER = ".legacy-migration-complete"
 
     @classmethod
     def project_root(cls) -> Path:
@@ -65,9 +66,14 @@ class AppPaths:
 
     @classmethod
     def _migrate_legacy_data(cls, destination: Path) -> None:
+        marker = destination / cls.MIGRATION_MARKER
+        if marker.exists():
+            return
+
         legacy = cls.legacy_data_dir()
         try:
             if not legacy.exists() or legacy.resolve() == destination.resolve():
+                marker.touch(exist_ok=True)
                 return
         except OSError:
             return
@@ -84,6 +90,8 @@ class AppPaths:
         if source_backups.is_dir():
             target_backups.mkdir(parents=True, exist_ok=True)
             shutil.copytree(source_backups, target_backups, dirs_exist_ok=True)
+
+        marker.touch(exist_ok=True)
 
     @staticmethod
     def _copy_sqlite_sidecars(source_database: Path, target_database: Path) -> None:
