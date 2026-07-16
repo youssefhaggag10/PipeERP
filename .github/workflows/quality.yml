@@ -42,4 +42,13 @@ jobs:
           app/core/config.py
           app/core/app_paths.py
           app/core/logging_setup.py
+          app/main.py
+          app/repositories/quotation_repository.py
+          app/services/a4_document_renderer.py
+          app/services/a4_print_service.py
+          app/ui/main_window.py
+          app/ui/quotation_dialog.py
+          app/ui/treasury_order_pages.py
           tests/test_recent_regressions.py
+          tests/test_first_run_setup.py
+          tests/test_quotations.py
