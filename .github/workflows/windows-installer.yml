@@ -3,8 +3,21 @@ name: Build Windows Installer
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - "v*"
+    paths:
+      - ".github/workflows/windows-installer.yml"
+      - "installer/**"
+      - "pyproject.toml"
+      - "main.py"
+      - "app/main.py"
+      - "app/core/**"
+      - "app/database/**"
+      - "app/services/first_run_service.py"
+      - "app/ui/first_run_dialog.py"
+      - "tests/test_first_run_setup.py"
 
 permissions:
   contents: read
@@ -44,6 +57,7 @@ jobs:
       - name: Compile standalone Windows application
         shell: pwsh
         run: |
+          $windowsVersion = "${env:PIPEERP_VERSION}.0"
           python -m nuitka `
             --mode=standalone `
             --enable-plugin=pyside6 `
@@ -54,8 +68,8 @@ jobs:
             --company-name="3A PIPE" `
             --product-name="PipeERP" `
             --file-description="3A PIPE ERP" `
-            --file-version="$env:PIPEERP_VERSION.0" `
-            --product-version="$env:PIPEERP_VERSION.0" `
+            --file-version="$windowsVersion" `
+            --product-version="$windowsVersion" `
             main.py
 
       - name: Run compiled executable smoke test
