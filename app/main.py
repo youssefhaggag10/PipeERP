@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 
 from PySide6.QtCore import Qt
@@ -21,9 +22,33 @@ from app.ui.styles import APP_STYLESHEET
 LOGGER = logging.getLogger("pipeerp")
 
 
+def _run_smoke_test() -> int:
+    database = Database(AppConfig.database_path())
+    initialize_database(database)
+    first_run = FirstRunService(database)
+    if first_run.requires_setup():
+        first_run.create_initial_admin(
+            username="smoke_admin",
+            full_name="Smoke Test Admin",
+            password="Smoke-Test-123",
+        )
+    user = AuthService(database).authenticate("smoke_admin", "Smoke-Test-123")
+    if user is None or user.role != "admin":
+        raise RuntimeError("PipeERP executable smoke test failed")
+    LOGGER.info("PipeERP executable smoke test passed")
+    return 0
+
+
 def main() -> int:
     log_path = setup_logging()
     install_exception_hook()
+
+    if os.environ.get("PIPEERP_SMOKE_TEST", "").strip() == "1":
+        try:
+            return _run_smoke_test()
+        except Exception:
+            LOGGER.exception("Executable smoke test failed")
+            return 1
 
     app = QApplication(sys.argv)
     app.setApplicationName(AppConfig.APP_NAME)
