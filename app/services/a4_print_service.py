@@ -9,7 +9,7 @@ from app.services.a4_invoice_renderer import A4InvoiceRenderer
 
 
 class A4PrintService:
-    """Preview and print the approved A4 design with live invoice data."""
+    """Preview and print approved A4 sales documents with live data."""
 
     PRINT_DPI = 300
     MARGINS_MM = QMarginsF(5.0, 5.0, 5.0, 5.0)
@@ -23,12 +23,22 @@ class A4PrintService:
         settings: dict[str, str],
         parent: QWidget | None = None,
     ) -> None:
-        pages = self.renderer.render(invoice, settings)
+        self.preview_document(invoice, settings, parent)
+
+    def preview_document(
+        self,
+        document: dict,
+        settings: dict[str, str],
+        parent: QWidget | None = None,
+    ) -> None:
+        pages = self.renderer.render(document, settings)
         printer = self._create_printer(str(settings.get("printer_name", "")))
         self._apply_a4_layout(printer)
 
         preview = QPrintPreviewDialog(printer, parent)
-        preview.setWindowTitle(f"معاينة فاتورة مبيعات {invoice['invoice_number']} — A4")
+        title = str(document.get("document_title") or "فاتورة مبيعات")
+        number = str(document.get("invoice_number") or "")
+        preview.setWindowTitle(f"معاينة {title} {number} — A4")
         preview.resize(1100, 850)
         preview.paintRequested.connect(
             lambda requested_printer: self._paint_pages(requested_printer, pages)
@@ -39,7 +49,7 @@ class A4PrintService:
         self._apply_a4_layout(printer)
         painter = QPainter()
         if not painter.begin(printer):
-            raise RuntimeError("تعذر بدء طباعة فاتورة A4")
+            raise RuntimeError("تعذر بدء طباعة مستند A4")
 
         try:
             target = QRectF(painter.viewport())
