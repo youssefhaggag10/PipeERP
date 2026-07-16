@@ -5,12 +5,14 @@ import os
 import sys
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from app.core.config import AppConfig
 from app.core.logging_setup import install_exception_hook, setup_logging
 from app.database.connection import Database
 from app.database.schema import initialize_database
+from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.services.auth_service import AuthService
 from app.services.backup_service import BackupService
 from app.services.first_run_service import FirstRunService
@@ -54,6 +56,7 @@ def main() -> int:
     app.setApplicationName(AppConfig.APP_NAME)
     app.setLayoutDirection(Qt.RightToLeft)
     app.setStyleSheet(APP_STYLESHEET)
+    app.setWindowIcon(QIcon(str(PrintSettingsRepository.default_logo_path())))
 
     try:
         database_path = AppConfig.database_path()
@@ -91,7 +94,7 @@ def main() -> int:
         window.setWindowFlag(Qt.WindowType.WindowMinimizeButtonHint, True)
         window.setMinimumSize(900, 600)
         window.setMaximumSize(16777215, 16777215)
-        window.showMaximized()
+        window.showFullScreen()
         exit_code = app.exec()
         LOGGER.info("PipeERP closed with exit code %s", exit_code)
         return exit_code
