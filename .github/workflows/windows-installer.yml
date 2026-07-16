@@ -13,11 +13,19 @@ on:
       - "pyproject.toml"
       - "main.py"
       - "app/main.py"
+      - "app/assets/**"
       - "app/core/**"
       - "app/database/**"
+      - "app/repositories/quotation_repository.py"
+      - "app/services/a4_document_renderer.py"
+      - "app/services/a4_print_service.py"
       - "app/services/first_run_service.py"
       - "app/ui/first_run_dialog.py"
+      - "app/ui/main_window.py"
+      - "app/ui/quotation_dialog.py"
+      - "app/ui/treasury_order_pages.py"
       - "tests/test_first_run_setup.py"
+      - "tests/test_quotations.py"
 
 permissions:
   contents: read
@@ -55,7 +63,13 @@ jobs:
         run: |
           python -m compileall -q app tests
           pytest -q
-          ruff check app/core app/services/first_run_service.py app/ui/first_run_dialog.py tests/test_first_run_setup.py
+          ruff check app/core app/main.py app/repositories/quotation_repository.py app/services/a4_document_renderer.py app/services/a4_print_service.py app/services/first_run_service.py app/ui/first_run_dialog.py app/ui/main_window.py app/ui/quotation_dialog.py app/ui/treasury_order_pages.py tests/test_first_run_setup.py tests/test_quotations.py
+
+      - name: Generate Windows application icon
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          python -c "from PIL import Image; image=Image.open('app/assets/print/default_logo.png').convert('RGBA'); image.save('build/PipeERP.ico', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])"
 
       - name: Compile standalone Windows application
         shell: pwsh
@@ -66,6 +80,8 @@ jobs:
             --enable-plugin=pyside6 `
             --include-package=tzdata `
             --include-package-data=tzdata `
+            --include-data-dir=app/assets=app/assets `
+            --windows-icon-from-ico=build/PipeERP.ico `
             --windows-console-mode=disable `
             --assume-yes-for-downloads `
             --output-dir=build/windows `
