@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from app.core.app_paths import AppPaths
+
 
 class AppConfig:
     APP_NAME = "PipeERP"
@@ -10,13 +12,15 @@ class AppConfig:
 
     @classmethod
     def project_root(cls) -> Path:
-        return Path(__file__).resolve().parents[2]
+        return AppPaths.project_root()
 
     @classmethod
     def data_dir(cls) -> Path:
-        path = cls.project_root() / cls.DATA_DIR_NAME
-        path.mkdir(parents=True, exist_ok=True)
-        return path
+        return AppPaths.data_dir()
+
+    @classmethod
+    def logs_dir(cls) -> Path:
+        return AppPaths.logs_dir()
 
     @classmethod
     def database_path(cls) -> Path:
