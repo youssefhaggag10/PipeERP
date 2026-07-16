@@ -12,10 +12,11 @@ from app.database.connection import Database
 from app.database.schema import initialize_database
 from app.services.auth_service import AuthService
 from app.services.backup_service import BackupService
+from app.services.first_run_service import FirstRunService
+from app.ui.first_run_dialog import FirstRunDialog
 from app.ui.login_dialog import LoginDialog
 from app.ui.main_window import MainWindow
 from app.ui.styles import APP_STYLESHEET
-
 
 LOGGER = logging.getLogger("pipeerp")
 
@@ -34,6 +35,13 @@ def main() -> int:
         LOGGER.info("Using database path: %s", database_path)
         database = Database(database_path)
         initialize_database(database)
+
+        first_run_service = FirstRunService(database)
+        if first_run_service.requires_setup():
+            setup_dialog = FirstRunDialog(first_run_service)
+            if setup_dialog.exec() != FirstRunDialog.Accepted:
+                LOGGER.info("Initial administrator setup was cancelled")
+                return 0
 
         try:
             BackupService(database.path).create_automatic_backup_if_due()
