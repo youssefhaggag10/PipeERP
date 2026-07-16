@@ -5,7 +5,7 @@ from PySide6.QtGui import QImage, QPageLayout, QPageSize, QPainter
 from PySide6.QtPrintSupport import QPrinter, QPrinterInfo, QPrintPreviewDialog
 from PySide6.QtWidgets import QWidget
 
-from app.services.a4_invoice_renderer import A4InvoiceRenderer
+from app.services.a4_document_renderer import A4DocumentRenderer
 
 
 class A4PrintService:
@@ -15,7 +15,7 @@ class A4PrintService:
     MARGINS_MM = QMarginsF(5.0, 5.0, 5.0, 5.0)
 
     def __init__(self) -> None:
-        self.renderer = A4InvoiceRenderer()
+        self.renderer = A4DocumentRenderer()
 
     def preview_sales_invoice(
         self,
