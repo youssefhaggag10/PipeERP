@@ -7,7 +7,6 @@ from pathlib import Path
 
 from app.core.app_paths import AppPaths
 
-
 LOG_FILE_NAME = "PipeERP.log"
 MAX_LOG_BYTES = 2 * 1024 * 1024
 BACKUP_LOG_COUNT = 5
