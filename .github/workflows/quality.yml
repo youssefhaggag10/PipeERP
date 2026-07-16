@@ -1,0 +1,46 @@
+name: PipeERP Quality Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PIPEERP_DATA_DIR: ${{ runner.temp }}/pipeerp-test-data
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install project and test tools
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+
+      - name: Compile Python files
+        run: python -m compileall -q app tests
+
+      - name: Run regression tests
+        run: pytest -q
+
+      - name: Run focused lint checks
+        run: >-
+          ruff check
+          app/core/config.py
+          app/core/paths.py
+          app/core/logging_config.py
+          app/main.py
+          tests/test_recent_regressions.py
