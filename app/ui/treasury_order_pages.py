@@ -1,8 +1,10 @@
 from PySide6.QtWidgets import QMessageBox, QPushButton
 
+from app.repositories.quotation_repository import QuotationRepository
 from app.repositories.treasury_invoice_repository import TreasuryInvoiceRepository
 from app.ui.automated_purchase_page import AutomatedPurchaseAccountingPage
 from app.ui.print_enabled_pages import SalesAccountingPageWithPrint
+from app.ui.quotation_dialog import QuotationDialog
 
 
 class _TreasuryOrderPageMixin:
@@ -73,6 +75,14 @@ class TreasurySalesAccountingPageWithPrint(
         self._install_treasury_invoice_repository()
         self._remove_order_entry_payment_field()
         self._hide_order_payment_buttons()
+        self.quotation_repository = QuotationRepository(self.sales_repository.database)
+
+        quotation_button = QPushButton("عروض الأسعار")
+        quotation_button.clicked.connect(self.open_quotations)
+        self.layout().insertWidget(0, quotation_button)
+
+    def open_quotations(self) -> None:
+        QuotationDialog(self.quotation_repository, self).exec()
 
     def create_order(self) -> None:
         if self.customer_input.currentData() is None:
