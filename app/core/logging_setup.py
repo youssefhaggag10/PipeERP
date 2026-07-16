@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import logging
-import sys
 from logging.handlers import RotatingFileHandler
+import sys
 from pathlib import Path
 
 from app.core.app_paths import AppPaths
