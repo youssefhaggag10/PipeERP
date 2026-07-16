@@ -11,23 +11,24 @@ from PySide6.QtWidgets import (
 
 from app.database.connection import Database
 from app.models.user import User
+from app.repositories.admin_only_crm_repository import AdminOnlyCRMRepository
 from app.repositories.automated_inventory_repository import AutomatedInventoryRepository
 from app.repositories.base_material_scrap_cost_repository import (
     BaseMaterialScrapCostRepository,
 )
-from app.repositories.crm_repository import CRMRepository
 from app.repositories.detailed_return_refund_repository import DetailedReturnRefundRepository
 from app.repositories.partner_repository import PartnerRepository
 from app.repositories.print_settings_repository import PrintSettingsRepository
-from app.repositories.product_repository import ProductRepository
 from app.repositories.return_refund_invoice_repository import ReturnRefundInvoiceRepository
 from app.repositories.sales_repository import SalesRepository
+from app.repositories.strict_product_repository import StrictProductRepository
 from app.repositories.supplier_cost_purchase_repository import (
     SupplierCostPurchaseRepository,
 )
 from app.repositories.system_admin_repository import SystemAdminRepository
 from app.repositories.warehouse_repository import WarehouseRepository
 from app.services.crm_customer_sync import CRMCustomerSync
+from app.ui.admin_only_crm_page import AdminOnlyCRMPage
 from app.ui.backup_settings_page import BackupPrintSettingsPage
 from app.ui.clickable_summary_accounts_page import ClickableSummaryAccountsPage
 from app.ui.crm_page import CRMPage
@@ -35,10 +36,10 @@ from app.ui.dashboard import DashboardPage
 from app.ui.inventory_page import InventoryPage
 from app.ui.lot_balances_page import LotBalancesPage
 from app.ui.partners_page import PartnersPage
-from app.ui.products_page import ProductsPage
 from app.ui.replanned_manufacturing_page import ReplannedManufacturingPage
 from app.ui.reports_page import ReportsPage
 from app.ui.stock_card_page import StockCardPage
+from app.ui.strict_products_page import StrictProductsPage
 from app.ui.table_readability import configure_tables_in_widget
 from app.ui.treasury_order_pages import (
     TreasuryPurchaseAccountingPage,
@@ -60,7 +61,7 @@ class MainWindow(QMainWindow):
         self.navigation.currentRowChanged.connect(self.pages_changed)
 
         admin_repository = SystemAdminRepository(database, current_user)
-        product_repository = ProductRepository(database)
+        product_repository = StrictProductRepository(database)
         inventory_repository = AutomatedInventoryRepository(database)
         partner_repository = PartnerRepository(database)
         purchase_repository = SupplierCostPurchaseRepository(database)
@@ -70,7 +71,7 @@ class MainWindow(QMainWindow):
         invoice_repository = ReturnRefundInvoiceRepository(database)
         manufacturing_repository = BaseMaterialScrapCostRepository(database)
         self.print_settings_repository = PrintSettingsRepository(database)
-        crm_repository = CRMRepository(database, current_user)
+        crm_repository = AdminOnlyCRMRepository(database, current_user)
         self.crm_sync = CRMCustomerSync(database, current_user)
 
         self.pages = QStackedWidget()
@@ -81,9 +82,9 @@ class MainWindow(QMainWindow):
             self.add_page("الرئيسية", DashboardPage(product_repository, inventory_repository))
         if admin_repository.has_permission("crm"):
             self.crm_sync.sync()
-            self.add_page("CRM متابعة العملاء", CRMPage(crm_repository))
+            self.add_page("CRM متابعة العملاء", AdminOnlyCRMPage(crm_repository))
         if admin_repository.has_permission("products"):
-            self.add_page("الأصناف", ProductsPage(product_repository))
+            self.add_page("الأصناف", StrictProductsPage(product_repository))
         if admin_repository.has_permission("suppliers"):
             self.add_page("الموردين", PartnersPage("الموردين", "supplier", partner_repository))
         if admin_repository.has_permission("customers"):
