@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 15
     env:
       QT_QPA_PLATFORM: offscreen
-      PIPEERP_DATA_DIR: ${{ runner.temp }}/pipeerp-test-data
+      PIPEERP_DATA_DIR: ${{ github.workspace }}/.pipeerp-test-data
 
     steps:
       - name: Checkout repository
