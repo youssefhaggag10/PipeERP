@@ -1,9 +1,11 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -12,6 +14,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -118,6 +121,17 @@ class ManufacturingPage(QWidget):
         layout.addWidget(tabs)
         self.reload()
 
+    @staticmethod
+    def _scrollable_tab(page: QWidget) -> QScrollArea:
+        scroll_area = QScrollArea()
+        scroll_area.setObjectName("contentScrollArea")
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setWidget(page)
+        return scroll_area
+
     def _build_recipes_tab(self) -> QWidget:
         page = QWidget()
         self.recipe_code_input = QLineEdit()
@@ -160,6 +174,9 @@ class ManufacturingPage(QWidget):
         self.recipe_components_table.setHorizontalHeaderLabels(
             ["الكود", "الخامة", "كجم لكل خلطة"]
         )
+        self.recipe_components_table.setMinimumHeight(180)
+        self.recipe_components_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.recipe_components_table.setSelectionMode(QTableWidget.SingleSelection)
         self.recipe_components_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.recipe_weight_label = QLabel("وزن الخامات الأساسية: 0 كجم")
         self.recipe_weight_label.setStyleSheet("font-size: 16px; font-weight: 800;")
@@ -172,6 +189,7 @@ class ManufacturingPage(QWidget):
         )
         self.recipes_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.recipes_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.recipes_table.setMinimumHeight(190)
 
         components_box = QGroupBox("مكونات الخلطة الأساسية")
         components_layout = QVBoxLayout(components_box)
@@ -185,7 +203,7 @@ class ManufacturingPage(QWidget):
         layout.addWidget(save_recipe)
         layout.addWidget(QLabel("الخلطات المحفوظة"))
         layout.addWidget(self.recipes_table)
-        return page
+        return self._scrollable_tab(page)
 
     def _build_orders_tab(self) -> QWidget:
         page = QWidget()
@@ -217,6 +235,7 @@ class ManufacturingPage(QWidget):
         self.outputs_table.setHorizontalHeaderLabels(
             ["الصنف", "العدد المطلوب", "وزن الماسورة كجم", "إجمالي الوزن كجم"]
         )
+        self.outputs_table.setMinimumHeight(160)
         self.outputs_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 
         self.scrap_product_input = QComboBox()
@@ -238,6 +257,7 @@ class ManufacturingPage(QWidget):
         self.scraps_table.setHorizontalHeaderLabels(
             ["مصدر الكسر", "المتاح كجم", "المستخدم/خلطة", "الإجمالي بعد الحساب"]
         )
+        self.scraps_table.setMinimumHeight(160)
         self.scraps_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 
         self.plan_label = QLabel("أضف المقاسات المطلوبة لعرض خطة التشغيل")
@@ -269,6 +289,7 @@ class ManufacturingPage(QWidget):
         self.orders_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.orders_table.setSelectionMode(QTableWidget.SingleSelection)
         self.orders_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.orders_table.setMinimumHeight(210)
         start = QPushButton("بدء وصرف الخامات")
         start.clicked.connect(self._start_selected)
         add_batch = QPushButton("إضافة خلطة للأمر الجاري")
@@ -290,7 +311,7 @@ class ManufacturingPage(QWidget):
         layout.addWidget(QLabel("أوامر التصنيع"))
         layout.addLayout(actions)
         layout.addWidget(self.orders_table)
-        return page
+        return self._scrollable_tab(page)
 
     def reload(self) -> None:
         self.products = self.product_repository.list_products()
@@ -361,6 +382,15 @@ class ManufacturingPage(QWidget):
         )
         self.component_qty_input.clear()
         self._refresh_recipe_components()
+        last_row = self.recipe_components_table.rowCount() - 1
+        if last_row >= 0:
+            self.recipe_components_table.setCurrentCell(last_row, 0)
+            item = self.recipe_components_table.item(last_row, 0)
+            if item is not None:
+                self.recipe_components_table.scrollToItem(
+                    item,
+                    QAbstractItemView.PositionAtCenter,
+                )
 
     def _delete_recipe_component(self) -> None:
         row = self.recipe_components_table.currentRow()

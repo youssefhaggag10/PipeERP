@@ -76,4 +76,55 @@ QListWidget::item:selected {
     background-color: #1D4ED8;
     color: #FFFFFF;
 }
+
+QScrollArea#contentScrollArea {
+    border: none;
+    background-color: #0F172A;
+}
+
+QScrollBar:vertical {
+    background: #0B1220;
+    width: 14px;
+    margin: 2px;
+    border-radius: 7px;
+}
+
+QScrollBar::handle:vertical {
+    background: #475569;
+    min-height: 30px;
+    border-radius: 6px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: #3B82F6;
+}
+
+QScrollBar:horizontal {
+    background: #0B1220;
+    height: 14px;
+    margin: 2px;
+    border-radius: 7px;
+}
+
+QScrollBar::handle:horizontal {
+    background: #475569;
+    min-width: 30px;
+    border-radius: 6px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: #3B82F6;
+}
+
+QScrollBar::add-line,
+QScrollBar::sub-line {
+    width: 0;
+    height: 0;
+    background: transparent;
+}
+
+QScrollBar::add-page,
+QScrollBar::sub-page {
+    background: transparent;
+}
 """
