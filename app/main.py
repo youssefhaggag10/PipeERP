@@ -16,6 +16,7 @@ from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.services.auth_service import AuthService
 from app.services.backup_service import BackupService
 from app.services.first_run_service import FirstRunService
+from app.ui.appearance import AppearanceSettingsRepository, apply_appearance
 from app.ui.first_run_dialog import FirstRunDialog
 from app.ui.login_dialog import LoginDialog
 from app.ui.main_window import MainWindow
@@ -56,6 +57,7 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName(AppConfig.APP_NAME)
     app.setLayoutDirection(Qt.RightToLeft)
+    app.setStyle("Fusion")
     app.setStyleSheet(APP_STYLESHEET)
     install_global_table_configuration(app)
     app.setWindowIcon(QIcon(str(PrintSettingsRepository.default_logo_path())))
@@ -65,6 +67,7 @@ def main() -> int:
         LOGGER.info("Using database path: %s", database_path)
         database = Database(database_path)
         initialize_database(database)
+        apply_appearance(app, AppearanceSettingsRepository(database))
 
         first_run_service = FirstRunService(database)
         if first_run_service.requires_setup():
@@ -72,7 +75,6 @@ def main() -> int:
             if setup_dialog.exec() != FirstRunDialog.Accepted:
                 LOGGER.info("Initial administrator setup was cancelled")
                 return 0
-
         try:
             BackupService(database.path).create_automatic_backup_if_due()
         except ValueError as error:
