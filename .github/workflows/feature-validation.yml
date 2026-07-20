@@ -46,4 +46,12 @@ jobs:
           if-no-files-found: error
 
       - name: Run lint
-        run: ruff check app tests
+        run: ruff check app tests > ruff-output.txt 2>&1
+
+      - name: Upload ruff output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruff-output
+          path: ruff-output.txt
+          if-no-files-found: error
