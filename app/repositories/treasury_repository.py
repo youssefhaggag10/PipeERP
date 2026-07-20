@@ -2,7 +2,6 @@ from app.database.connection import Database
 from app.repositories.reversible_accounting_repository import ReversibleAccountingRepository
 from app.services.payment_service import post_order_payment
 
-
 EPSILON = 0.000001
 
 
@@ -48,9 +47,8 @@ class TreasuryRepository(ReversibleAccountingRepository):
                 """
             )
             payment_columns = {
-                str(row[1]) for row in connection.execute(
-                    "PRAGMA table_info(payment_transactions)"
-                ).fetchall()
+                str(row[1])
+                for row in connection.execute("PRAGMA table_info(payment_transactions)").fetchall()
             }
             if "financial_account_id" not in payment_columns:
                 connection.execute(
@@ -207,9 +205,11 @@ class TreasuryRepository(ReversibleAccountingRepository):
             ).fetchall()
             if len(accounts) != 2:
                 raise ValueError("أحد الحسابات غير موجود أو غير نشط")
-            next_id = int(connection.execute(
-                "SELECT COALESCE(MAX(id), 0) + 1 FROM financial_account_transfers"
-            ).fetchone()[0])
+            next_id = int(
+                connection.execute(
+                    "SELECT COALESCE(MAX(id), 0) + 1 FROM financial_account_transfers"
+                ).fetchone()[0]
+            )
             cursor = connection.execute(
                 """
                 INSERT INTO financial_account_transfers(
@@ -267,9 +267,7 @@ class TreasuryRepository(ReversibleAccountingRepository):
         notes: str = "",
         financial_account_id: int | None = None,
     ) -> int:
-        expected_partner_type = (
-            "customer" if transaction_type == "customer_receipt" else "supplier"
-        )
+        expected_partner_type = "customer" if transaction_type == "customer_receipt" else "supplier"
         if transaction_type not in {"customer_receipt", "supplier_payment"}:
             raise ValueError("نوع الحركة المالية غير صحيح")
         if amount <= 0:
@@ -302,7 +300,9 @@ class TreasuryRepository(ReversibleAccountingRepository):
                 reference_type = "sale" if expected_partner_type == "customer" else "purchase"
                 order_table = "sales_orders" if reference_type == "sale" else "purchase_orders"
                 partner_column = "customer_id" if reference_type == "sale" else "supplier_id"
-                line_table = "sales_order_lines" if reference_type == "sale" else "purchase_order_lines"
+                line_table = (
+                    "sales_order_lines" if reference_type == "sale" else "purchase_order_lines"
+                )
                 order_fk = "sales_order_id" if reference_type == "sale" else "purchase_order_id"
                 order = connection.execute(
                     f"""
@@ -335,9 +335,15 @@ class TreasuryRepository(ReversibleAccountingRepository):
                 financial_account_id=financial_account_id,
             )
             if reference_id is not None:
-                invoice_table = "sales_invoices" if reference_type == "sale" else "purchase_invoices"
-                invoice_column = "sales_invoice_id" if reference_type == "sale" else "purchase_invoice_id"
-                invoice_order_column = "sales_order_id" if reference_type == "sale" else "purchase_order_id"
+                invoice_table = (
+                    "sales_invoices" if reference_type == "sale" else "purchase_invoices"
+                )
+                invoice_column = (
+                    "sales_invoice_id" if reference_type == "sale" else "purchase_invoice_id"
+                )
+                invoice_order_column = (
+                    "sales_order_id" if reference_type == "sale" else "purchase_order_id"
+                )
                 invoice = connection.execute(
                     f"SELECT id FROM {invoice_table} WHERE {invoice_order_column} = ? AND status = 'posted'",
                     (reference_id,),
@@ -369,7 +375,9 @@ class TreasuryRepository(ReversibleAccountingRepository):
                 if row["financial_account_id"] is not None
             }
         for row in rows:
-            row["financial_account_name"] = account_map.get(linked.get(int(row.get("id", 0)), 0), "-")
+            row["financial_account_name"] = account_map.get(
+                linked.get(int(row.get("id", 0)), 0), "-"
+            )
         return rows
 
 

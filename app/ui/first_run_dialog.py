@@ -25,9 +25,7 @@ class FirstRunDialog(QDialog):
         title.setObjectName("titleLabel")
         title.setAlignment(Qt.AlignCenter)
 
-        message = QLabel(
-            "هذه الشاشة تظهر مرة واحدة فقط. أنشئ حساب المدير الذي سيستخدمه المصنع."
-        )
+        message = QLabel("هذه الشاشة تظهر مرة واحدة فقط. أنشئ حساب المدير الذي سيستخدمه المصنع.")
         message.setWordWrap(True)
         message.setAlignment(Qt.AlignCenter)
 

@@ -91,11 +91,13 @@ class TreasuryInvoiceRepository(InvoiceRepository):
                 raise ValueError("الفاتورة غير موجودة")
             if invoice["status"] != "posted":
                 raise ValueError("يجب اعتماد الفاتورة قبل تسجيل الدفع")
-            paid = float(connection.execute(
-                "SELECT COALESCE(SUM(amount), 0) AS paid "
-                f"FROM payment_transactions WHERE {invoice_column} = ?",
-                (invoice_id,),
-            ).fetchone()["paid"])
+            paid = float(
+                connection.execute(
+                    "SELECT COALESCE(SUM(amount), 0) AS paid "
+                    f"FROM payment_transactions WHERE {invoice_column} = ?",
+                    (invoice_id,),
+                ).fetchone()["paid"]
+            )
             remaining = float(invoice["total"]) - paid
             if amount - remaining > 0.000001:
                 raise ValueError(f"المبلغ أكبر من المتبقي على الفاتورة ({remaining:,.2f})")

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from app.repositories.sales_repository import SalesRepository
 
-
 EPSILON = 0.0000001
 
 
@@ -20,8 +19,7 @@ class WeightSalesRepository(SalesRepository):
     def _ensure_weight_sales_schema(self) -> None:
         with self.database.session(immediate=True) as connection:
             product_columns = {
-                str(row[1])
-                for row in connection.execute("PRAGMA table_info(products)").fetchall()
+                str(row[1]) for row in connection.execute("PRAGMA table_info(products)").fetchall()
             }
             if "standard_weight_kg" not in product_columns:
                 connection.execute(
@@ -383,7 +381,8 @@ class WeightSalesRepository(SalesRepository):
             raise ValueError("أمر البيع غير موجود")
         if str(order["billing_method"]) == "weight":
             missing = [
-                row for row in self.get_order_weight_lines(int(order_id))
+                row
+                for row in self.get_order_weight_lines(int(order_id))
                 if float(row["remaining_quantity"]) > EPSILON
             ]
             if missing:

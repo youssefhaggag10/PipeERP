@@ -4,7 +4,6 @@ from app.services.payment_account_rules import (
     expected_account_label,
 )
 
-
 EPSILON = 0.000001
 
 
@@ -232,9 +231,7 @@ class ReturnRefundRepository(ReturnAwareTreasuryRepository):
             raise ValueError("لا يوجد مبلغ قابل للاسترداد على الفاتورة المحددة")
         refundable = float(matching["refundable"])
         if amount - refundable > EPSILON:
-            raise ValueError(
-                f"المبلغ أكبر من المتاح للاسترداد على الفاتورة ({refundable:,.2f})"
-            )
+            raise ValueError(f"المبلغ أكبر من المتاح للاسترداد على الفاتورة ({refundable:,.2f})")
 
         with self.database.session(immediate=True) as connection:
             next_id = int(
@@ -276,13 +273,10 @@ class ReturnRefundRepository(ReturnAwareTreasuryRepository):
             GROUP BY financial_account_id
             """
         )
-        by_account = {
-            int(row["financial_account_id"]): float(row["total"])
-            for row in refund_rows
-        }
+        by_account = {int(row["financial_account_id"]): float(row["total"]) for row in refund_rows}
         for item in rows:
-            item["current_balance"] = (
-                float(item["current_balance"]) + by_account.get(int(item["id"]), 0.0)
+            item["current_balance"] = float(item["current_balance"]) + by_account.get(
+                int(item["id"]), 0.0
             )
         return rows
 

@@ -2,7 +2,6 @@ from PySide6.QtWidgets import QInputDialog, QMessageBox, QWidget
 
 from app.services.payment_account_rules import allowed_account_types, expected_account_label
 
-
 PAYMENT_METHODS = ["نقدي", "تحويل بنكي", "شيك", "محفظة إلكترونية"]
 
 

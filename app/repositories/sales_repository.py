@@ -181,8 +181,12 @@ class SalesRepository:
                     VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (
-                        order_id, line["product_id"], line["quantity"],
-                        line["unit"], line["unit_price"], line["line_total"],
+                        order_id,
+                        line["product_id"],
+                        line["quantity"],
+                        line["unit"],
+                        line["unit_price"],
+                        line["line_total"],
                     ),
                 )
             if paid_amount > 0:

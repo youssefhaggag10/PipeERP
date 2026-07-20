@@ -32,23 +32,17 @@ class ResponsiveAccountsPage(ClickableSummaryAccountsPage):
         accounts_table = getattr(self, "accounts_table", None)
         if accounts_table is not None:
             accounts_table.setMinimumHeight(260)
-            accounts_table.horizontalHeader().setSectionResizeMode(
-                QHeaderView.ResizeToContents
-            )
+            accounts_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
             accounts_table.horizontalHeader().setStretchLastSection(True)
 
         movements_table = getattr(self, "movements_table", None)
         if movements_table is not None:
             movements_table.setMinimumHeight(300)
-            movements_table.horizontalHeader().setSectionResizeMode(
-                QHeaderView.ResizeToContents
-            )
+            movements_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
             movements_table.horizontalHeader().setStretchLastSection(True)
 
         for layout in self.findChildren(QFormLayout):
-            layout.setFieldGrowthPolicy(
-                QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
-            )
+            layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
             layout.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
 
 

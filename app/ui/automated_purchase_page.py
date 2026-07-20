@@ -60,9 +60,7 @@ class AutomatedPurchaseAccountingPage(PurchaseAccountingPage):
         try:
             quantity = float(self.qty_input.text().strip())
             unit_price = float(self.price_input.text().strip() or 0)
-            manufacturing_unit_cost = float(
-                self.manufacturing_price_input.text().strip() or 0
-            )
+            manufacturing_unit_cost = float(self.manufacturing_price_input.text().strip() or 0)
             loss_text = self.loss_input.text().strip()
             purchase_loss_quantity = (
                 float(loss_text) if loss_text else self._default_purchase_loss(quantity)

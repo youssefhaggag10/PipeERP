@@ -4,7 +4,6 @@ from app.database.connection import Database
 from app.models.user import User
 from app.security.passwords import hash_password, verify_password
 
-
 PERMISSIONS: tuple[tuple[str, str], ...] = (
     ("dashboard", "الرئيسية"),
     ("crm", "CRM متابعة العملاء"),
@@ -222,11 +221,16 @@ class AdminRepository:
             connection.executemany(
                 "INSERT OR IGNORE INTO crm_sources(code, name, sequence) VALUES (?, ?, ?)",
                 (
-                    ("facebook", "فيسبوك", 10), ("instagram", "إنستجرام", 20),
-                    ("whatsapp", "واتساب", 30), ("website", "الموقع", 40),
-                    ("paid_ad", "إعلان ممول", 50), ("referral", "ترشيح عميل", 60),
-                    ("sales_rep", "مندوب", 70), ("inbound_call", "اتصال وارد", 80),
-                    ("exhibition", "معرض", 90), ("other", "مصدر آخر", 100),
+                    ("facebook", "فيسبوك", 10),
+                    ("instagram", "إنستجرام", 20),
+                    ("whatsapp", "واتساب", 30),
+                    ("website", "الموقع", 40),
+                    ("paid_ad", "إعلان ممول", 50),
+                    ("referral", "ترشيح عميل", 60),
+                    ("sales_rep", "مندوب", 70),
+                    ("inbound_call", "اتصال وارد", 80),
+                    ("exhibition", "معرض", 90),
+                    ("other", "مصدر آخر", 100),
                 ),
             )
             connection.executemany(

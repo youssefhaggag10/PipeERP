@@ -102,9 +102,17 @@ class PurchasePage(QWidget):
         self.lines_table = QTableWidget(0, 11)
         self.lines_table.setHorizontalHeaderLabels(
             [
-                "الكود", "الصنف", "رقم الدفعة", "إجمالي الكمية", "الوحدة",
-                "سعر الشراء", "تصنيع/كجم", "الفقد", "صافي المخزن",
-                "تكلفة المخزون/وحدة", "الإجمالي",
+                "الكود",
+                "الصنف",
+                "رقم الدفعة",
+                "إجمالي الكمية",
+                "الوحدة",
+                "سعر الشراء",
+                "تصنيع/كجم",
+                "الفقد",
+                "صافي المخزن",
+                "تكلفة المخزون/وحدة",
+                "الإجمالي",
             ]
         )
         self.lines_table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -223,9 +231,7 @@ class PurchasePage(QWidget):
         try:
             quantity = float(self.qty_input.text().strip())
             unit_price = float(self.price_input.text().strip() or 0)
-            manufacturing_unit_cost = float(
-                self.manufacturing_price_input.text().strip() or 0
-            )
+            manufacturing_unit_cost = float(self.manufacturing_price_input.text().strip() or 0)
             loss_text = self.loss_input.text().strip()
             purchase_loss_quantity = (
                 float(loss_text) if loss_text else self._default_purchase_loss(quantity)
@@ -284,9 +290,7 @@ class PurchasePage(QWidget):
         self.qty_input.setText(f"{float(line['quantity']):g}")
         self.unit_input.setText(str(line["unit"]))
         self.price_input.setText(f"{float(line['unit_price']):g}")
-        self.manufacturing_price_input.setText(
-            f"{float(line.get('manufacturing_unit_cost', 0)):g}"
-        )
+        self.manufacturing_price_input.setText(f"{float(line.get('manufacturing_unit_cost', 0)):g}")
         self.loss_input.setText(f"{float(line.get('purchase_loss_quantity', 0)):g}")
         self.add_line_button.setText("تحديث البند")
 
@@ -400,9 +404,17 @@ class PurchasePage(QWidget):
                 ("الملاحظات", order["notes"] or ""),
             ],
             columns=[
-                "الكود", "الصنف", "الدفعة", "الإجمالي كجم", "الوحدة",
-                "سعر الشراء", "تصنيع/كجم", "الفقد", "صافي المخزن",
-                "تكلفة المخزون", "الإجمالي",
+                "الكود",
+                "الصنف",
+                "الدفعة",
+                "الإجمالي كجم",
+                "الوحدة",
+                "سعر الشراء",
+                "تصنيع/كجم",
+                "الفقد",
+                "صافي المخزن",
+                "تكلفة المخزون",
+                "الإجمالي",
             ],
             rows=rows,
             total=float(order["total"]),

@@ -55,8 +55,9 @@ def create_invoice_for_order(
         return int(existing["id"]), str(existing["invoice_number"])
 
     next_id = int(
-        connection.execute(f"SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM {table}")
-        .fetchone()["next_id"]
+        connection.execute(f"SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM {table}").fetchone()[
+            "next_id"
+        ]
     )
     invoice_number = f"{prefix}{next_id:05d}"
     posted_at_sql = "CURRENT_TIMESTAMP" if status == "posted" else "NULL"

@@ -2,7 +2,6 @@ from app.repositories.scrap_aware_manufacturing_repository import (
     ScrapAwareManufacturingRepository,
 )
 
-
 EPSILON = 0.0000001
 
 
@@ -23,9 +22,7 @@ class BaseMaterialScrapCostRepository(ScrapAwareManufacturingRepository):
         with self.database.session(immediate=True) as connection:
             columns = {
                 str(row[1])
-                for row in connection.execute(
-                    "PRAGMA table_info(manufacturing_recipes)"
-                ).fetchall()
+                for row in connection.execute("PRAGMA table_info(manufacturing_recipes)").fetchall()
             }
             if "estimated_scrap_unit_cost" not in columns:
                 connection.execute(

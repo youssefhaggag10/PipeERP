@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
 
 from app.utils.datetime_utils import format_egypt_datetime
 
-
 ACTIVITY_LABELS = {
     "call": "مكالمة",
     "whatsapp": "واتساب",
@@ -55,17 +54,11 @@ class CRMActivityCenter(QToolButton):
         overdue = [row for row in activities if row.get("display_status") == "overdue"]
         today = [row for row in activities if row.get("display_status") == "today"]
         future = [
-            row
-            for row in activities
-            if row.get("display_status") not in {"overdue", "today"}
+            row for row in activities if row.get("display_status") not in {"overdue", "today"}
         ]
 
         attention_count = len(overdue) + len(today)
-        self.setText(
-            f"🔔 الأنشطة {attention_count}"
-            if attention_count
-            else "🔔 الأنشطة"
-        )
+        self.setText(f"🔔 الأنشطة {attention_count}" if attention_count else "🔔 الأنشطة")
         self.setProperty("hasAttention", bool(attention_count))
         self.style().unpolish(self)
         self.style().polish(self)
@@ -101,9 +94,7 @@ class CRMActivityCenter(QToolButton):
         layout.setContentsMargins(12, 10, 12, 10)
         title = QLabel("مركز أنشطة CRM")
         title.setStyleSheet("font-size: 16px; font-weight: 800;")
-        counts = QLabel(
-            f"متأخر: {overdue}   |   اليوم: {today}   |   قادم: {future}"
-        )
+        counts = QLabel(f"متأخر: {overdue}   |   اليوم: {today}   |   قادم: {future}")
         counts.setObjectName("subtitleLabel")
         layout.addWidget(title)
         layout.addWidget(counts)
@@ -136,25 +127,21 @@ class CRMActivityCenter(QToolButton):
         badge = QLabel(status_label)
         if status == "overdue":
             badge.setStyleSheet(
-                "background:#DC2626;color:white;padding:3px 7px;"
-                "border-radius:6px;font-weight:700;"
+                "background:#DC2626;color:white;padding:3px 7px;border-radius:6px;font-weight:700;"
             )
         elif status == "today":
             badge.setStyleSheet(
-                "background:#D97706;color:white;padding:3px 7px;"
-                "border-radius:6px;font-weight:700;"
+                "background:#D97706;color:white;padding:3px 7px;border-radius:6px;font-weight:700;"
             )
         else:
             badge.setStyleSheet(
-                "background:#2563EB;color:white;padding:3px 7px;"
-                "border-radius:6px;font-weight:700;"
+                "background:#2563EB;color:white;padding:3px 7px;border-radius:6px;font-weight:700;"
             )
         top.addWidget(subject, 1)
         top.addWidget(badge)
 
         customer = QLabel(
-            f"{activity_type} مع {activity.get('lead_name', '')}"
-            f" — {activity.get('phone', '')}"
+            f"{activity_type} مع {activity.get('lead_name', '')} — {activity.get('phone', '')}"
         )
         customer.setObjectName("subtitleLabel")
         due = QLabel(

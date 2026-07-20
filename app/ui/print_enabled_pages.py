@@ -48,12 +48,8 @@ class SalesAccountingPageWithPrint(SalesAccountingPage):
             return
 
         try:
-            print_data = self.invoice_repository.get_sales_invoice_print_data(
-                int(invoice["id"])
-            )
-            settings = PrintSettingsRepository(
-                self.sales_repository.database
-            ).get_settings()
+            print_data = self.invoice_repository.get_sales_invoice_print_data(int(invoice["id"]))
+            settings = PrintSettingsRepository(self.sales_repository.database).get_settings()
             self._invoice_print_service.preview_sales_invoice(
                 print_data,
                 settings,
@@ -135,12 +131,8 @@ class AccountsPageWithPrint(AccountsPage):
             return
 
         try:
-            print_data = self.invoice_repository.get_sales_invoice_print_data(
-                int(row["id"])
-            )
-            settings = PrintSettingsRepository(
-                self.invoice_repository.database
-            ).get_settings()
+            print_data = self.invoice_repository.get_sales_invoice_print_data(int(row["id"]))
+            settings = PrintSettingsRepository(self.invoice_repository.database).get_settings()
             self._invoice_print_service.preview_sales_invoice(
                 print_data,
                 settings,

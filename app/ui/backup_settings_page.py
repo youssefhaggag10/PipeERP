@@ -22,9 +22,9 @@ from PySide6.QtWidgets import (
 from app.database.connection import Database
 from app.services.backup_service import BackupService
 from app.ui.appearance import (
+    THEME_LABELS,
     AppearanceSettings,
     AppearanceSettingsRepository,
-    THEME_LABELS,
     apply_appearance,
 )
 from app.ui.print_settings_page import PrintSettingsPage

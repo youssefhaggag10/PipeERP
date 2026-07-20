@@ -1,6 +1,5 @@
 from app.repositories.strict_treasury_repository import StrictTreasuryRepository
 
-
 EPSILON = 0.000001
 
 
@@ -60,9 +59,7 @@ class ReturnAwareTreasuryRepository(StrictTreasuryRepository):
             item["invoices_total"] = max(0.0, float(item["invoices_total"]) - returned)
             item["orders_total"] = item["invoices_total"]
             item["balance"] = (
-                float(item["opening_balance"])
-                + float(item["invoices_total"])
-                - float(item["paid"])
+                float(item["opening_balance"]) + float(item["invoices_total"]) - float(item["paid"])
             )
         return rows
 

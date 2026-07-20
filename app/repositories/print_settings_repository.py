@@ -50,16 +50,13 @@ class PrintSettingsRepository:
         )
         stored = {str(row["key"]): str(row["value"]) for row in rows}
         result = {
-            name: stored.get(db_key, self.DEFAULTS[name])
-            for name, db_key in self.KEYS.items()
+            name: stored.get(db_key, self.DEFAULTS[name]) for name, db_key in self.KEYS.items()
         }
         result["paper_width_mm"] = "80"
         result["logo_path"] = str(
             self._resolve_asset(result["logo_path"], self.default_logo_path())
         )
-        result["qr_path"] = str(
-            self._resolve_asset(result["qr_path"], self.default_qr_path())
-        )
+        result["qr_path"] = str(self._resolve_asset(result["qr_path"], self.default_qr_path()))
         result["watermark_path"] = str(
             self._resolve_asset(result["watermark_path"], self.default_logo_path())
         )
@@ -97,7 +94,9 @@ class PrintSettingsRepository:
         normalized["watermark_opacity"] = str(opacity)
         normalized["watermark_size"] = str(size)
         normalized["watermark_enabled"] = (
-            "1" if normalized.get("watermark_enabled", "0").lower() in {"1", "true", "yes", "on"} else "0"
+            "1"
+            if normalized.get("watermark_enabled", "0").lower() in {"1", "true", "yes", "on"}
+            else "0"
         )
 
         current_assets = self._stored_asset_values()
@@ -114,10 +113,7 @@ class PrintSettingsRepository:
         with self.database.session() as connection:
             connection.executemany(
                 "INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)",
-                (
-                    (self.KEYS[name], value)
-                    for name, value in normalized.items()
-                ),
+                ((self.KEYS[name], value) for name, value in normalized.items()),
             )
 
     def _stored_asset_values(self) -> dict[str, str]:
@@ -160,10 +156,4 @@ class PrintSettingsRepository:
 
     @staticmethod
     def default_qr_path() -> Path:
-        return (
-            AppConfig.project_root()
-            / "app"
-            / "assets"
-            / "print"
-            / "default_instapay_qr.png"
-        )
+        return AppConfig.project_root() / "app" / "assets" / "print" / "default_instapay_qr.png"

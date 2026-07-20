@@ -8,7 +8,6 @@ from PySide6.QtWidgets import QApplication
 from app.database.connection import Database
 from app.ui.styles import build_stylesheet
 
-
 THEME_LABELS = {
     "dark": "داكن",
     "light": "فاتح",

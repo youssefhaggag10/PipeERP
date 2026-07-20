@@ -102,9 +102,7 @@ def test_draft_orders_are_advances_not_partner_debt(accounting_data) -> None:
     assert supplier["advances"] == 20
     assert supplier["balance"] == 0
     assert database.fetch_one("SELECT status FROM sales_orders WHERE id = ?", (sales_id,))
-    assert database.fetch_one(
-        "SELECT status FROM purchase_orders WHERE id = ?", (purchase_id,)
-    )
+    assert database.fetch_one("SELECT status FROM purchase_orders WHERE id = ?", (purchase_id,))
 
 
 def test_fulfillment_creates_debt_and_applies_order_advances(accounting_data) -> None:

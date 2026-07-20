@@ -20,9 +20,8 @@ def _ensure_financial_account_schema(connection: Connection) -> int:
         """
     )
     columns = {
-        str(row[1]) for row in connection.execute(
-            "PRAGMA table_info(payment_transactions)"
-        ).fetchall()
+        str(row[1])
+        for row in connection.execute("PRAGMA table_info(payment_transactions)").fetchall()
     }
     if "financial_account_id" not in columns:
         connection.execute(

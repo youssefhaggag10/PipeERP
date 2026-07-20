@@ -19,7 +19,6 @@ from PySide6.QtWidgets import (
 
 from app.ui.replanned_manufacturing_page import ReplannedManufacturingPage
 
-
 RUN_STATUS = {
     "draft": "جاهزة للصرف",
     "in_progress": "جارية",
@@ -35,9 +34,7 @@ class RunCompletionDialog(QDialog):
         self.repository = repository
         self.run = run
         self.output_inputs: dict[int, tuple[QLineEdit, QLineEdit]] = {}
-        self.setWindowTitle(
-            f"إغلاق خلطة التشغيل رقم {run['run_number']} وتسجيل الإنتاج"
-        )
+        self.setWindowTitle(f"إغلاق خلطة التشغيل رقم {run['run_number']} وتسجيل الإنتاج")
         self.setLayoutDirection(Qt.RightToLeft)
         self.resize(720, 520)
 
@@ -244,9 +241,7 @@ class ProductionRunsDialog(QDialog):
                 f"{float(material['total_cost']):,.2f}",
             ]
             for column, value in enumerate(values):
-                self.materials_table.setItem(
-                    row_index, column, QTableWidgetItem(str(value))
-                )
+                self.materials_table.setItem(row_index, column, QTableWidgetItem(str(value)))
 
     def ensure_run(self) -> None:
         try:
@@ -320,9 +315,7 @@ class ProductionRunsDialog(QDialog):
         if run_id is None:
             return
         run = self.repository.get_run(run_id)
-        materials = [
-            item for item in run["materials"] if item["component_kind"] != "scrap"
-        ]
+        materials = [item for item in run["materials"] if item["component_kind"] != "scrap"]
         if not materials:
             QMessageBox.warning(self, "تنبيه", "لا توجد خامات أساسية في الخلطة")
             return

@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from app.repositories.base_material_scrap_cost_repository import (
     BaseMaterialScrapCostRepository,
 )
-
 
 EPSILON = 0.0000001
 
@@ -25,8 +22,7 @@ class ProductionRunRepository(BaseMaterialScrapCostRepository):
     def _ensure_run_schema(self) -> None:
         with self.database.session(immediate=True) as connection:
             product_columns = {
-                str(row[1])
-                for row in connection.execute("PRAGMA table_info(products)").fetchall()
+                str(row[1]) for row in connection.execute("PRAGMA table_info(products)").fetchall()
             }
             if "standard_weight_kg" not in product_columns:
                 connection.execute(
@@ -390,7 +386,11 @@ class ProductionRunRepository(BaseMaterialScrapCostRepository):
                     raise ValueError(
                         f"رصيد {material['name']} غير كافٍ. المطلوب {required:,.2f} والمتاح {available:,.2f}"
                     )
-                actual = min(required, available) if str(material["component_kind"]) == "scrap" else required
+                actual = (
+                    min(required, available)
+                    if str(material["component_kind"]) == "scrap"
+                    else required
+                )
                 requirements.append((material, actual))
 
             input_weight = 0.0
@@ -404,9 +404,7 @@ class ProductionRunRepository(BaseMaterialScrapCostRepository):
                     warehouse_id=int(run["warehouse_id"]),
                     quantity=quantity,
                     reference_id=int(run_id),
-                    notes=(
-                        f"صرف خلطة تشغيل {run['order_number']}/{run['run_number']}"
-                    ),
+                    notes=(f"صرف خلطة تشغيل {run['order_number']}/{run['run_number']}"),
                 )
                 connection.execute(
                     """
@@ -545,9 +543,7 @@ class ProductionRunRepository(BaseMaterialScrapCostRepository):
                     """,
                     (quantity, actual_weight, unit_cost, int(row["id"])),
                 )
-                lot_number = (
-                    f"{run['order_number']}-RUN{int(run['run_number']):02d}-FG-{int(row['product_id'])}"
-                )
+                lot_number = f"{run['order_number']}-RUN{int(run['run_number']):02d}-FG-{int(row['product_id'])}"
                 lot_id = self._ensure_lot(
                     connection,
                     int(row["product_id"]),

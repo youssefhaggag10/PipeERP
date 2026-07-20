@@ -4,7 +4,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
-    QFormLayout,
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
@@ -18,7 +17,6 @@ from PySide6.QtWidgets import (
 )
 
 from app.ui.treasury_order_pages import TreasurySalesAccountingPageWithPrint
-
 
 CARD_STATUS = {
     "draft": "مسودة",
@@ -245,15 +243,9 @@ class WeightCardsDialog(QDialog):
             net_weight = float(self.net_input.text().strip())
             price = float(self.price_input.text().strip())
             gross = (
-                float(self.gross_input.text().strip())
-                if self.gross_input.text().strip()
-                else None
+                float(self.gross_input.text().strip()) if self.gross_input.text().strip() else None
             )
-            tare = (
-                float(self.tare_input.text().strip())
-                if self.tare_input.text().strip()
-                else None
-            )
+            tare = float(self.tare_input.text().strip()) if self.tare_input.text().strip() else None
         except ValueError:
             QMessageBox.warning(self, "تنبيه", "الأعداد والأوزان والسعر يجب أن تكون أرقامًا")
             return

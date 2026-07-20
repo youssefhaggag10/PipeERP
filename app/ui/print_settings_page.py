@@ -227,9 +227,7 @@ class PrintSettingsPage(SettingsPage):
 
     def _clear_watermark_source(self) -> None:
         self._watermark_source = None
-        self.watermark_path_label.setText(
-            str(self.print_repository.default_logo_path())
-        )
+        self.watermark_path_label.setText(str(self.print_repository.default_logo_path()))
 
     def _add_phone(self) -> None:
         phone = self.new_phone_input.text().strip()

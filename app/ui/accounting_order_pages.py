@@ -165,8 +165,17 @@ class PurchaseAccountingPage(_PaymentOrderMixin, PurchasePage):
         self.orders_table.setColumnCount(12)
         self.orders_table.setHorizontalHeaderLabels(
             [
-                "رقم الأمر", "الوقت", "المورد", "الأصناف", "عدد البنود", "المخزن",
-                "حالة الأمر", "الإجمالي", "المدفوع", "المتبقي", "رقم الفاتورة",
+                "رقم الأمر",
+                "الوقت",
+                "المورد",
+                "الأصناف",
+                "عدد البنود",
+                "المخزن",
+                "حالة الأمر",
+                "الإجمالي",
+                "المدفوع",
+                "المتبقي",
+                "رقم الفاتورة",
                 "حالة الفاتورة",
             ]
         )
@@ -206,11 +215,17 @@ class PurchaseAccountingPage(_PaymentOrderMixin, PurchasePage):
             summary = str(order["product_summary"])
             visible_summary = summary if len(summary) <= 45 else summary[:42] + "..."
             values = [
-                order["order_number"], format_egypt_datetime(order["order_date"]),
-                order["partner_name"], visible_summary, order["line_count"],
-                order["warehouse_name"], self.status_label(order["status"]),
-                f"{float(order['total']):,.2f}", f"{float(order['paid']):,.2f}",
-                f"{float(order['remaining']):,.2f}", order["invoice_number"],
+                order["order_number"],
+                format_egypt_datetime(order["order_date"]),
+                order["partner_name"],
+                visible_summary,
+                order["line_count"],
+                order["warehouse_name"],
+                self.status_label(order["status"]),
+                f"{float(order['total']):,.2f}",
+                f"{float(order['paid']):,.2f}",
+                f"{float(order['remaining']):,.2f}",
+                order["invoice_number"],
                 self._invoice_status_label(str(order["invoice_status"])),
             ]
             for column_index, value in enumerate(values):
@@ -271,8 +286,11 @@ class PurchaseAccountingPage(_PaymentOrderMixin, PurchasePage):
         order = self.purchase_repository.get_order_details(order_id)
         rows = [
             [
-                line["code"], line["name"], line["lot_number"],
-                f"{float(line['quantity']):g}", line["unit"],
+                line["code"],
+                line["name"],
+                line["lot_number"],
+                f"{float(line['quantity']):g}",
+                line["unit"],
                 f"{float(line['unit_price']):,.2f}",
                 f"{float(line['manufacturing_unit_cost']):,.2f}",
                 f"{float(line['purchase_loss_quantity']):g}",
@@ -285,7 +303,8 @@ class PurchaseAccountingPage(_PaymentOrderMixin, PurchasePage):
         dialog = OrderDetailsDialog(
             title=f"تفاصيل أمر الشراء {order['order_number']}",
             header_fields=[
-                ("المورد", order["supplier_name"]), ("المخزن", order["warehouse_name"]),
+                ("المورد", order["supplier_name"]),
+                ("المخزن", order["warehouse_name"]),
                 ("التاريخ", format_egypt_datetime(order["order_date"])),
                 ("الحالة", self.status_label(order["status"])),
                 ("المدفوع", f"{float(order['paid']):,.2f}"),
@@ -293,11 +312,21 @@ class PurchaseAccountingPage(_PaymentOrderMixin, PurchasePage):
                 ("الملاحظات", order["notes"] or ""),
             ],
             columns=[
-                "الكود", "الصنف", "الدفعة", "الإجمالي كجم", "الوحدة",
-                "سعر الشراء", "تصنيع/كجم", "الفقد", "صافي المخزن",
-                "تكلفة المخزون", "الإجمالي",
+                "الكود",
+                "الصنف",
+                "الدفعة",
+                "الإجمالي كجم",
+                "الوحدة",
+                "سعر الشراء",
+                "تصنيع/كجم",
+                "الفقد",
+                "صافي المخزن",
+                "تكلفة المخزون",
+                "الإجمالي",
             ],
-            rows=rows, total=float(order["total"]), parent=self,
+            rows=rows,
+            total=float(order["total"]),
+            parent=self,
         )
         dialog.exec()
 
@@ -315,8 +344,17 @@ class SalesAccountingPage(_PaymentOrderMixin, SalesPage):
         self.orders_table.setColumnCount(12)
         self.orders_table.setHorizontalHeaderLabels(
             [
-                "رقم الأمر", "الوقت", "العميل", "الأصناف", "عدد البنود", "المخزن",
-                "حالة الأمر", "الإجمالي", "المدفوع", "المتبقي", "رقم الفاتورة",
+                "رقم الأمر",
+                "الوقت",
+                "العميل",
+                "الأصناف",
+                "عدد البنود",
+                "المخزن",
+                "حالة الأمر",
+                "الإجمالي",
+                "المدفوع",
+                "المتبقي",
+                "رقم الفاتورة",
                 "حالة الفاتورة",
             ]
         )
@@ -355,11 +393,17 @@ class SalesAccountingPage(_PaymentOrderMixin, SalesPage):
             summary = str(order["product_summary"])
             visible_summary = summary if len(summary) <= 45 else summary[:42] + "..."
             values = [
-                order["order_number"], format_egypt_datetime(order["order_date"]),
-                order["partner_name"], visible_summary, order["line_count"],
-                order["warehouse_name"], self.status_label(order["status"]),
-                f"{float(order['total']):,.2f}", f"{float(order['paid']):,.2f}",
-                f"{float(order['remaining']):,.2f}", order["invoice_number"],
+                order["order_number"],
+                format_egypt_datetime(order["order_date"]),
+                order["partner_name"],
+                visible_summary,
+                order["line_count"],
+                order["warehouse_name"],
+                self.status_label(order["status"]),
+                f"{float(order['total']):,.2f}",
+                f"{float(order['paid']):,.2f}",
+                f"{float(order['remaining']):,.2f}",
+                order["invoice_number"],
                 self._invoice_status_label(str(order["invoice_status"])),
             ]
             for column_index, value in enumerate(values):
@@ -420,15 +464,20 @@ class SalesAccountingPage(_PaymentOrderMixin, SalesPage):
         order = self.sales_repository.get_order_details(order_id)
         rows = [
             [
-                line["code"], line["name"], f"{float(line['quantity']):g}", line["unit"],
-                f"{float(line['unit_price']):,.2f}", f"{float(line['line_total']):,.2f}",
+                line["code"],
+                line["name"],
+                f"{float(line['quantity']):g}",
+                line["unit"],
+                f"{float(line['unit_price']):,.2f}",
+                f"{float(line['line_total']):,.2f}",
             ]
             for line in order["lines"]
         ]
         dialog = OrderDetailsDialog(
             title=f"تفاصيل أمر البيع {order['order_number']}",
             header_fields=[
-                ("العميل", order["customer_name"]), ("المخزن", order["warehouse_name"]),
+                ("العميل", order["customer_name"]),
+                ("المخزن", order["warehouse_name"]),
                 ("التاريخ", format_egypt_datetime(order["order_date"])),
                 ("الحالة", self.status_label(order["status"])),
                 ("المدفوع", f"{float(order['paid']):,.2f}"),
@@ -436,6 +485,8 @@ class SalesAccountingPage(_PaymentOrderMixin, SalesPage):
                 ("الملاحظات", order["notes"] or ""),
             ],
             columns=["الكود", "الصنف", "الكمية", "الوحدة", "السعر", "الإجمالي"],
-            rows=rows, total=float(order["total"]), parent=self,
+            rows=rows,
+            total=float(order["total"]),
+            parent=self,
         )
         dialog.exec()

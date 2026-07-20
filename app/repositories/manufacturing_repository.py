@@ -109,9 +109,7 @@ class ManufacturingRepository:
                 """,
                 [
                     (recipe_id, product_id, quantity, index)
-                    for index, (product_id, quantity) in enumerate(
-                        normalized_components, start=1
-                    )
+                    for index, (product_id, quantity) in enumerate(normalized_components, start=1)
                 ],
             )
             if suggested_scrap_per_batch > 0:
@@ -543,8 +541,13 @@ class ManufacturingRepository:
                     ) VALUES (?, ?, ?, ?, 0, ?, 'manufacturing', ?, ?)
                     """,
                     (
-                        product_id, order["warehouse_id"], lot_id, quantity,
-                        unit_cost, order_id, f"إنتاج تام {order['order_number']}",
+                        product_id,
+                        order["warehouse_id"],
+                        lot_id,
+                        quantity,
+                        unit_cost,
+                        order_id,
+                        f"إنتاج تام {order['order_number']}",
                     ),
                 )
 
@@ -562,8 +565,12 @@ class ManufacturingRepository:
                     ) VALUES (?, ?, ?, ?, 0, ?, 'manufacturing_scrap', ?, ?)
                     """,
                     (
-                        scrap_product_id, order["warehouse_id"], lot_id,
-                        returned_scrap_quantity, average_input_cost, order_id,
+                        scrap_product_id,
+                        order["warehouse_id"],
+                        lot_id,
+                        returned_scrap_quantity,
+                        average_input_cost,
+                        order_id,
                         f"كسر مصنع ناتج من {order['order_number']}",
                     ),
                 )
@@ -578,8 +585,11 @@ class ManufacturingRepository:
                 WHERE id = ?
                 """,
                 (
-                    returned_scrap_quantity, material_cost, finished_cost,
-                    variance, order_id,
+                    returned_scrap_quantity,
+                    material_cost,
+                    finished_cost,
+                    variance,
+                    order_id,
                 ),
             )
             return {
@@ -633,8 +643,12 @@ class ManufacturingRepository:
             WHERE id = ?
             """,
             (
-                issued_quantity, issued_cost, issued_quantity, issued_cost,
-                issued_quantity, material_id,
+                issued_quantity,
+                issued_cost,
+                issued_quantity,
+                issued_cost,
+                issued_quantity,
+                material_id,
             ),
         )
 

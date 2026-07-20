@@ -316,9 +316,7 @@ def _migration_005_accounting_and_single_warehouse(connection: Connection) -> No
     connection.execute(
         "INSERT OR IGNORE INTO warehouses(code, name, is_active) VALUES ('MAIN', 'المصنع', 1)"
     )
-    main_row = connection.execute(
-        "SELECT id FROM warehouses WHERE code = 'MAIN'"
-    ).fetchone()
+    main_row = connection.execute("SELECT id FROM warehouses WHERE code = 'MAIN'").fetchone()
     main_id = int(main_row[0])
     connection.execute(
         "UPDATE warehouses SET name = 'المصنع', is_active = 1 WHERE id = ?",
@@ -363,8 +361,15 @@ def _migration_006_invoices(connection: Connection) -> None:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'posted' THEN ? ELSE NULL END)
             """,
             (
-                f"SI{int(order[0]):05d}", order[0], order[1], order[2], status,
-                float(order[5]), order[4] or "", status, order[2],
+                f"SI{int(order[0]):05d}",
+                order[0],
+                order[1],
+                order[2],
+                status,
+                float(order[5]),
+                order[4] or "",
+                status,
+                order[2],
             ),
         )
 
@@ -388,8 +393,15 @@ def _migration_006_invoices(connection: Connection) -> None:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'posted' THEN ? ELSE NULL END)
             """,
             (
-                f"PI{int(order[0]):05d}", order[0], order[1], order[2], status,
-                float(order[5]), order[4] or "", status, order[2],
+                f"PI{int(order[0]):05d}",
+                order[0],
+                order[1],
+                order[2],
+                status,
+                float(order[5]),
+                order[4] or "",
+                status,
+                order[2],
             ),
         )
 

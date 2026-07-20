@@ -2,7 +2,6 @@ from app.database.connection import Database
 from app.repositories.purchase_repository import PurchaseRepository
 from app.services.payment_service import post_order_payment
 
-
 EPSILON = 0.000001
 
 
@@ -126,11 +125,11 @@ class SupplierCostPurchaseRepository(PurchaseRepository):
             if unit_price < 0:
                 raise ValueError(f"سعر البند رقم {line_number} لا يمكن أن يكون سالبًا")
             if manufacturing_unit_cost < 0:
-                raise ValueError(f"تكلفة التجهيز الداخلي للبند رقم {line_number} لا يمكن أن تكون سالبة")
-            if purchase_loss_quantity < 0 or purchase_loss_quantity >= quantity:
                 raise ValueError(
-                    f"فقد البند رقم {line_number} يجب أن يكون صفرًا أو أقل من الكمية"
+                    f"تكلفة التجهيز الداخلي للبند رقم {line_number} لا يمكن أن تكون سالبة"
                 )
+            if purchase_loss_quantity < 0 or purchase_loss_quantity >= quantity:
+                raise ValueError(f"فقد البند رقم {line_number} يجب أن يكون صفرًا أو أقل من الكمية")
             if not lot_number:
                 raise ValueError(f"رقم الدفعة مطلوب في البند رقم {line_number}")
 

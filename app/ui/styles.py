@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 DARK_PALETTE = {
     "window": "#0F172A",
     "surface": "#111827",

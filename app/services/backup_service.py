@@ -61,9 +61,7 @@ class BackupService:
 
     def create_backup(self, *, category: str = "manual") -> Path:
         if not self.database_is_healthy():
-            raise ValueError(
-                "قاعدة البيانات الحالية غير سليمة، لم يتم إنشاء النسخة الاحتياطية"
-            )
+            raise ValueError("قاعدة البيانات الحالية غير سليمة، لم يتم إنشاء النسخة الاحتياطية")
 
         now = datetime.now()
         destination_dir = {
@@ -101,10 +99,7 @@ class BackupService:
 
     def _ensure_monthly_snapshot(self, daily_backup: Path, now: datetime) -> None:
         month_prefix = f"pipeerp_monthly_{now.strftime('%Y-%m')}_"
-        if any(
-            path.name.startswith(month_prefix)
-            for path in self.monthly_dir.glob("*.sqlite3")
-        ):
+        if any(path.name.startswith(month_prefix) for path in self.monthly_dir.glob("*.sqlite3")):
             return
         destination = self.monthly_dir / (
             f"pipeerp_monthly_{now.strftime('%Y-%m-%d_%H-%M-%S')}.sqlite3"
@@ -176,9 +171,7 @@ class BackupService:
         if not self.database_is_healthy():
             copy2(safety_backup, self.database_path)
             self._remove_sqlite_sidecars()
-            raise ValueError(
-                "فشل فحص قاعدة البيانات بعد الاسترجاع وتمت إعادة نسخة الأمان"
-            )
+            raise ValueError("فشل فحص قاعدة البيانات بعد الاسترجاع وتمت إعادة نسخة الأمان")
         return safety_backup
 
     def _remove_sqlite_sidecars(self) -> None:

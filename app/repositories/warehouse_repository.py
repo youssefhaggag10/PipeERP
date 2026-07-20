@@ -12,9 +12,7 @@ class WarehouseRepository:
                 "INSERT OR IGNORE INTO warehouses(code, name, is_active) VALUES (?, ?, 1)",
                 ("MAIN", "المصنع"),
             )
-            main = connection.execute(
-                "SELECT id FROM warehouses WHERE code = 'MAIN'"
-            ).fetchone()
+            main = connection.execute("SELECT id FROM warehouses WHERE code = 'MAIN'").fetchone()
             main_id = int(main["id"])
             connection.execute(
                 "UPDATE warehouses SET name = ?, is_active = 1 WHERE id = ?",

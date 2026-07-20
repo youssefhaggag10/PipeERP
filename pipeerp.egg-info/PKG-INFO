@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: pipeerp
+Version: 0.1.1
+Summary: Offline Arabic ERP for plastic pipe manufacturing factories
+Requires-Python: >=3.11
+Requires-Dist: PySide6>=6.7.0
+Requires-Dist: openpyxl>=3.1.5
+Requires-Dist: tzdata
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0.0; extra == "dev"
+Requires-Dist: ruff>=0.5.0; extra == "dev"
+Provides-Extra: build
+Requires-Dist: nuitka<3,>=2.6; extra == "build"
+Requires-Dist: pillow>=10.0.0; extra == "build"

@@ -14,23 +14,22 @@ from app.database.connection import Database
 from app.models.user import User
 from app.repositories.admin_only_crm_repository import AdminOnlyCRMRepository
 from app.repositories.automated_inventory_repository import AutomatedInventoryRepository
-from app.repositories.production_run_repository import ProductionRunRepository
 from app.repositories.detailed_return_refund_repository import DetailedReturnRefundRepository
 from app.repositories.partner_repository import PartnerRepository
 from app.repositories.print_settings_repository import PrintSettingsRepository
+from app.repositories.production_run_repository import ProductionRunRepository
 from app.repositories.return_refund_invoice_repository import ReturnRefundInvoiceRepository
-from app.repositories.weight_sales_repository import WeightSalesRepository
 from app.repositories.strict_product_repository import StrictProductRepository
 from app.repositories.supplier_cost_purchase_repository import (
     SupplierCostPurchaseRepository,
 )
 from app.repositories.system_admin_repository import SystemAdminRepository
 from app.repositories.warehouse_repository import WarehouseRepository
+from app.repositories.weight_sales_repository import WeightSalesRepository
 from app.services.crm_customer_sync import CRMCustomerSync
 from app.ui.admin_only_crm_page import AdminOnlyCRMPage
 from app.ui.appearance import AppearanceSettingsRepository, apply_appearance
 from app.ui.backup_settings_page import BackupPrintSettingsPage
-from app.ui.responsive_accounts_page import ResponsiveAccountsPage
 from app.ui.crm_activity_center import CRMActivityCenter
 from app.ui.crm_page import CRMPage
 from app.ui.dashboard import DashboardPage
@@ -39,13 +38,14 @@ from app.ui.lot_balances_page import LotBalancesPage
 from app.ui.partners_page import PartnersPage
 from app.ui.production_run_page import ProductionRunManufacturingPage
 from app.ui.reports_page import ReportsPage
+from app.ui.responsive_accounts_page import ResponsiveAccountsPage
 from app.ui.stock_card_page import StockCardPage
 from app.ui.strict_products_page import StrictProductsPage
 from app.ui.table_readability import configure_tables_in_widget
 from app.ui.treasury_order_pages import TreasuryPurchaseAccountingPage
-from app.ui.weight_card_sales_page import WeightCardSalesPage
 from app.ui.warehouse_page import WarehousePage
 from app.ui.watermark_overlay import WatermarkOverlay
+from app.ui.weight_card_sales_page import WeightCardSalesPage
 
 
 class MainWindow(QMainWindow):
@@ -185,9 +185,7 @@ class MainWindow(QMainWindow):
         self.navigation.setCurrentRow(0)
 
     def _refresh_watermark(self) -> None:
-        self.watermark_overlay.apply_settings(
-            self.print_settings_repository.get_settings()
-        )
+        self.watermark_overlay.apply_settings(self.print_settings_repository.get_settings())
 
     def _apply_appearance(self) -> None:
         app = QApplication.instance()

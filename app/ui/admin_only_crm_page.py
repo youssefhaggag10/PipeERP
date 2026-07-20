@@ -16,9 +16,7 @@ class AdminOnlyCRMPage(CRMPage):
             if button.text().strip() == "جدولة نشاط":
                 button.setEnabled(allowed)
                 button.setToolTip(
-                    "جدولة الأنشطة متاحة للأدمن فقط"
-                    if not allowed
-                    else "جدولة نشاط للعميل المحدد"
+                    "جدولة الأنشطة متاحة للأدمن فقط" if not allowed else "جدولة نشاط للعميل المحدد"
                 )
 
     def schedule_activity(self) -> None:
