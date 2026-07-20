@@ -34,41 +34,76 @@ def create_invoice_for_order(
     status: str = "draft",
     notes: str = "",
 ) -> tuple[int, str]:
+    normalized_notes = notes.strip()
+
     if invoice_type == "sales":
-        table = "sales_invoices"
-        order_column = "sales_order_id"
-        partner_column = "customer_id"
-        prefix = "SI"
-    elif invoice_type == "purchase":
-        table = "purchase_invoices"
-        order_column = "purchase_order_id"
-        partner_column = "supplier_id"
-        prefix = "PI"
-    else:
-        raise ValueError("نوع الفاتورة غير صحيح")
+        existing = connection.execute(
+            "SELECT id, invoice_number FROM sales_invoices WHERE sales_order_id = ?",
+            (order_id,),
+        ).fetchone()
+        if existing is not None:
+            return int(existing["id"]), str(existing["invoice_number"])
 
-    existing = connection.execute(
-        f"SELECT id, invoice_number FROM {table} WHERE {order_column} = ?",
-        (order_id,),
-    ).fetchone()
-    if existing is not None:
-        return int(existing["id"]), str(existing["invoice_number"])
-
-    next_id = int(
-        connection.execute(f"SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM {table}").fetchone()[
-            "next_id"
-        ]
-    )
-    invoice_number = f"{prefix}{next_id:05d}"
-    posted_at_sql = "CURRENT_TIMESTAMP" if status == "posted" else "NULL"
-    cursor = connection.execute(
-        f"""
-        INSERT INTO {table}(
-            invoice_number, {order_column}, {partner_column}, status,
-            total, notes, posted_at
+        next_id = int(
+            connection.execute(
+                "SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM sales_invoices"
+            ).fetchone()["next_id"]
         )
-        VALUES (?, ?, ?, ?, ?, ?, {posted_at_sql})
-        """,
-        (invoice_number, order_id, partner_id, status, total, notes.strip()),
-    )
-    return int(cursor.lastrowid), invoice_number
+        invoice_number = f"SI{next_id:05d}"
+        cursor = connection.execute(
+            """
+            INSERT INTO sales_invoices(
+                invoice_number, sales_order_id, customer_id, status,
+                total, notes, posted_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?,
+                    CASE WHEN ? = 'posted' THEN CURRENT_TIMESTAMP ELSE NULL END)
+            """,
+            (
+                invoice_number,
+                order_id,
+                partner_id,
+                status,
+                total,
+                normalized_notes,
+                status,
+            ),
+        )
+        return int(cursor.lastrowid), invoice_number
+
+    if invoice_type == "purchase":
+        existing = connection.execute(
+            "SELECT id, invoice_number FROM purchase_invoices WHERE purchase_order_id = ?",
+            (order_id,),
+        ).fetchone()
+        if existing is not None:
+            return int(existing["id"]), str(existing["invoice_number"])
+
+        next_id = int(
+            connection.execute(
+                "SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM purchase_invoices"
+            ).fetchone()["next_id"]
+        )
+        invoice_number = f"PI{next_id:05d}"
+        cursor = connection.execute(
+            """
+            INSERT INTO purchase_invoices(
+                invoice_number, purchase_order_id, supplier_id, status,
+                total, notes, posted_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?,
+                    CASE WHEN ? = 'posted' THEN CURRENT_TIMESTAMP ELSE NULL END)
+            """,
+            (
+                invoice_number,
+                order_id,
+                partner_id,
+                status,
+                total,
+                normalized_notes,
+                status,
+            ),
+        )
+        return int(cursor.lastrowid), invoice_number
+
+    raise ValueError("نوع الفاتورة غير صحيح")
