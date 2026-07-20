@@ -4,7 +4,12 @@ from pathlib import Path
 import pytest
 
 from app.database.connection import Database
-from app.database.migrations import DATABASE_VERSION, LATEST_SCHEMA_VERSION, MIGRATIONS, run_migrations
+from app.database.migrations import (
+    DATABASE_VERSION,
+    LATEST_SCHEMA_VERSION,
+    MIGRATIONS,
+    run_migrations,
+)
 from app.database.schema import initialize_database
 from app.repositories.production_run_repository import ProductionRunRepository
 from app.repositories.weight_sales_repository import WeightSalesRepository
