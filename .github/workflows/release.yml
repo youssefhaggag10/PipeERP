@@ -1,0 +1,100 @@
+name: Publish PipeERP Release
+
+on:
+  workflow_run:
+    workflows: ["Windows Build"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  release:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Verify all main quality gates
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const required = new Set([
+              "Feature Validation",
+              "PipeERP Quality Checks",
+              "PipeERP Smoke Tests",
+              "Windows Build",
+            ]);
+            const sha = context.payload.workflow_run.head_sha;
+            for (let attempt = 0; attempt < 30; attempt++) {
+              const response = await github.rest.actions.listWorkflowRunsForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                head_sha: sha,
+                per_page: 100,
+              });
+              const latest = new Map();
+              for (const run of response.data.workflow_runs) {
+                if (!required.has(run.name)) continue;
+                const current = latest.get(run.name);
+                if (!current || new Date(run.created_at) > new Date(current.created_at)) {
+                  latest.set(run.name, run);
+                }
+              }
+              const pending = [...required].filter((name) => {
+                const run = latest.get(name);
+                return !run || run.status !== "completed";
+              });
+              const failed = [...required].filter((name) => {
+                const run = latest.get(name);
+                return run && run.status === "completed" && run.conclusion !== "success";
+              });
+              if (failed.length) {
+                core.setFailed(`Main quality gates failed: ${failed.join(", ")}`);
+                return;
+              }
+              if (!pending.length) {
+                core.info("All main quality gates succeeded.");
+                return;
+              }
+              core.info(`Waiting for: ${pending.join(", ")}`);
+              await new Promise((resolve) => setTimeout(resolve, 20000));
+            }
+            core.setFailed("Timed out waiting for all main quality gates.");
+
+      - name: Download validated Windows installer
+        uses: actions/download-artifact@v4
+        with:
+          name: PipeERP-Setup-0.2.0
+          path: release-assets
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Verify installer checksum
+        working-directory: release-assets
+        run: sha256sum --check PipeERP-Setup-0.2.0.exe.sha256
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.2.0
+          target_commitish: ${{ github.event.workflow_run.head_sha }}
+          name: PipeERP v0.2.0
+          body: |
+            ## PipeERP v0.2.0
+
+            - Appearance themes: Dark, Light, and System.
+            - CRM activities and follow-up center.
+            - Manufacturing operating runs with independent material and cost snapshots.
+            - Materials can be removed from later operating mixes without changing previous runs.
+            - Weight-card sales using actual weight × price per kg.
+            - Multi-size weight allocation and inventory weight tracking.
+            - Schema 9 migration with safe database upgrades.
+            - Automated regression, GUI smoke, and Windows installer tests.
+          files: |
+            release-assets/PipeERP-Setup-0.2.0.exe
+            release-assets/PipeERP-Setup-0.2.0.exe.sha256
+          fail_on_unmatched_files: true
+          generate_release_notes: false
