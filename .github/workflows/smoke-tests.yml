@@ -7,11 +7,10 @@ name: PipeERP Smoke Tests
       - main
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
   smoke:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:

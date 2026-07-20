@@ -6,12 +6,11 @@ on:
     types: [completed]
     branches: [main]
 
-permissions:
-  actions: read
-  contents: write
-
 jobs:
   release:
+    permissions:
+      actions: read
+      contents: write
     if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20

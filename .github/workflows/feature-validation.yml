@@ -7,11 +7,10 @@ name: Feature Validation
       - main
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
   validate:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
