@@ -31,17 +31,25 @@ def _run_smoke_test() -> int:
     database = Database(AppConfig.database_path())
     initialize_database(database)
     first_run = FirstRunService(database)
-    smoke_username = f"smoke_{secrets.token_hex(8)}"
-    smoke_credential = secrets.token_urlsafe(32)
+
     if first_run.requires_setup():
+        smoke_username = f"smoke_{secrets.token_hex(8)}"
+        smoke_credential = secrets.token_urlsafe(32)
         first_run.create_initial_admin(
             username=smoke_username,
             full_name="Smoke Test Admin",
             password=smoke_credential,
         )
-    user = AuthService(database).authenticate(smoke_username, smoke_credential)
-    if user is None or user.role != "admin":
-        raise RuntimeError("PipeERP executable smoke test failed")
+        user = AuthService(database).authenticate(smoke_username, smoke_credential)
+        if user is None or user.role != "admin":
+            raise RuntimeError("PipeERP executable smoke-test authentication failed")
+    else:
+        admin = database.fetch_one(
+            "SELECT id FROM users WHERE role = 'admin' AND is_active = 1 LIMIT 1"
+        )
+        if admin is None:
+            raise RuntimeError("PipeERP executable smoke test found no active administrator")
+
     LOGGER.info("PipeERP executable smoke test passed")
     return 0
 
