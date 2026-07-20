@@ -41,3 +41,50 @@ jobs:
 
       - name: Run lint
         run: ruff check app tests
+
+      - name: Capture SonarQube vulnerability details
+        if: always() && github.event_name == 'pull_request'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          python - <<'PY'
+          import base64
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+          from pathlib import Path
+
+          url = (
+              "https://sonarcloud.io/api/issues/search"
+              "?componentKeys=youssefhaggag10_PipeERP"
+              "&pullRequest=5&types=VULNERABILITY&ps=500"
+          )
+          request = urllib.request.Request(url)
+          token = os.environ.get("SONAR_TOKEN", "")
+          if token:
+              credentials = base64.b64encode(f"{token}:".encode()).decode()
+              request.add_header("Authorization", f"Basic {credentials}")
+          try:
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  payload = json.loads(response.read().decode())
+          except urllib.error.HTTPError as error:
+              payload = {
+                  "http_status": error.code,
+                  "response": error.read().decode(errors="replace"),
+              }
+          except Exception as error:
+              payload = {"error": type(error).__name__, "message": str(error)}
+          Path("sonar-vulnerabilities.json").write_text(
+              json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+          )
+          PY
+
+      - name: Upload SonarQube diagnostics
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonar-vulnerability-details
+          path: sonar-vulnerabilities.json
+          if-no-files-found: error
+          retention-days: 1
