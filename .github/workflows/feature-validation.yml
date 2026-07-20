@@ -1,12 +1,11 @@
-# Validation trigger after bot-authored workflow cleanup
 name: Feature Validation
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main]
   push:
     branches:
+      - main
       - feature/theme-crm-manufacturing-weight
 
 permissions:
@@ -16,6 +15,10 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PIPEERP_DATA_DIR: ${{ runner.temp }}/pipeerp-validation-data
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -39,11 +42,3 @@ jobs:
 
       - name: Run lint
         run: ruff check app tests
-
-      - name: Upload checked-out source
-        uses: actions/upload-artifact@v4
-        with:
-          name: feature-source-checkout
-          path: .
-          include-hidden-files: false
-          retention-days: 1
