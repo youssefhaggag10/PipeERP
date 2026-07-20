@@ -86,14 +86,17 @@ jobs:
           $installDir = Join-Path $env:RUNNER_TEMP "PipeERP-Installed"
           $dataDir = Join-Path $env:RUNNER_TEMP "PipeERP-UserData"
           New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
-          & $installer /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- "/DIR=$installDir"
-          if ($LASTEXITCODE -ne 0) { throw "Silent installation failed: $LASTEXITCODE" }
+          $installArgs = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/DIR=$installDir")
+          $installProcess = Start-Process -FilePath $installer -ArgumentList $installArgs -Wait -PassThru
+          if ($installProcess.ExitCode -ne 0) { throw "Silent installation failed: $($installProcess.ExitCode)" }
           $exe = Join-Path $installDir "PipeERP.exe"
           if (-not (Test-Path $exe)) { throw "Installed executable is missing" }
           $env:PIPEERP_DATA_DIR = $dataDir
           $env:PIPEERP_SMOKE_TEST = "1"
-          & $exe
-          if ($LASTEXITCODE -ne 0) { throw "Installed executable smoke test failed: $LASTEXITCODE" }
+          $smokeProcess = Start-Process -FilePath $exe -Wait -PassThru
+          if ($smokeProcess.ExitCode -ne 0) { throw "Installed executable smoke test failed: $($smokeProcess.ExitCode)" }
+          $databasePath = Join-Path $dataDir "pipeerp.sqlite3"
+          if (-not (Test-Path $databasePath)) { throw "Smoke test database was not created" }
           @'
           import os, sqlite3
           from pathlib import Path
@@ -101,8 +104,8 @@ jobs:
           with sqlite3.connect(db) as con:
               con.execute("INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)", ("installer_preservation", "kept"))
           '@ | python -
-          & $installer /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- "/DIR=$installDir"
-          if ($LASTEXITCODE -ne 0) { throw "Silent update failed: $LASTEXITCODE" }
+          $updateProcess = Start-Process -FilePath $installer -ArgumentList $installArgs -Wait -PassThru
+          if ($updateProcess.ExitCode -ne 0) { throw "Silent update failed: $($updateProcess.ExitCode)" }
           @'
           import os, sqlite3
           from pathlib import Path
@@ -111,8 +114,8 @@ jobs:
               value = con.execute("SELECT value FROM settings WHERE key = ?", ("installer_preservation",)).fetchone()
           assert value == ("kept",), value
           '@ | python -
-          & $exe
-          if ($LASTEXITCODE -ne 0) { throw "Post-update executable smoke test failed: $LASTEXITCODE" }
+          $postUpdateSmoke = Start-Process -FilePath $exe -Wait -PassThru
+          if ($postUpdateSmoke.ExitCode -ne 0) { throw "Post-update executable smoke test failed: $($postUpdateSmoke.ExitCode)" }
 
       - name: Generate SHA256 checksum
         shell: pwsh
