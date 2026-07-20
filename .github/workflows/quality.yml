@@ -1,10 +1,15 @@
 name: PipeERP Quality Checks
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -12,10 +17,10 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       QT_QPA_PLATFORM: offscreen
-      PIPEERP_DATA_DIR: ${{ github.workspace }}/.pipeerp-test-data
+      PIPEERP_DATA_DIR: ${{ runner.temp }}/pipeerp-quality-data
 
     steps:
       - name: Checkout repository
@@ -28,7 +33,9 @@ jobs:
           cache: pip
 
       - name: Install project and test tools
-        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
 
       - name: Compile Python files
         run: python -m compileall -q app tests
@@ -36,23 +43,5 @@ jobs:
       - name: Run regression tests
         run: pytest -q
 
-      - name: Run focused lint checks
-        run: >-
-          ruff check
-          app/core/config.py
-          app/core/app_paths.py
-          app/core/logging_setup.py
-          app/main.py
-          app/repositories/quotation_repository.py
-          app/services/a4_document_renderer.py
-          app/services/a4_print_service.py
-          app/ui/manufacturing_page.py
-          app/ui/main_window.py
-          app/ui/quotation_dialog.py
-          app/ui/styles.py
-          app/ui/table_readability.py
-          app/ui/treasury_order_pages.py
-          tests/test_recent_regressions.py
-          tests/test_first_run_setup.py
-          tests/test_quotations.py
-          tests/test_table_scrolling.py
+      - name: Run lint checks
+        run: ruff check app tests

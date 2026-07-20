@@ -1,0 +1,133 @@
+name: Windows Build
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      APP_VERSION: "0.2.0"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install build dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[build]"
+
+      - name: Generate Windows icon
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          @'
+          from pathlib import Path
+          from PIL import Image
+          source = Path("app/assets/print/default_logo.png")
+          target = Path("build/PipeERP.ico")
+          image = Image.open(source).convert("RGBA")
+          image.save(target, format="ICO", sizes=[(16,16), (32,32), (48,48), (64,64), (128,128), (256,256)])
+          '@ | python -
+
+      - name: Build standalone application
+        shell: pwsh
+        run: |
+          python -m nuitka `
+            --standalone `
+            --assume-yes-for-downloads `
+            --enable-plugin=pyside6 `
+            --windows-console-mode=disable `
+            --windows-icon-from-ico=build/PipeERP.ico `
+            --include-data-dir=app/assets=app/assets `
+            --output-dir=build/windows `
+            --output-filename=PipeERP.exe `
+            main.py
+          if (-not (Test-Path "build/windows/main.dist/PipeERP.exe")) {
+            throw "Nuitka executable was not produced"
+          }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$env:APP_VERSION" "installer\PipeERP.iss"
+          $installer = "dist\installer\PipeERP-Setup-$env:APP_VERSION.exe"
+          if (-not (Test-Path $installer)) { throw "Installer was not produced" }
+          if ((Get-Item $installer).Length -lt 1000000) { throw "Installer size is unexpectedly small" }
+
+      - name: Validate silent install and database preservation
+        shell: pwsh
+        run: |
+          $installer = (Resolve-Path "dist\installer\PipeERP-Setup-$env:APP_VERSION.exe").Path
+          $installDir = Join-Path $env:RUNNER_TEMP "PipeERP-Installed"
+          $dataDir = Join-Path $env:RUNNER_TEMP "PipeERP-UserData"
+          New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+          & $installer /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- "/DIR=$installDir"
+          if ($LASTEXITCODE -ne 0) { throw "Silent installation failed: $LASTEXITCODE" }
+          $exe = Join-Path $installDir "PipeERP.exe"
+          if (-not (Test-Path $exe)) { throw "Installed executable is missing" }
+          $env:PIPEERP_DATA_DIR = $dataDir
+          $env:PIPEERP_SMOKE_TEST = "1"
+          & $exe
+          if ($LASTEXITCODE -ne 0) { throw "Installed executable smoke test failed: $LASTEXITCODE" }
+          @'
+          import os, sqlite3
+          from pathlib import Path
+          db = Path(os.environ["PIPEERP_DATA_DIR"]) / "pipeerp.sqlite3"
+          with sqlite3.connect(db) as con:
+              con.execute("INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)", ("installer_preservation", "kept"))
+          '@ | python -
+          & $installer /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- "/DIR=$installDir"
+          if ($LASTEXITCODE -ne 0) { throw "Silent update failed: $LASTEXITCODE" }
+          @'
+          import os, sqlite3
+          from pathlib import Path
+          db = Path(os.environ["PIPEERP_DATA_DIR"]) / "pipeerp.sqlite3"
+          with sqlite3.connect(db) as con:
+              value = con.execute("SELECT value FROM settings WHERE key = ?", ("installer_preservation",)).fetchone()
+          assert value == ("kept",), value
+          '@ | python -
+          & $exe
+          if ($LASTEXITCODE -ne 0) { throw "Post-update executable smoke test failed: $LASTEXITCODE" }
+
+      - name: Generate SHA256 checksum
+        shell: pwsh
+        run: |
+          $installer = "dist\installer\PipeERP-Setup-$env:APP_VERSION.exe"
+          $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  PipeERP-Setup-$env:APP_VERSION.exe" | Set-Content "dist\installer\PipeERP-Setup-$env:APP_VERSION.exe.sha256"
+          Write-Host "Installer SHA256: $hash"
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: PipeERP-Setup-0.2.0
+          path: |
+            dist/installer/PipeERP-Setup-0.2.0.exe
+            dist/installer/PipeERP-Setup-0.2.0.exe.sha256
+          if-no-files-found: error
+          retention-days: 14

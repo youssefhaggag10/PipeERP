@@ -1,4 +1,4 @@
-name: Feature Validation
+name: PipeERP Smoke Tests
 
 on:
   pull_request:
@@ -15,12 +15,13 @@ permissions:
   contents: read
 
 jobs:
-  validate:
+  smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     env:
       QT_QPA_PLATFORM: offscreen
-      PIPEERP_DATA_DIR: ${{ runner.temp }}/pipeerp-validation-data
+      PIPEERP_GUI_SMOKE: "1"
+      PIPEERP_DATA_DIR: ${{ runner.temp }}/pipeerp-smoke-data
 
     steps:
       - name: Checkout repository
@@ -37,11 +38,11 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
 
-      - name: Compile application
-        run: python -m compileall -q app tests
-
-      - name: Run tests
-        run: pytest -q
-
-      - name: Run lint
-        run: ruff check app tests
+      - name: Run offscreen GUI and business smoke tests
+        run: >-
+          pytest -q
+          tests/test_application_smoke.py
+          tests/test_schema_v9_runs_and_weight_sales.py
+          tests/test_migrations.py
+          tests/test_manufacturing.py
+          tests/test_accounting_invoices.py
