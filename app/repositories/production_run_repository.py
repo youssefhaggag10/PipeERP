@@ -10,111 +10,11 @@ EPSILON = 0.0000001
 class ProductionRunRepository(BaseMaterialScrapCostRepository):
     """Manufacturing orders executed as independent physical operating mixes.
 
-    The base recipe remains a reusable master.  Each manufacturing run stores a
+    The base recipe remains a reusable master. Each manufacturing run stores a
     material snapshot, issues only the material used by that run, and records the
     actual pipe count and actual output weight before another mix can be created.
+    The centralized database migrations own the run and weight-layer schema.
     """
-
-    def __init__(self, database) -> None:
-        super().__init__(database)
-        self._ensure_run_schema()
-
-    def _ensure_run_schema(self) -> None:
-        with self.database.session(immediate=True) as connection:
-            product_columns = {
-                str(row[1]) for row in connection.execute("PRAGMA table_info(products)").fetchall()
-            }
-            if "standard_weight_kg" not in product_columns:
-                connection.execute(
-                    "ALTER TABLE products ADD COLUMN standard_weight_kg REAL NOT NULL DEFAULT 0"
-                )
-            if "weight_tolerance_percent" not in product_columns:
-                connection.execute(
-                    "ALTER TABLE products ADD COLUMN weight_tolerance_percent REAL NOT NULL DEFAULT 5"
-                )
-            connection.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS manufacturing_runs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    manufacturing_order_id INTEGER NOT NULL
-                        REFERENCES manufacturing_orders(id) ON DELETE CASCADE,
-                    run_number INTEGER NOT NULL,
-                    status TEXT NOT NULL DEFAULT 'draft' CHECK(
-                        status IN ('draft', 'in_progress', 'completed', 'stopped', 'cancelled')
-                    ),
-                    issued_batches INTEGER NOT NULL DEFAULT 0,
-                    actual_input_weight REAL NOT NULL DEFAULT 0,
-                    material_cost REAL NOT NULL DEFAULT 0,
-                    good_output_weight REAL NOT NULL DEFAULT 0,
-                    scrap_weight REAL NOT NULL DEFAULT 0,
-                    finished_cost REAL NOT NULL DEFAULT 0,
-                    change_reason TEXT,
-                    notes TEXT,
-                    started_at TEXT,
-                    completed_at TEXT,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(manufacturing_order_id, run_number)
-                );
-
-                CREATE TABLE IF NOT EXISTS manufacturing_run_materials (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    manufacturing_run_id INTEGER NOT NULL
-                        REFERENCES manufacturing_runs(id) ON DELETE CASCADE,
-                    product_id INTEGER NOT NULL REFERENCES products(id),
-                    component_kind TEXT NOT NULL DEFAULT 'material',
-                    quantity_per_batch REAL NOT NULL CHECK(quantity_per_batch >= 0),
-                    actual_quantity REAL NOT NULL DEFAULT 0,
-                    unit_cost REAL NOT NULL DEFAULT 0,
-                    total_cost REAL NOT NULL DEFAULT 0,
-                    display_order INTEGER NOT NULL DEFAULT 100,
-                    UNIQUE(manufacturing_run_id, product_id, component_kind)
-                );
-
-                CREATE TABLE IF NOT EXISTS manufacturing_run_outputs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    manufacturing_run_id INTEGER NOT NULL
-                        REFERENCES manufacturing_runs(id) ON DELETE CASCADE,
-                    product_id INTEGER NOT NULL REFERENCES products(id),
-                    standard_weight_kg REAL NOT NULL DEFAULT 0,
-                    actual_quantity REAL NOT NULL DEFAULT 0,
-                    actual_weight_kg REAL NOT NULL DEFAULT 0,
-                    unit_cost REAL NOT NULL DEFAULT 0,
-                    UNIQUE(manufacturing_run_id, product_id)
-                );
-
-                CREATE TABLE IF NOT EXISTS manufacturing_run_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    manufacturing_run_id INTEGER NOT NULL
-                        REFERENCES manufacturing_runs(id) ON DELETE CASCADE,
-                    event_type TEXT NOT NULL,
-                    details TEXT,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
-
-                CREATE TABLE IF NOT EXISTS finished_good_weight_layers (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    product_id INTEGER NOT NULL REFERENCES products(id),
-                    warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
-                    source_move_id INTEGER NOT NULL UNIQUE REFERENCES inventory_moves(id),
-                    lot_id INTEGER REFERENCES lots(id),
-                    quantity_in REAL NOT NULL CHECK(quantity_in > 0),
-                    weight_in_kg REAL NOT NULL CHECK(weight_in_kg > 0),
-                    quantity_out REAL NOT NULL DEFAULT 0,
-                    weight_out_kg REAL NOT NULL DEFAULT 0,
-                    unit_cost_per_kg REAL NOT NULL DEFAULT 0,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_manufacturing_runs_order
-                ON manufacturing_runs(manufacturing_order_id, run_number);
-                CREATE INDEX IF NOT EXISTS idx_run_materials_run
-                ON manufacturing_run_materials(manufacturing_run_id);
-                CREATE INDEX IF NOT EXISTS idx_run_outputs_run
-                ON manufacturing_run_outputs(manufacturing_run_id);
-                CREATE INDEX IF NOT EXISTS idx_weight_layers_fifo
-                ON finished_good_weight_layers(product_id, warehouse_id, id);
-                """
-            )
 
     def start_order(self, order_id: int) -> None:
         """Open an order without issuing all planned mixes in advance."""
@@ -404,7 +304,7 @@ class ProductionRunRepository(BaseMaterialScrapCostRepository):
                     warehouse_id=int(run["warehouse_id"]),
                     quantity=quantity,
                     reference_id=int(run_id),
-                    notes=(f"صرف خلطة تشغيل {run['order_number']}/{run['run_number']}"),
+                    notes=f"صرف خلطة تشغيل {run['order_number']}/{run['run_number']}",
                 )
                 connection.execute(
                     """
@@ -543,7 +443,10 @@ class ProductionRunRepository(BaseMaterialScrapCostRepository):
                     """,
                     (quantity, actual_weight, unit_cost, int(row["id"])),
                 )
-                lot_number = f"{run['order_number']}-RUN{int(run['run_number']):02d}-FG-{int(row['product_id'])}"
+                lot_number = (
+                    f"{run['order_number']}-RUN{int(run['run_number']):02d}-"
+                    f"FG-{int(row['product_id'])}"
+                )
                 lot_id = self._ensure_lot(
                     connection,
                     int(row["product_id"]),
