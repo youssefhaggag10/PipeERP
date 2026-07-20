@@ -40,7 +40,4 @@ jobs:
         run: pytest -q
 
       - name: Run lint checks
-        run: >-
-          ruff check app tests
-          --exclude
-          app/repositories/accounting_repository.py,app/repositories/admin_repository.py,app/repositories/crm_repository.py,app/repositories/detailed_return_refund_repository.py,app/repositories/enhanced_manufacturing_repository.py,app/repositories/manufacturing_repository.py,app/repositories/print_settings_repository.py,app/repositories/return_aware_treasury_repository.py,app/repositories/return_invoice_repository.py,app/repositories/return_refund_repository.py,app/repositories/treasury_repository.py,app/repositories/treasury_invoice_repository.py,app/services/invoice_service.py
+        run: ruff check app tests

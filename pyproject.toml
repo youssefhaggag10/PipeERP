@@ -30,6 +30,21 @@ exclude = ["data*", "tests*"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+extend-exclude = [
+    "app/repositories/accounting_repository.py",
+    "app/repositories/admin_repository.py",
+    "app/repositories/crm_repository.py",
+    "app/repositories/detailed_return_refund_repository.py",
+    "app/repositories/enhanced_manufacturing_repository.py",
+    "app/repositories/manufacturing_repository.py",
+    "app/repositories/print_settings_repository.py",
+    "app/repositories/return_aware_treasury_repository.py",
+    "app/repositories/return_invoice_repository.py",
+    "app/repositories/return_refund_repository.py",
+    "app/repositories/treasury_repository.py",
+    "app/repositories/treasury_invoice_repository.py",
+    "app/services/invoice_service.py",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
