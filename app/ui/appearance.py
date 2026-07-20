@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication
+from typing import TYPE_CHECKING
 
 from app.database.connection import Database
 from app.ui.styles import build_stylesheet
+
+if TYPE_CHECKING:
+    from PySide6.QtWidgets import QApplication
 
 THEME_LABELS = {
     "dark": "داكن",
@@ -66,6 +67,8 @@ class AppearanceSettingsRepository:
 
 
 def _system_is_dark(app: QApplication) -> bool:
+    from PySide6.QtCore import Qt
+
     try:
         return app.styleHints().colorScheme() == Qt.ColorScheme.Dark
     except (AttributeError, TypeError):
