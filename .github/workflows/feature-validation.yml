@@ -42,7 +42,7 @@ jobs:
       - name: Run lint
         run: ruff check app tests
 
-      - name: Capture SonarQube vulnerability details
+      - name: Capture SonarQube security-impact details
         if: always() && github.event_name == 'pull_request'
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -58,7 +58,7 @@ jobs:
           url = (
               "https://sonarcloud.io/api/issues/search"
               "?componentKeys=youssefhaggag10_PipeERP"
-              "&pullRequest=5&types=VULNERABILITY&ps=500"
+              "&pullRequest=5&ps=500"
           )
           request = urllib.request.Request(url)
           token = os.environ.get("SONAR_TOKEN", "")
