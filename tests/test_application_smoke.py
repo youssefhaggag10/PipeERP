@@ -1,4 +1,5 @@
 import os
+import secrets
 from pathlib import Path
 
 import pytest
@@ -19,12 +20,14 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
 
     database = Database(tmp_path / "gui-smoke.sqlite3")
     initialize_database(database)
+    username = f"smoke_{secrets.token_hex(8)}"
+    credential = secrets.token_urlsafe(32)
     FirstRunService(database).create_initial_admin(
-        username="smoke_admin",
+        username=username,
         full_name="Smoke Admin",
-        password="Smoke-Test-123",
+        password=credential,
     )
-    user = AuthService(database).authenticate("smoke_admin", "Smoke-Test-123")
+    user = AuthService(database).authenticate(username, credential)
     assert user is not None
 
     app = QApplication.instance() or QApplication([])
