@@ -1,15 +1,11 @@
 name: PipeERP Smoke Tests
 
-on:
+"on":
   pull_request:
-    branches: [main]
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -21,7 +17,7 @@ jobs:
     env:
       QT_QPA_PLATFORM: offscreen
       PIPEERP_GUI_SMOKE: "1"
-      PIPEERP_DATA_DIR: ${{ runner.temp }}/pipeerp-smoke-data
+      PIPEERP_DATA_DIR: .pipeerp-smoke-data
 
     steps:
       - name: Checkout repository
