@@ -42,77 +42,17 @@ jobs:
       - name: Run lint
         run: ruff check app tests
 
-      - name: Capture SonarQube security-impact details
+      - name: Run independent Python security scan
         if: always() && github.event_name == 'pull_request'
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          python - <<'PY'
-          import base64
-          import json
-          import os
-          import urllib.error
-          import urllib.request
-          from pathlib import Path
+          python -m pip install bandit
+          bandit -r app -f json -o bandit-report.json || true
 
-          base = "https://sonarcloud.io"
-          endpoints = {
-              "issues": (
-                  "/api/issues/search?componentKeys=youssefhaggag10_PipeERP"
-                  "&pullRequest=5&ps=500"
-              ),
-              "quality_gate": (
-                  "/api/qualitygates/project_status?projectKey=youssefhaggag10_PipeERP"
-                  "&pullRequest=5"
-              ),
-              "project_measures": (
-                  "/api/measures/component?component=youssefhaggag10_PipeERP"
-                  "&pullRequest=5&metricKeys=new_software_quality_security_issues,"
-                  "new_software_quality_security_rating,new_security_rating,new_vulnerabilities"
-              ),
-              "file_measures": (
-                  "/api/measures/component_tree?component=youssefhaggag10_PipeERP"
-                  "&pullRequest=5&qualifiers=FIL&ps=500&metricKeys="
-                  "new_software_quality_security_issues,new_software_quality_security_rating,"
-                  "new_security_rating,new_vulnerabilities"
-              ),
-              "hotspots": (
-                  "/api/hotspots/search?projectKey=youssefhaggag10_PipeERP"
-                  "&pullRequest=5&ps=500"
-              ),
-          }
-          token = os.environ.get("SONAR_TOKEN", "")
-          authorization = ""
-          if token:
-              credentials = base64.b64encode(f"{token}:".encode()).decode()
-              authorization = f"Basic {credentials}"
-
-          def fetch(path: str) -> dict:
-              request = urllib.request.Request(base + path)
-              if authorization:
-                  request.add_header("Authorization", authorization)
-              try:
-                  with urllib.request.urlopen(request, timeout=30) as response:
-                      return json.loads(response.read().decode())
-              except urllib.error.HTTPError as error:
-                  return {
-                      "http_status": error.code,
-                      "response": error.read().decode(errors="replace"),
-                  }
-              except Exception as error:
-                  return {"error": type(error).__name__, "message": str(error)}
-
-          payload = {name: fetch(path) for name, path in endpoints.items()}
-          Path("sonar-vulnerabilities.json").write_text(
-              json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
-          )
-          PY
-
-      - name: Upload SonarQube diagnostics
+      - name: Upload security diagnostics
         if: always() && github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
-          name: sonar-vulnerability-details
-          path: sonar-vulnerabilities.json
+          name: python-security-diagnostics
+          path: bandit-report.json
           if-no-files-found: error
           retention-days: 1
