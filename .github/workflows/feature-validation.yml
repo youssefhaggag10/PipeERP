@@ -1,15 +1,11 @@
 name: Feature Validation
 
-on:
+"on":
   pull_request:
-    branches: [main]
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -20,7 +16,7 @@ jobs:
     timeout-minutes: 30
     env:
       QT_QPA_PLATFORM: offscreen
-      PIPEERP_DATA_DIR: ${{ runner.temp }}/pipeerp-validation-data
+      PIPEERP_DATA_DIR: .pipeerp-validation-data
 
     steps:
       - name: Checkout repository
