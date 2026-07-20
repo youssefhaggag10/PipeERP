@@ -1,8 +1,8 @@
 from collections.abc import Callable
 from sqlite3 import Connection
 
-DATABASE_VERSION = "0.8.0"
-LATEST_SCHEMA_VERSION = 8
+DATABASE_VERSION = "0.9.0"
+LATEST_SCHEMA_VERSION = 9
 
 
 INITIAL_SCHEMA_SQL = """
@@ -550,6 +550,138 @@ ON manufacturing_order_outputs(manufacturing_order_id);
 """
 
 
+RUNS_AND_WEIGHT_SALES_SQL = """
+CREATE TABLE IF NOT EXISTS manufacturing_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    manufacturing_order_id INTEGER NOT NULL
+        REFERENCES manufacturing_orders(id) ON DELETE CASCADE,
+    run_number INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft' CHECK(
+        status IN ('draft', 'in_progress', 'completed', 'stopped', 'cancelled')
+    ),
+    issued_batches INTEGER NOT NULL DEFAULT 0,
+    actual_input_weight REAL NOT NULL DEFAULT 0,
+    material_cost REAL NOT NULL DEFAULT 0,
+    good_output_weight REAL NOT NULL DEFAULT 0,
+    scrap_weight REAL NOT NULL DEFAULT 0,
+    finished_cost REAL NOT NULL DEFAULT 0,
+    change_reason TEXT,
+    notes TEXT,
+    started_at TEXT,
+    completed_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(manufacturing_order_id, run_number)
+);
+
+CREATE TABLE IF NOT EXISTS manufacturing_run_materials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    manufacturing_run_id INTEGER NOT NULL
+        REFERENCES manufacturing_runs(id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL REFERENCES products(id),
+    component_kind TEXT NOT NULL DEFAULT 'material',
+    quantity_per_batch REAL NOT NULL CHECK(quantity_per_batch >= 0),
+    actual_quantity REAL NOT NULL DEFAULT 0,
+    unit_cost REAL NOT NULL DEFAULT 0,
+    total_cost REAL NOT NULL DEFAULT 0,
+    display_order INTEGER NOT NULL DEFAULT 100,
+    UNIQUE(manufacturing_run_id, product_id, component_kind)
+);
+
+CREATE TABLE IF NOT EXISTS manufacturing_run_outputs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    manufacturing_run_id INTEGER NOT NULL
+        REFERENCES manufacturing_runs(id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL REFERENCES products(id),
+    standard_weight_kg REAL NOT NULL DEFAULT 0,
+    actual_quantity REAL NOT NULL DEFAULT 0,
+    actual_weight_kg REAL NOT NULL DEFAULT 0,
+    unit_cost REAL NOT NULL DEFAULT 0,
+    UNIQUE(manufacturing_run_id, product_id)
+);
+
+CREATE TABLE IF NOT EXISTS manufacturing_run_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    manufacturing_run_id INTEGER NOT NULL
+        REFERENCES manufacturing_runs(id) ON DELETE CASCADE,
+    event_type TEXT NOT NULL,
+    details TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS finished_good_weight_layers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL REFERENCES products(id),
+    warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+    source_move_id INTEGER NOT NULL UNIQUE REFERENCES inventory_moves(id),
+    lot_id INTEGER REFERENCES lots(id),
+    quantity_in REAL NOT NULL CHECK(quantity_in > 0),
+    weight_in_kg REAL NOT NULL CHECK(weight_in_kg > 0),
+    quantity_out REAL NOT NULL DEFAULT 0,
+    weight_out_kg REAL NOT NULL DEFAULT 0,
+    unit_cost_per_kg REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS sales_weight_cards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sales_order_id INTEGER NOT NULL REFERENCES sales_orders(id) ON DELETE CASCADE,
+    card_number TEXT NOT NULL UNIQUE,
+    card_date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    vehicle_number TEXT,
+    gross_weight_kg REAL,
+    tare_weight_kg REAL,
+    net_weight_kg REAL NOT NULL CHECK(net_weight_kg > 0),
+    price_per_kg REAL NOT NULL CHECK(price_per_kg >= 0),
+    total_amount REAL NOT NULL CHECK(total_amount >= 0),
+    status TEXT NOT NULL DEFAULT 'posted'
+        CHECK(status IN ('draft', 'posted', 'cancelled')),
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS sales_weight_card_lines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    weight_card_id INTEGER NOT NULL
+        REFERENCES sales_weight_cards(id) ON DELETE CASCADE,
+    sales_order_line_id INTEGER NOT NULL REFERENCES sales_order_lines(id),
+    product_id INTEGER NOT NULL REFERENCES products(id),
+    quantity_pieces REAL NOT NULL CHECK(quantity_pieces > 0),
+    standard_weight_kg REAL NOT NULL DEFAULT 0,
+    theoretical_weight_kg REAL NOT NULL DEFAULT 0,
+    allocated_weight_kg REAL NOT NULL CHECK(allocated_weight_kg > 0),
+    line_total REAL NOT NULL CHECK(line_total >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS sales_weight_inventory_allocations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    weight_card_line_id INTEGER NOT NULL
+        REFERENCES sales_weight_card_lines(id) ON DELETE CASCADE,
+    weight_layer_id INTEGER REFERENCES finished_good_weight_layers(id),
+    quantity_pieces REAL NOT NULL CHECK(quantity_pieces > 0),
+    weight_kg REAL NOT NULL CHECK(weight_kg > 0),
+    cost_amount REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_manufacturing_runs_order
+ON manufacturing_runs(manufacturing_order_id, run_number);
+CREATE INDEX IF NOT EXISTS idx_run_materials_run
+ON manufacturing_run_materials(manufacturing_run_id);
+CREATE INDEX IF NOT EXISTS idx_run_outputs_run
+ON manufacturing_run_outputs(manufacturing_run_id);
+CREATE INDEX IF NOT EXISTS idx_run_events_run
+ON manufacturing_run_events(manufacturing_run_id, id);
+CREATE INDEX IF NOT EXISTS idx_weight_layers_fifo
+ON finished_good_weight_layers(product_id, warehouse_id, id);
+CREATE INDEX IF NOT EXISTS idx_weight_cards_order
+ON sales_weight_cards(sales_order_id, id);
+CREATE INDEX IF NOT EXISTS idx_weight_card_lines_card
+ON sales_weight_card_lines(weight_card_id, id);
+CREATE INDEX IF NOT EXISTS idx_weight_allocations_line
+ON sales_weight_inventory_allocations(weight_card_line_id, id);
+"""
+
+
 def _migration_008_manufacturing_foundation(connection: Connection) -> None:
     purchase_columns = {
         "manufacturing_unit_cost": "REAL NOT NULL DEFAULT 0",
@@ -579,6 +711,38 @@ def _migration_008_manufacturing_foundation(connection: Connection) -> None:
     connection.executescript(MANUFACTURING_SQL)
 
 
+def _migration_009_runs_and_weight_sales(connection: Connection) -> None:
+    columns = {
+        "products": {
+            "standard_weight_kg": "REAL NOT NULL DEFAULT 0",
+            "weight_tolerance_percent": "REAL NOT NULL DEFAULT 5",
+        },
+        "sales_orders": {
+            "billing_method": "TEXT NOT NULL DEFAULT 'piece'",
+            "weight_card_total": "REAL NOT NULL DEFAULT 0",
+        },
+        "sales_order_lines": {
+            "billing_weight_kg": "REAL NOT NULL DEFAULT 0",
+            "price_per_kg": "REAL NOT NULL DEFAULT 0",
+        },
+    }
+    for table_name, table_columns in columns.items():
+        for column_name, definition in table_columns.items():
+            if not _column_exists(connection, table_name, column_name):
+                connection.execute(
+                    f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}"
+                )
+
+    connection.executescript(RUNS_AND_WEIGHT_SALES_SQL)
+    connection.execute(
+        """
+        UPDATE sales_orders
+        SET billing_method = 'piece'
+        WHERE billing_method IS NULL OR TRIM(billing_method) = ''
+        """
+    )
+
+
 MIGRATIONS: tuple[tuple[int, Callable[[Connection], None]], ...] = (
     (1, _migration_001_initial_schema),
     (2, _migration_002_inventory_partner_link),
@@ -588,6 +752,7 @@ MIGRATIONS: tuple[tuple[int, Callable[[Connection], None]], ...] = (
     (6, _migration_006_invoices),
     (7, _migration_007_print_settings),
     (8, _migration_008_manufacturing_foundation),
+    (9, _migration_009_runs_and_weight_sales),
 )
 
 
