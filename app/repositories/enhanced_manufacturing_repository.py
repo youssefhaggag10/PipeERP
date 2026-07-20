@@ -160,7 +160,9 @@ class EnhancedManufacturingRepository(ManufacturingRepository):
                 """,
                 [
                     (recipe_id, product_id, quantity, index)
-                    for index, (product_id, quantity) in enumerate(normalized_components, start=1)
+                    for index, (product_id, quantity) in enumerate(
+                        normalized_components, start=1
+                    )
                 ],
             )
             if suggested_scrap_per_batch > 0:

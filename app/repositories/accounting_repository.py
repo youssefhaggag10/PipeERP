@@ -173,7 +173,9 @@ class AccountingRepository:
             item = dict(row)
             item["orders_total"] = float(item["invoices_total"])
             item["balance"] = (
-                float(item["opening_balance"]) + float(item["invoices_total"]) - float(item["paid"])
+                float(item["opening_balance"])
+                + float(item["invoices_total"])
+                - float(item["paid"])
             )
             result.append(item)
         return result
@@ -247,7 +249,9 @@ class AccountingRepository:
         reference_id: int | None = None,
         notes: str = "",
     ) -> int:
-        expected_partner_type = "customer" if transaction_type == "customer_receipt" else "supplier"
+        expected_partner_type = (
+            "customer" if transaction_type == "customer_receipt" else "supplier"
+        )
         if transaction_type not in {"customer_receipt", "supplier_payment"}:
             raise ValueError("نوع الحركة المالية غير صحيح")
         if amount <= 0:
@@ -387,7 +391,9 @@ class AccountingRepository:
         end = date_to.isoformat() + " 23:59:59"
 
         if report_key == "sales":
-            columns = ["رقم الأمر", "التاريخ", "العميل", "الإجمالي", "المدفوع", "المتبقي", "الحالة"]
+            columns = [
+                "رقم الأمر", "التاريخ", "العميل", "الإجمالي", "المدفوع", "المتبقي", "الحالة"
+            ]
             rows = self.database.fetch_all(
                 """
                 SELECT so.order_number AS 'رقم الأمر', so.order_date AS 'التاريخ',
@@ -410,7 +416,9 @@ class AccountingRepository:
                 (start, end, partner_id, partner_id),
             )
         elif report_key == "purchases":
-            columns = ["رقم الأمر", "التاريخ", "المورد", "الإجمالي", "المدفوع", "المتبقي", "الحالة"]
+            columns = [
+                "رقم الأمر", "التاريخ", "المورد", "الإجمالي", "المدفوع", "المتبقي", "الحالة"
+            ]
             rows = self.database.fetch_all(
                 """
                 SELECT po.order_number AS 'رقم الأمر', po.order_date AS 'التاريخ',

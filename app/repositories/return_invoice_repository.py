@@ -7,6 +7,7 @@ from app.repositories.treasury_invoice_repository import TreasuryInvoiceReposito
 from app.services.inventory_costing_service import InventoryCostingService
 from app.services.invoice_service import payment_status
 
+
 EPSILON = 0.000001
 
 
@@ -164,16 +165,12 @@ class ReturnInvoiceRepository(TreasuryInvoiceRepository):
 
         if invoice_type == "sales":
             invoice_table, order_column, party_column = (
-                "sales_invoices",
-                "sales_order_id",
-                "customer_id",
+                "sales_invoices", "sales_order_id", "customer_id"
             )
             prefix, reference_type = "SR", "sales_return"
         elif invoice_type == "purchase":
             invoice_table, order_column, party_column = (
-                "purchase_invoices",
-                "purchase_order_id",
-                "supplier_id",
+                "purchase_invoices", "purchase_order_id", "supplier_id"
             )
             prefix, reference_type = "PR", "purchase_return"
         else:
@@ -195,14 +192,13 @@ class ReturnInvoiceRepository(TreasuryInvoiceRepository):
             if order is None:
                 raise ValueError("أمر الفاتورة غير موجود")
 
-            next_id = int(
-                connection.execute(
-                    "SELECT COALESCE(MAX(id), 0) + 1 FROM invoice_returns"
-                ).fetchone()[0]
-            )
+            next_id = int(connection.execute(
+                "SELECT COALESCE(MAX(id), 0) + 1 FROM invoice_returns"
+            ).fetchone()[0])
             return_number = f"{prefix}{next_id:06d}"
             total = sum(
-                float(line["return_quantity"]) * float(line["unit_price"]) for line in normalized
+                float(line["return_quantity"]) * float(line["unit_price"])
+                for line in normalized
             )
             cursor = connection.execute(
                 """
@@ -226,13 +222,8 @@ class ReturnInvoiceRepository(TreasuryInvoiceRepository):
                     ) VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
-                        return_id,
-                        int(line["order_line_id"]),
-                        product_id,
-                        quantity,
-                        str(line["unit"]),
-                        unit_price,
-                        quantity * unit_price,
+                        return_id, int(line["order_line_id"]), product_id, quantity,
+                        str(line["unit"]), unit_price, quantity * unit_price,
                     ),
                 )
                 if invoice_type == "purchase":
@@ -260,8 +251,7 @@ class ReturnInvoiceRepository(TreasuryInvoiceRepository):
                     cost_quantity = float(cost_row["quantity"] or 0)
                     unit_cost = (
                         float(cost_row["value"] or 0) / cost_quantity
-                        if cost_quantity > EPSILON
-                        else 0.0
+                        if cost_quantity > EPSILON else 0.0
                     )
                     lot_number = (
                         f"RET-{return_number}-{product_id}-"
@@ -279,15 +269,9 @@ class ReturnInvoiceRepository(TreasuryInvoiceRepository):
                         ) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
                         """,
                         (
-                            product_id,
-                            int(order["warehouse_id"]),
-                            int(lot_cursor.lastrowid),
-                            quantity,
-                            unit_cost,
-                            reference_type,
-                            return_id,
-                            int(invoice["party_id"]),
-                            f"{return_number} — {reason}",
+                            product_id, int(order["warehouse_id"]), int(lot_cursor.lastrowid),
+                            quantity, unit_cost, reference_type, return_id,
+                            int(invoice["party_id"]), f"{return_number} — {reason}",
                         ),
                     )
             return return_id

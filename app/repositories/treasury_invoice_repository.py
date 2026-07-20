@@ -65,54 +65,37 @@ class TreasuryInvoiceRepository(InvoiceRepository):
             )
 
         if invoice_type == "sales":
-            invoice_query = """
-                SELECT id, status, total, customer_id AS partner_id,
-                       sales_order_id AS order_id, invoice_number
-                FROM sales_invoices
-                WHERE id = ?
-            """
-            paid_query = """
-                SELECT COALESCE(SUM(amount), 0) AS paid
-                FROM payment_transactions
-                WHERE sales_invoice_id = ?
-            """
-            link_query = """
-                UPDATE payment_transactions
-                SET sales_invoice_id = ?
-                WHERE id = ?
-            """
+            table = "sales_invoices"
+            partner_column = "customer_id"
+            order_column = "sales_order_id"
+            invoice_column = "sales_invoice_id"
             transaction_type = "customer_receipt"
             reference_type = "sale"
         elif invoice_type == "purchase":
-            invoice_query = """
-                SELECT id, status, total, supplier_id AS partner_id,
-                       purchase_order_id AS order_id, invoice_number
-                FROM purchase_invoices
-                WHERE id = ?
-            """
-            paid_query = """
-                SELECT COALESCE(SUM(amount), 0) AS paid
-                FROM payment_transactions
-                WHERE purchase_invoice_id = ?
-            """
-            link_query = """
-                UPDATE payment_transactions
-                SET purchase_invoice_id = ?
-                WHERE id = ?
-            """
+            table = "purchase_invoices"
+            partner_column = "supplier_id"
+            order_column = "purchase_order_id"
+            invoice_column = "purchase_invoice_id"
             transaction_type = "supplier_payment"
             reference_type = "purchase"
         else:
             raise ValueError("نوع الفاتورة غير صحيح")
 
         with self.database.session(immediate=True) as connection:
-            invoice = connection.execute(invoice_query, (invoice_id,)).fetchone()
+            invoice = connection.execute(
+                f"SELECT id, status, total, {partner_column} AS partner_id, "
+                f"{order_column} AS order_id, invoice_number FROM {table} WHERE id = ?",
+                (invoice_id,),
+            ).fetchone()
             if invoice is None:
                 raise ValueError("الفاتورة غير موجودة")
             if invoice["status"] != "posted":
                 raise ValueError("يجب اعتماد الفاتورة قبل تسجيل الدفع")
-
-            paid = float(connection.execute(paid_query, (invoice_id,)).fetchone()["paid"])
+            paid = float(connection.execute(
+                "SELECT COALESCE(SUM(amount), 0) AS paid "
+                f"FROM payment_transactions WHERE {invoice_column} = ?",
+                (invoice_id,),
+            ).fetchone()["paid"])
             remaining = float(invoice["total"]) - paid
             if amount - remaining > 0.000001:
                 raise ValueError(f"المبلغ أكبر من المتبقي على الفاتورة ({remaining:,.2f})")
@@ -128,7 +111,10 @@ class TreasuryInvoiceRepository(InvoiceRepository):
                 payment_method=payment_method,
                 financial_account_id=int(financial_account_id),
             )
-            connection.execute(link_query, (invoice_id, transaction_id))
+            connection.execute(
+                f"UPDATE payment_transactions SET {invoice_column} = ? WHERE id = ?",
+                (invoice_id, transaction_id),
+            )
             return transaction_id
 
 
