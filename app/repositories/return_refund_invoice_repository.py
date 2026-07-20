@@ -16,10 +16,7 @@ class ReturnRefundInvoiceRepository(ReturnInvoiceRepository):
             """,
             (invoice_type,),
         )
-        refunded_by_invoice = {
-            int(row["invoice_id"]): float(row["total"])
-            for row in refund_rows
-        }
+        refunded_by_invoice = {int(row["invoice_id"]): float(row["total"]) for row in refund_rows}
         for item in rows:
             cash_refunded = refunded_by_invoice.get(int(item["id"]), 0.0)
             effective_paid = max(0.0, float(item["paid"]) - cash_refunded)
@@ -48,13 +45,10 @@ class ReturnRefundInvoiceRepository(ReturnInvoiceRepository):
             GROUP BY financial_account_id
             """
         )
-        by_account = {
-            int(row["financial_account_id"]): float(row["total"])
-            for row in refund_rows
-        }
+        by_account = {int(row["financial_account_id"]): float(row["total"]) for row in refund_rows}
         for item in rows:
-            item["current_balance"] = (
-                float(item["current_balance"]) + by_account.get(int(item["id"]), 0.0)
+            item["current_balance"] = float(item["current_balance"]) + by_account.get(
+                int(item["id"]), 0.0
             )
         return rows
 
@@ -63,11 +57,7 @@ class ReturnRefundInvoiceRepository(ReturnInvoiceRepository):
         invoice_id = int(kwargs.get("invoice_id"))
         amount = float(kwargs.get("amount", 0))
         matching = next(
-            (
-                row
-                for row in self.list_invoices(invoice_type)
-                if int(row["id"]) == invoice_id
-            ),
+            (row for row in self.list_invoices(invoice_type) if int(row["id"]) == invoice_id),
             None,
         )
         if matching is None:
@@ -75,8 +65,7 @@ class ReturnRefundInvoiceRepository(ReturnInvoiceRepository):
         remaining = float(matching["remaining"])
         if amount - remaining > 0.000001:
             raise ValueError(
-                f"المبلغ أكبر من صافي المتبقي بعد المرتجعات والاستردادات "
-                f"({remaining:,.2f})"
+                f"المبلغ أكبر من صافي المتبقي بعد المرتجعات والاستردادات ({remaining:,.2f})"
             )
         return super().record_invoice_payment(**kwargs)
 

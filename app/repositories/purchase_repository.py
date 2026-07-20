@@ -133,9 +133,7 @@ class PurchaseRepository:
             if manufacturing_unit_cost < 0:
                 raise ValueError(f"سعر تصنيع البند رقم {line_number} لا يمكن أن يكون سالبًا")
             if purchase_loss_quantity < 0 or purchase_loss_quantity >= quantity:
-                raise ValueError(
-                    f"فقد البند رقم {line_number} يجب أن يكون صفرًا أو أقل من الكمية"
-                )
+                raise ValueError(f"فقد البند رقم {line_number} يجب أن يكون صفرًا أو أقل من الكمية")
             if not lot_number:
                 raise ValueError(f"رقم الدفعة مطلوب في البند رقم {line_number}")
             net_quantity = quantity - purchase_loss_quantity
@@ -246,7 +244,8 @@ class PurchaseRepository:
                     lot_cursor = connection.execute(
                         "INSERT INTO lots(product_id, lot_number, unit_cost) VALUES (?, ?, ?)",
                         (
-                            line["product_id"], line["lot_number"],
+                            line["product_id"],
+                            line["lot_number"],
                             line["inventory_unit_cost"],
                         ),
                     )
@@ -263,9 +262,14 @@ class PurchaseRepository:
                     VALUES (?, ?, ?, ?, 0, ?, 'purchase', ?, ?, ?)
                     """,
                     (
-                        line["product_id"], order["warehouse_id"], lot_id,
-                        line["net_quantity"], line["inventory_unit_cost"], order_id,
-                        order["supplier_id"], order["order_number"],
+                        line["product_id"],
+                        order["warehouse_id"],
+                        lot_id,
+                        line["net_quantity"],
+                        line["inventory_unit_cost"],
+                        order_id,
+                        order["supplier_id"],
+                        order["order_number"],
                     ),
                 )
             connection.execute(

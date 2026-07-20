@@ -13,9 +13,7 @@ class AdvancedManufacturingRepository(EnhancedManufacturingRepository):
         additional_only: bool = False,
     ) -> list[dict]:
         order = self.get_order(order_id)
-        batches = int(
-            target_batches if target_batches is not None else order["planned_batches"]
-        )
+        batches = int(target_batches if target_batches is not None else order["planned_batches"])
         if batches < 0:
             raise ValueError("عدد الخلطات لا يمكن أن يكون سالبًا")
         current_batches = int(order["actual_batches"])

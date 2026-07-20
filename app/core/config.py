@@ -5,6 +5,7 @@ from app.core.app_paths import AppPaths
 
 class AppConfig:
     APP_NAME = "PipeERP"
+    APP_VERSION = "0.2.0"
     APP_DISPLAY_NAME_AR = "3A PIPE"
     COMPANY_NAME = "3A PIPE"
     DATA_DIR_NAME = "data"

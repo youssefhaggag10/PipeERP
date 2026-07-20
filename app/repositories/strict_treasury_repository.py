@@ -55,8 +55,8 @@ class StrictTreasuryRepository(TreasuryRepository):
             for row in adjustment_rows
         }
         for row in rows:
-            row["current_balance"] = (
-                float(row["current_balance"]) + adjustments.get(int(row["id"]), 0.0)
+            row["current_balance"] = float(row["current_balance"]) + adjustments.get(
+                int(row["id"]), 0.0
             )
         return rows
 
@@ -158,7 +158,10 @@ class StrictTreasuryRepository(TreasuryRepository):
         )
         rows.extend(dict(row) for row in adjustment_rows)
         rows.sort(
-            key=lambda row: (str(row.get("movement_date", "")), str(row.get("movement_number", ""))),
+            key=lambda row: (
+                str(row.get("movement_date", "")),
+                str(row.get("movement_number", "")),
+            ),
             reverse=True,
         )
         return rows[:limit]

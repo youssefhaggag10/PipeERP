@@ -1,6 +1,5 @@
 from app.repositories.advanced_manufacturing_repository import AdvancedManufacturingRepository
 
-
 EPSILON = 0.0000001
 
 

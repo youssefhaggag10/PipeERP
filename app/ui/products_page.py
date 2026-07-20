@@ -127,9 +127,7 @@ class ProductsPage(QWidget):
             self.type_input.setCurrentText(type_label)
         self.unit_input.setText(str(product["unit"]))
         self.min_stock_input.setText(f"{float(product['min_stock']):g}")
-        self.standard_weight_input.setText(
-            f"{float(product.get('standard_weight_kg', 0)):g}"
-        )
+        self.standard_weight_input.setText(f"{float(product.get('standard_weight_kg', 0)):g}")
         self.save_button.setText("حفظ تعديلات الصنف")
 
     def clear_editor(self) -> None:

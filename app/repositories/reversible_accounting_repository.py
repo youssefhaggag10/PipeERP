@@ -46,8 +46,12 @@ class ReversibleAccountingRepository(AccountingRepository):
             FROM payment_transactions
             """
         )
-        result["customer_advances"] = float(result.get("customer_advances", 0)) + float(row["customer_unlinked"])
-        result["supplier_advances"] = float(result.get("supplier_advances", 0)) + float(row["supplier_unlinked"])
+        result["customer_advances"] = float(result.get("customer_advances", 0)) + float(
+            row["customer_unlinked"]
+        )
+        result["supplier_advances"] = float(result.get("supplier_advances", 0)) + float(
+            row["supplier_unlinked"]
+        )
         return result
 
     def list_partner_balances(self, partner_type: str) -> list[dict]:
@@ -73,11 +77,14 @@ class ReversibleAccountingRepository(AccountingRepository):
             if row is None:
                 raise ValueError("الحركة المالية غير موجودة أو تم عكسها بالفعل")
 
-            columns = {item[1] for item in connection.execute(
-                "PRAGMA table_info(payment_transactions)"
-            ).fetchall()}
+            columns = {
+                item[1]
+                for item in connection.execute("PRAGMA table_info(payment_transactions)").fetchall()
+            }
             sales_invoice_id = row["sales_invoice_id"] if "sales_invoice_id" in columns else None
-            purchase_invoice_id = row["purchase_invoice_id"] if "purchase_invoice_id" in columns else None
+            purchase_invoice_id = (
+                row["purchase_invoice_id"] if "purchase_invoice_id" in columns else None
+            )
 
             connection.execute(
                 """
@@ -89,12 +96,18 @@ class ReversibleAccountingRepository(AccountingRepository):
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    int(row["id"]), str(row["transaction_number"]),
-                    str(row["transaction_type"]), int(row["partner_id"]),
-                    float(row["amount"]), str(row["payment_method"] or ""),
-                    row["reference_type"], row["reference_id"],
-                    sales_invoice_id, purchase_invoice_id,
-                    str(row["notes"] or ""), reason.strip(),
+                    int(row["id"]),
+                    str(row["transaction_number"]),
+                    str(row["transaction_type"]),
+                    int(row["partner_id"]),
+                    float(row["amount"]),
+                    str(row["payment_method"] or ""),
+                    row["reference_type"],
+                    row["reference_id"],
+                    sales_invoice_id,
+                    purchase_invoice_id,
+                    str(row["notes"] or ""),
+                    reason.strip(),
                 ),
             )
             connection.execute("DELETE FROM payment_transactions WHERE id = ?", (transaction_id,))

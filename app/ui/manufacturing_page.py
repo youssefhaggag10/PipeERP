@@ -171,9 +171,7 @@ class ManufacturingPage(QWidget):
         editor.addWidget(delete_component)
 
         self.recipe_components_table = QTableWidget(0, 3)
-        self.recipe_components_table.setHorizontalHeaderLabels(
-            ["الكود", "الخامة", "كجم لكل خلطة"]
-        )
+        self.recipe_components_table.setHorizontalHeaderLabels(["الكود", "الخامة", "كجم لكل خلطة"])
         self.recipe_components_table.setMinimumHeight(180)
         self.recipe_components_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.recipe_components_table.setSelectionMode(QTableWidget.SingleSelection)
@@ -281,8 +279,14 @@ class ManufacturingPage(QWidget):
         self.orders_table = QTableWidget(0, 8)
         self.orders_table.setHorizontalHeaderLabels(
             [
-                "رقم الأمر", "الخلطة", "المطلوب", "المخطط", "الفعلي",
-                "الحالة", "تكلفة الخامات", "فرق الوزن",
+                "رقم الأمر",
+                "الخلطة",
+                "المطلوب",
+                "المخطط",
+                "الفعلي",
+                "الحالة",
+                "تكلفة الخامات",
+                "فرق الوزن",
             ]
         )
         self.orders_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -403,7 +407,8 @@ class ManufacturingPage(QWidget):
         for row_index, component in enumerate(self.recipe_components):
             for column, value in enumerate(
                 [
-                    component["code"], component["name"],
+                    component["code"],
+                    component["name"],
                     f"{float(component['quantity_per_batch']):g}",
                 ]
             ):
@@ -446,8 +451,12 @@ class ManufacturingPage(QWidget):
             base = float(recipe["base_batch_weight"])
             scrap = float(recipe["suggested_scrap_per_batch"])
             values = [
-                recipe["code"], recipe["name"], recipe["output_summary"],
-                f"{base:g}", f"{scrap:g}", f"{base + scrap:g}",
+                recipe["code"],
+                recipe["name"],
+                recipe["output_summary"],
+                f"{base:g}",
+                f"{scrap:g}",
+                f"{base + scrap:g}",
             ]
             for column, value in enumerate(values):
                 self.recipes_table.setItem(row_index, column, QTableWidgetItem(str(value)))
@@ -462,8 +471,7 @@ class ManufacturingPage(QWidget):
         recipe = self.repository.get_recipe(int(recipe_id))
         for output in recipe["outputs"]:
             output_label = (
-                f"{output['code']} — {output['name']} "
-                f"({float(output['standard_weight_kg']):g} كجم)"
+                f"{output['code']} — {output['name']} ({float(output['standard_weight_kg']):g} كجم)"
             )
             self.output_product_input.addItem(
                 output_label,
@@ -497,9 +505,7 @@ class ManufacturingPage(QWidget):
             QMessageBox.warning(self, "تنبيه", "عدد المواسير يجب أن يكون أكبر من صفر")
             return
         recipe = self.repository.get_recipe(int(self.order_recipe_input.currentData()))
-        output = next(
-            row for row in recipe["outputs"] if int(row["product_id"]) == int(product_id)
-        )
+        output = next(row for row in recipe["outputs"] if int(row["product_id"]) == int(product_id))
         self.order_outputs = [
             row for row in self.order_outputs if int(row["product_id"]) != int(product_id)
         ]
@@ -541,8 +547,10 @@ class ManufacturingPage(QWidget):
         ]
         self.order_scraps.append(
             {
-                "product_id": int(product_id), "name": name,
-                "available": available, "quantity_per_batch": quantity,
+                "product_id": int(product_id),
+                "name": name,
+                "available": available,
+                "quantity_per_batch": quantity,
             }
         )
         self.scrap_qty_input.clear()
@@ -566,7 +574,8 @@ class ManufacturingPage(QWidget):
         return calculate_batch_plan(
             [
                 ProductionTarget(
-                    int(row["product_id"]), float(row["quantity"]),
+                    int(row["product_id"]),
+                    float(row["quantity"]),
                     float(row["standard_weight_kg"]),
                 )
                 for row in self.order_outputs
@@ -579,7 +588,8 @@ class ManufacturingPage(QWidget):
         self.outputs_table.setRowCount(len(self.order_outputs))
         for row_index, output in enumerate(self.order_outputs):
             values = [
-                output["name"], f"{float(output['quantity']):g}",
+                output["name"],
+                f"{float(output['quantity']):g}",
                 f"{float(output['standard_weight_kg']):g}",
                 f"{float(output['quantity']) * float(output['standard_weight_kg']):g}",
             ]
@@ -590,8 +600,10 @@ class ManufacturingPage(QWidget):
         for row_index, scrap in enumerate(self.order_scraps):
             total = float(scrap["quantity_per_batch"]) * (plan.batches if plan else 0)
             values = [
-                scrap["name"], f"{float(scrap['available']):g}",
-                f"{float(scrap['quantity_per_batch']):g}", f"{total:g}",
+                scrap["name"],
+                f"{float(scrap['available']):g}",
+                f"{float(scrap['quantity_per_batch']):g}",
+                f"{total:g}",
             ]
             for column, value in enumerate(values):
                 self.scraps_table.setItem(row_index, column, QTableWidgetItem(str(value)))
@@ -599,13 +611,12 @@ class ManufacturingPage(QWidget):
             self.plan_label.setText("أضف المقاسات المطلوبة لعرض خطة التشغيل")
             return
         shortage = [
-            row for row in self.order_scraps
+            row
+            for row in self.order_scraps
             if float(row["quantity_per_batch"]) * plan.batches > float(row["available"])
         ]
         warning = (
-            "\n⚠ الكسر أقل من المخطط؛ النظام سيصرف المتاح فقط ولن يوقف التصنيع."
-            if shortage
-            else ""
+            "\n⚠ الكسر أقل من المخطط؛ النظام سيصرف المتاح فقط ولن يوقف التصنيع." if shortage else ""
         )
         self.plan_label.setText(
             f"الوزن المطلوب: {plan.target_weight:,.2f} كجم  |  "
@@ -627,8 +638,10 @@ class ManufacturingPage(QWidget):
             return
         try:
             order_id = self.repository.create_order(
-                recipe_id=int(recipe_id), warehouse_id=int(warehouse_id),
-                outputs=self.order_outputs, scrap_inputs=self.order_scraps,
+                recipe_id=int(recipe_id),
+                warehouse_id=int(warehouse_id),
+                outputs=self.order_outputs,
+                scrap_inputs=self.order_scraps,
                 notes=self.order_notes_input.text(),
             )
         except (KeyError, TypeError, ValueError) as error:
@@ -706,8 +719,11 @@ class ManufacturingPage(QWidget):
         self.orders_table.setRowCount(len(self.orders))
         for row_index, order in enumerate(self.orders):
             values = [
-                order["order_number"], order["recipe_name"], order["output_summary"],
-                order["planned_batches"], order["actual_batches"],
+                order["order_number"],
+                order["recipe_name"],
+                order["output_summary"],
+                order["planned_batches"],
+                order["actual_batches"],
                 STATUS_LABELS.get(str(order["status"]), order["status"]),
                 f"{float(order['material_cost']):,.2f}",
                 f"{float(order['weight_variance']):,.2f}",

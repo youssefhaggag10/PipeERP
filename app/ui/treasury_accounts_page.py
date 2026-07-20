@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
 
 from app.ui.print_enabled_pages import AccountsPageWithPrint
 
-
 ACCOUNT_TYPES = {
     "cash": "خزينة نقدية",
     "bank": "حساب بنكي",
@@ -103,7 +102,16 @@ class TreasuryAccountsPage(AccountsPageWithPrint):
 
         self.movements_table = QTableWidget(0, 8)
         self.movements_table.setHorizontalHeaderLabels(
-            ["التاريخ", "رقم الحركة", "الحساب", "نوع الحركة", "داخل", "خارج", "الطرف / الحساب المقابل", "البيان"]
+            [
+                "التاريخ",
+                "رقم الحركة",
+                "الحساب",
+                "نوع الحركة",
+                "داخل",
+                "خارج",
+                "الطرف / الحساب المقابل",
+                "البيان",
+            ]
         )
         self.movements_table.setEditTriggers(QTableWidget.NoEditTriggers)
 
@@ -118,7 +126,17 @@ class TreasuryAccountsPage(AccountsPageWithPrint):
     def _expand_transaction_table(self) -> None:
         self.transactions_table.setColumnCount(9)
         self.transactions_table.setHorizontalHeaderLabels(
-            ["رقم الحركة", "التاريخ", "النوع", "الطرف", "المبلغ", "الطريقة", "الحساب", "المستند", "ملاحظات"]
+            [
+                "رقم الحركة",
+                "التاريخ",
+                "النوع",
+                "الطرف",
+                "المبلغ",
+                "الطريقة",
+                "الحساب",
+                "المستند",
+                "ملاحظات",
+            ]
         )
 
     def reload(self) -> None:
@@ -220,7 +238,10 @@ class TreasuryAccountsPage(AccountsPageWithPrint):
         self.reload()
 
     def transfer_between_accounts(self) -> None:
-        if self.transfer_from_input.currentData() is None or self.transfer_to_input.currentData() is None:
+        if (
+            self.transfer_from_input.currentData() is None
+            or self.transfer_to_input.currentData() is None
+        ):
             QMessageBox.warning(self, "تنبيه", "اختر الحساب المحول منه والحساب المحول إليه")
             return
         try:
@@ -259,9 +280,14 @@ class TreasuryAccountsPage(AccountsPageWithPrint):
         self.movements_table.setRowCount(len(rows))
         for row_index, row in enumerate(rows):
             values = [
-                row["movement_date"], row["movement_number"], row["account_name"],
-                row["movement_type"], f"{float(row['amount_in']):,.2f}",
-                f"{float(row['amount_out']):,.2f}", row["counterparty"], row["notes"],
+                row["movement_date"],
+                row["movement_number"],
+                row["account_name"],
+                row["movement_type"],
+                f"{float(row['amount_in']):,.2f}",
+                f"{float(row['amount_out']):,.2f}",
+                row["counterparty"],
+                row["notes"],
             ]
             for column, value in enumerate(values):
                 self.movements_table.setItem(row_index, column, QTableWidgetItem(str(value)))
@@ -272,11 +298,15 @@ class TreasuryAccountsPage(AccountsPageWithPrint):
         labels = {"customer_receipt": "تحصيل عميل", "supplier_payment": "سداد مورد"}
         for row_index, row in enumerate(rows):
             values = [
-                row["transaction_number"], row["transaction_date"],
+                row["transaction_number"],
+                row["transaction_date"],
                 labels.get(row["transaction_type"], row["transaction_type"]),
-                row["partner_name"], f"{float(row['amount']):,.2f}",
-                row["payment_method"], row.get("financial_account_name", "-"),
-                row["reference_number"] or "-", row["notes"],
+                row["partner_name"],
+                f"{float(row['amount']):,.2f}",
+                row["payment_method"],
+                row.get("financial_account_name", "-"),
+                row["reference_number"] or "-",
+                row["notes"],
             ]
             for column, value in enumerate(values):
                 self.transactions_table.setItem(row_index, column, QTableWidgetItem(str(value)))

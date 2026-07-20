@@ -1,4 +1,4 @@
-name: PipeERP Quality Checks
+name: Feature Validation
 
 "on":
   pull_request:
@@ -8,15 +8,15 @@ name: PipeERP Quality Checks
   workflow_dispatch:
 
 jobs:
-  test:
+  validate:
     permissions:
       contents: read
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       PYTHONPATH: "."
       QT_QPA_PLATFORM: offscreen
-      PIPEERP_DATA_DIR: .pipeerp-quality-data
+      PIPEERP_DATA_DIR: .pipeerp-validation-data
 
     steps:
       - name: Checkout repository
@@ -33,11 +33,11 @@ jobs:
       - name: Install locked dependencies
         run: python -m pip install --disable-pip-version-check --require-hashes --requirement requirements-ci.txt
 
-      - name: Compile Python files
+      - name: Compile application
         run: python -m compileall -q app tests
 
-      - name: Run regression tests
+      - name: Run tests
         run: pytest -q
 
-      - name: Run lint checks
+      - name: Run lint
         run: ruff check app tests

@@ -85,9 +85,7 @@ class InvoicesTab(QWidget):
 
         post_button = QPushButton("اعتماد الفاتورة")
         post_button.clicked.connect(self.post_selected)
-        payment_button = QPushButton(
-            "تسجيل تحصيل" if invoice_type == "sales" else "تسجيل سداد"
-        )
+        payment_button = QPushButton("تسجيل تحصيل" if invoice_type == "sales" else "تسجيل سداد")
         payment_button.clicked.connect(self.pay_selected)
         return_button = QPushButton("إنشاء مرتجع")
         return_button.clicked.connect(self.return_selected)
@@ -181,9 +179,7 @@ class InvoicesTab(QWidget):
                 f"{float(row['remaining']):,.2f}",
                 INVOICE_STATUS_LABELS.get(str(row["status"]), str(row["status"])),
                 row["return_status"],
-                PAYMENT_STATUS_LABELS.get(
-                    str(row["payment_status"]), str(row["payment_status"])
-                ),
+                PAYMENT_STATUS_LABELS.get(str(row["payment_status"]), str(row["payment_status"])),
             ]
             for column_index, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
@@ -192,7 +188,9 @@ class InvoicesTab(QWidget):
                     item.setBackground(INVOICE_COLORS.get(str(row["status"]), QColor("#64748B")))
                     item.setForeground(QColor("white"))
                 elif column_index == 12:
-                    item.setBackground(RETURN_COLORS.get(str(row["return_status"]), QColor("#64748B")))
+                    item.setBackground(
+                        RETURN_COLORS.get(str(row["return_status"]), QColor("#64748B"))
+                    )
                     item.setForeground(QColor("white"))
                 elif column_index == 13:
                     item.setBackground(
@@ -330,4 +328,6 @@ class InvoicesTab(QWidget):
             QMessageBox.warning(self, "تنبيه", str(error))
             return
         self.reload()
-        QMessageBox.information(self, "تم", "تم تسجيل الحركة على الحساب المالي المحدد وتحديث حالة الدفع")
+        QMessageBox.information(
+            self, "تم", "تم تسجيل الحركة على الحساب المالي المحدد وتحديث حالة الدفع"
+        )

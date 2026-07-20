@@ -9,6 +9,7 @@ venv/
 env/
 .pytest_cache/
 .ruff_cache/
+*.egg-info/
 
 # PySide / Qt
 *.qmlc
@@ -22,8 +23,8 @@ data/
 backups/
 
 # Packaging
-dist/
 build/
+dist/
 
 # IDE
 .vscode/

@@ -161,15 +161,11 @@ class AccountsPage(QWidget):
         summary = self.accounting_repository.dashboard_summary()
         self.sales_card[1].setText(f"{float(summary['sales_total']):,.2f}")
         self.receipts_card[1].setText(f"{float(summary['customer_receipts']):,.2f}")
-        self.customer_advances_card[1].setText(
-            f"{float(summary['customer_advances']):,.2f}"
-        )
+        self.customer_advances_card[1].setText(f"{float(summary['customer_advances']):,.2f}")
         self.receivables_card[1].setText(f"{float(summary['receivables']):,.2f}")
         self.purchases_card[1].setText(f"{float(summary['purchases_total']):,.2f}")
         self.payments_card[1].setText(f"{float(summary['supplier_payments']):,.2f}")
-        self.supplier_advances_card[1].setText(
-            f"{float(summary['supplier_advances']):,.2f}"
-        )
+        self.supplier_advances_card[1].setText(f"{float(summary['supplier_advances']):,.2f}")
         self.payables_card[1].setText(f"{float(summary['payables']):,.2f}")
         self._fill_balances(
             self.customer_table,
@@ -200,9 +196,7 @@ class AccountsPage(QWidget):
 
     def _reload_payment_partners(self) -> None:
         partner_type = (
-            "customer"
-            if self.transaction_type.currentData() == "customer_receipt"
-            else "supplier"
+            "customer" if self.transaction_type.currentData() == "customer_receipt" else "supplier"
         )
         selected = self.partner_input.currentData()
         self.partner_input.blockSignals(True)
@@ -219,9 +213,7 @@ class AccountsPage(QWidget):
     def _reload_open_orders(self) -> None:
         partner_id = self.partner_input.currentData()
         partner_type = (
-            "customer"
-            if self.transaction_type.currentData() == "customer_receipt"
-            else "supplier"
+            "customer" if self.transaction_type.currentData() == "customer_receipt" else "supplier"
         )
         self.order_input.clear()
         self.order_input.addItem("بدون ربط بمستند محدد", None)
@@ -262,10 +254,14 @@ class AccountsPage(QWidget):
         labels = {"customer_receipt": "تحصيل عميل", "supplier_payment": "سداد مورد"}
         for row_index, row in enumerate(rows):
             values = [
-                row["transaction_number"], row["transaction_date"],
+                row["transaction_number"],
+                row["transaction_date"],
                 labels.get(row["transaction_type"], row["transaction_type"]),
-                row["partner_name"], f"{float(row['amount']):,.2f}",
-                row["payment_method"], row["reference_number"] or "-", row["notes"],
+                row["partner_name"],
+                f"{float(row['amount']):,.2f}",
+                row["payment_method"],
+                row["reference_number"] or "-",
+                row["notes"],
             ]
             for column, value in enumerate(values):
                 self.transactions_table.setItem(row_index, column, QTableWidgetItem(str(value)))

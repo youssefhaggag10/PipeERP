@@ -1,5 +1,5 @@
 #ifndef MyAppVersion
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.2.0"
 #endif
 
 #define MyAppName "PipeERP"
@@ -10,6 +10,7 @@
 AppId={{BE1B4A35-3410-4C8C-9234-0A09C520AAB7}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+VersionInfoVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\{#MyAppName}
 DefaultGroupName={#MyAppPublisher}\{#MyAppName}

@@ -101,9 +101,7 @@ def _show_full_cell_text(table: QTableWidget, row: int, column: int) -> None:
     editor = QPlainTextEdit()
     editor.setReadOnly(True)
     editor.setPlainText(item.text())
-    editor.setTextInteractionFlags(
-        Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard
-    )
+    editor.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard)
 
     buttons = QDialogButtonBox(QDialogButtonBox.Close)
     buttons.rejected.connect(dialog.reject)
@@ -129,9 +127,7 @@ def configure_readable_table(table: QTableWidget) -> None:
     table.setMouseTracking(True)
     table.setWordWrap(False)
     table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-    table.setMinimumHeight(
-        max(table.minimumHeight(), DEFAULT_TABLE_MINIMUM_HEIGHT)
-    )
+    table.setMinimumHeight(max(table.minimumHeight(), DEFAULT_TABLE_MINIMUM_HEIGHT))
     table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
     table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
     table.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
@@ -148,9 +144,7 @@ def configure_readable_table(table: QTableWidget) -> None:
             table.setColumnWidth(column, 130)
 
     table.cellDoubleClicked.connect(
-        lambda row, column, current_table=table: _show_full_cell_text(
-            current_table, row, column
-        )
+        lambda row, column, current_table=table: _show_full_cell_text(current_table, row, column)
     )
 
     readability_filter = _TableReadabilityFilter(table)

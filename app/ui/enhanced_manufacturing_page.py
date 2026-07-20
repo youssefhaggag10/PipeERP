@@ -97,8 +97,7 @@ class EnhancedManufacturingPage(ManufacturingPage):
             return
 
         output_ids = [
-            int(item.data(Qt.UserRole))
-            for item in self.recipe_outputs_list.selectedItems()
+            int(item.data(Qt.UserRole)) for item in self.recipe_outputs_list.selectedItems()
         ]
         try:
             self.repository.update_recipe(
@@ -166,8 +165,7 @@ class EnhancedManufacturingPage(ManufacturingPage):
 
         if status == "draft":
             question = (
-                f"سيتم حذف أمر التصنيع {order_number} نهائيًا لأنه ما زال مسودة.\n"
-                "هل تريد المتابعة؟"
+                f"سيتم حذف أمر التصنيع {order_number} نهائيًا لأنه ما زال مسودة.\nهل تريد المتابعة؟"
             )
             answer = QMessageBox.question(
                 self,

@@ -31,9 +31,7 @@ class _TreasuryOrderPageMixin:
                 button.setEnabled(False)
 
 
-class TreasuryPurchaseAccountingPage(
-    _TreasuryOrderPageMixin, AutomatedPurchaseAccountingPage
-):
+class TreasuryPurchaseAccountingPage(_TreasuryOrderPageMixin, AutomatedPurchaseAccountingPage):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._install_treasury_invoice_repository()
@@ -67,9 +65,7 @@ class TreasuryPurchaseAccountingPage(
         )
 
 
-class TreasurySalesAccountingPageWithPrint(
-    _TreasuryOrderPageMixin, SalesAccountingPageWithPrint
-):
+class TreasurySalesAccountingPageWithPrint(_TreasuryOrderPageMixin, SalesAccountingPageWithPrint):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._install_treasury_invoice_repository()

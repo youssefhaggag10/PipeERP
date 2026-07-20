@@ -178,20 +178,14 @@ class ReplannedManufacturingPage(AdvancedManufacturingPage):
         self.orders_table.setRowCount(len(self.orders))
         for row_index, order in enumerate(self.orders):
             completed = str(order["status"]) == "completed"
-            returned_scrap_quantity = float(
-                order.get("returned_scrap_quantity", 0) or 0
-            )
-            scrap_quantity = (
-                f"{returned_scrap_quantity:,.2f}" if completed else "—"
-            )
+            returned_scrap_quantity = float(order.get("returned_scrap_quantity", 0) or 0)
+            scrap_quantity = f"{returned_scrap_quantity:,.2f}" if completed else "—"
             scrap_unit_cost = (
                 f"{float(order.get('scrap_unit_cost', 0) or 0):,.6f}"
                 if completed and returned_scrap_quantity > 0
                 else "—"
             )
-            finished_cost = (
-                f"{float(order['finished_cost']):,.2f}" if completed else "—"
-            )
+            finished_cost = f"{float(order['finished_cost']):,.2f}" if completed else "—"
             values = [
                 order["order_number"],
                 order["recipe_name"],

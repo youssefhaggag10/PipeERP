@@ -127,8 +127,7 @@ class PartnersPage(QWidget):
         query = self.search_input.text().strip().casefold()
         for row_index, item in enumerate(self.rows):
             haystack = " ".join(
-                str(item.get(key, "") or "")
-                for key in ("code", "name", "phone", "address")
+                str(item.get(key, "") or "") for key in ("code", "name", "phone", "address")
             ).casefold()
             self.table.setRowHidden(row_index, bool(query) and query not in haystack)
 

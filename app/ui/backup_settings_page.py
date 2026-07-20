@@ -1,25 +1,38 @@
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
     QFileDialog,
+    QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
+from app.database.connection import Database
 from app.services.backup_service import BackupService
+from app.ui.appearance import (
+    THEME_LABELS,
+    AppearanceSettings,
+    AppearanceSettingsRepository,
+    apply_appearance,
+)
 from app.ui.print_settings_page import PrintSettingsPage
 
 
 class BackupPrintSettingsPage(PrintSettingsPage):
+    appearance_settings_changed = Signal()
+
     def __init__(
         self,
         print_repository,
@@ -27,9 +40,86 @@ class BackupPrintSettingsPage(PrintSettingsPage):
         database_path: Path,
     ) -> None:
         super().__init__(print_repository, admin_repository)
+        self.database = Database(Path(database_path))
+        self.appearance_repository = AppearanceSettingsRepository(self.database)
         self.backup_service = BackupService(Path(database_path))
-        self.tabs.insertTab(2, self._build_backup_tab(), "النسخ الاحتياطي")
+        self.tabs.insertTab(2, self._build_appearance_tab(), "المظهر")
+        self.tabs.insertTab(3, self._build_backup_tab(), "النسخ الاحتياطي")
+        self._reload_appearance_settings()
         self._reload_backups()
+
+    def _build_appearance_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        self.theme_input = QComboBox()
+        for code, label in THEME_LABELS.items():
+            self.theme_input.addItem(label, code)
+
+        self.font_size_input = QSpinBox()
+        self.font_size_input.setRange(11, 20)
+        self.font_size_input.setSuffix(" px")
+
+        self.interface_scale_input = QSpinBox()
+        self.interface_scale_input.setRange(90, 140)
+        self.interface_scale_input.setSingleStep(5)
+        self.interface_scale_input.setSuffix(" %")
+
+        group = QGroupBox("الثيم وحجم واجهة البرنامج")
+        form = QFormLayout(group)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        form.addRow("الثيم", self.theme_input)
+        form.addRow("حجم الخط الأساسي", self.font_size_input)
+        form.addRow("تكبير العناصر والمسافات", self.interface_scale_input)
+
+        note = QLabel(
+            "اختيار «حسب إعداد ويندوز» يجعل البرنامج يستخدم الوضع الفاتح أو الداكن "
+            "حسب إعداد النظام عند التشغيل. إعداد التكبير يؤثر على الحقول والأزرار "
+            "والتابات والجداول، ولا يغير تنسيق الفواتير المطبوعة."
+        )
+        note.setWordWrap(True)
+        note.setObjectName("subtitleLabel")
+
+        save_button = QPushButton("حفظ وتطبيق المظهر الآن")
+        save_button.clicked.connect(self.save_appearance_settings)
+        reload_button = QPushButton("إلغاء التعديلات وإعادة التحميل")
+        reload_button.setObjectName("secondaryButton")
+        reload_button.clicked.connect(self._reload_appearance_settings)
+
+        actions = QHBoxLayout()
+        actions.addWidget(save_button)
+        actions.addWidget(reload_button)
+        actions.addStretch()
+
+        layout.addWidget(group)
+        layout.addWidget(note)
+        layout.addLayout(actions)
+        layout.addStretch()
+        return tab
+
+    def _reload_appearance_settings(self) -> None:
+        settings = self.appearance_repository.get_settings()
+        index = self.theme_input.findData(settings.theme)
+        self.theme_input.setCurrentIndex(max(0, index))
+        self.font_size_input.setValue(settings.font_size)
+        self.interface_scale_input.setValue(settings.scale_percent)
+
+    def save_appearance_settings(self) -> None:
+        settings = AppearanceSettings(
+            theme=str(self.theme_input.currentData()),
+            font_size=int(self.font_size_input.value()),
+            scale_percent=int(self.interface_scale_input.value()),
+        )
+        try:
+            self.appearance_repository.save_settings(settings)
+        except ValueError as error:
+            QMessageBox.warning(self, "تنبيه", str(error))
+            return
+        app = QApplication.instance()
+        if isinstance(app, QApplication):
+            apply_appearance(app, self.appearance_repository)
+        self.appearance_settings_changed.emit()
+        QMessageBox.information(self, "تم", "تم حفظ وتطبيق إعدادات المظهر")
 
     def _build_backup_tab(self) -> QWidget:
         tab = QWidget()

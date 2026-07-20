@@ -85,18 +85,14 @@ class StrictTreasuryAccountsPage(TreasuryAccountsPage):
     def _reload_open_orders(self) -> None:
         partner_id = self.partner_input.currentData()
         partner_type = (
-            "customer"
-            if self.transaction_type.currentData() == "customer_receipt"
-            else "supplier"
+            "customer" if self.transaction_type.currentData() == "customer_receipt" else "supplier"
         )
         self.order_input.blockSignals(True)
         self.order_input.clear()
         self.order_input.addItem("بدون ربط بفاتورة أو أمر — دفعة مقدمة", None)
         self.order_input.setItemData(0, 0.0, Qt.UserRole + 1)
         if partner_id is not None:
-            for order in self.accounting_repository.list_open_orders(
-                partner_type, int(partner_id)
-            ):
+            for order in self.accounting_repository.list_open_orders(partner_type, int(partner_id)):
                 remaining = float(order["remaining"])
                 label = (
                     f"{order['order_number']} — {order['payment_context']} — "
@@ -260,7 +256,9 @@ class StrictTreasuryAccountsPage(TreasuryAccountsPage):
 
     def save_payment(self) -> None:
         if self.partner_input.currentData() is None:
-            party = "العميل" if self.transaction_type.currentData() == "customer_receipt" else "المورد"
+            party = (
+                "العميل" if self.transaction_type.currentData() == "customer_receipt" else "المورد"
+            )
             QMessageBox.warning(self, "تنبيه", f"اختر {party}")
             return
         if self.financial_account_input.currentData() is None:

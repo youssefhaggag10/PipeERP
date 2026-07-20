@@ -20,9 +20,7 @@ def database(tmp_path: Path) -> Database:
 def _masters(database: Database) -> dict[str, int]:
     with database.session() as connection:
         warehouse = int(
-            connection.execute(
-                "SELECT id FROM warehouses WHERE code = 'MAIN'"
-            ).fetchone()[0]
+            connection.execute("SELECT id FROM warehouses WHERE code = 'MAIN'").fetchone()[0]
         )
         raw_ids = []
         for code, name in (
@@ -222,7 +220,8 @@ def test_scrap_from_one_recipe_can_be_used_by_another_at_original_fifo_cost(
     )
     repository.start_order(order_b)
     material = next(
-        row for row in repository.get_order(order_b)["materials"]
+        row
+        for row in repository.get_order(order_b)["materials"]
         if int(row["product_id"]) == source_scrap_id
     )
     assert material["planned_quantity"] == 15

@@ -43,9 +43,7 @@ class AppPaths:
 
         xdg_data_home = os.environ.get("XDG_DATA_HOME", "").strip()
         base = (
-            Path(xdg_data_home).expanduser()
-            if xdg_data_home
-            else Path.home() / ".local" / "share"
+            Path(xdg_data_home).expanduser() if xdg_data_home else Path.home() / ".local" / "share"
         )
         return base / cls.APP_DIR_NAME
 
