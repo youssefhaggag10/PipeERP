@@ -55,26 +55,54 @@ jobs:
           import urllib.request
           from pathlib import Path
 
-          url = (
-              "https://sonarcloud.io/api/issues/search"
-              "?componentKeys=youssefhaggag10_PipeERP"
-              "&pullRequest=5&ps=500"
-          )
-          request = urllib.request.Request(url)
+          base = "https://sonarcloud.io"
+          endpoints = {
+              "issues": (
+                  "/api/issues/search?componentKeys=youssefhaggag10_PipeERP"
+                  "&pullRequest=5&ps=500"
+              ),
+              "quality_gate": (
+                  "/api/qualitygates/project_status?projectKey=youssefhaggag10_PipeERP"
+                  "&pullRequest=5"
+              ),
+              "project_measures": (
+                  "/api/measures/component?component=youssefhaggag10_PipeERP"
+                  "&pullRequest=5&metricKeys=new_software_quality_security_issues,"
+                  "new_software_quality_security_rating,new_security_rating,new_vulnerabilities"
+              ),
+              "file_measures": (
+                  "/api/measures/component_tree?component=youssefhaggag10_PipeERP"
+                  "&pullRequest=5&qualifiers=FIL&ps=500&metricKeys="
+                  "new_software_quality_security_issues,new_software_quality_security_rating,"
+                  "new_security_rating,new_vulnerabilities"
+              ),
+              "hotspots": (
+                  "/api/hotspots/search?projectKey=youssefhaggag10_PipeERP"
+                  "&pullRequest=5&ps=500"
+              ),
+          }
           token = os.environ.get("SONAR_TOKEN", "")
+          authorization = ""
           if token:
               credentials = base64.b64encode(f"{token}:".encode()).decode()
-              request.add_header("Authorization", f"Basic {credentials}")
-          try:
-              with urllib.request.urlopen(request, timeout=30) as response:
-                  payload = json.loads(response.read().decode())
-          except urllib.error.HTTPError as error:
-              payload = {
-                  "http_status": error.code,
-                  "response": error.read().decode(errors="replace"),
-              }
-          except Exception as error:
-              payload = {"error": type(error).__name__, "message": str(error)}
+              authorization = f"Basic {credentials}"
+
+          def fetch(path: str) -> dict:
+              request = urllib.request.Request(base + path)
+              if authorization:
+                  request.add_header("Authorization", authorization)
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      return json.loads(response.read().decode())
+              except urllib.error.HTTPError as error:
+                  return {
+                      "http_status": error.code,
+                      "response": error.read().decode(errors="replace"),
+                  }
+              except Exception as error:
+                  return {"error": type(error).__name__, "message": str(error)}
+
+          payload = {name: fetch(path) for name, path in endpoints.items()}
           Path("sonar-vulnerabilities.json").write_text(
               json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
           )
