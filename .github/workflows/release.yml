@@ -75,25 +75,40 @@ jobs:
         working-directory: release-assets
         run: sha256sum --check PipeERP-Setup-0.2.0.exe.sha256
 
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v0.2.0
-          target_commitish: ${{ github.event.workflow_run.head_sha }}
-          name: PipeERP v0.2.0
-          body: |
-            ## PipeERP v0.2.0
+      - name: Write release notes
+        run: |
+          cat > release-notes.md <<'EOF'
+          ## PipeERP v0.2.0
 
-            - Appearance themes: Dark, Light, and System.
-            - CRM activities and follow-up center.
-            - Manufacturing operating runs with independent material and cost snapshots.
-            - Materials can be removed from later operating mixes without changing previous runs.
-            - Weight-card sales using actual weight × price per kg.
-            - Multi-size weight allocation and inventory weight tracking.
-            - Schema 9 migration with safe database upgrades.
-            - Automated regression, GUI smoke, and Windows installer tests.
-          files: |
-            release-assets/PipeERP-Setup-0.2.0.exe
-            release-assets/PipeERP-Setup-0.2.0.exe.sha256
-          fail_on_unmatched_files: true
-          generate_release_notes: false
+          - Appearance themes: Dark, Light, and System.
+          - CRM activities and follow-up center.
+          - Manufacturing operating runs with independent material and cost snapshots.
+          - Materials can be removed from later operating mixes without changing previous runs.
+          - Weight-card sales using actual weight × price per kg.
+          - Multi-size weight allocation and inventory weight tracking.
+          - Schema 9 migration with safe database upgrades.
+          - Automated regression, GUI smoke, and Windows installer tests.
+          EOF
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if gh release view v0.2.0 >/dev/null 2>&1; then
+            gh release upload v0.2.0 \
+              release-assets/PipeERP-Setup-0.2.0.exe \
+              release-assets/PipeERP-Setup-0.2.0.exe.sha256 \
+              --clobber
+            gh release edit v0.2.0 \
+              --title "PipeERP v0.2.0" \
+              --notes-file release-notes.md
+          else
+            gh release create v0.2.0 \
+              release-assets/PipeERP-Setup-0.2.0.exe \
+              release-assets/PipeERP-Setup-0.2.0.exe.sha256 \
+              --target "$TARGET_SHA" \
+              --title "PipeERP v0.2.0" \
+              --notes-file release-notes.md
+          fi
