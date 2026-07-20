@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 import sys
 
 from PySide6.QtCore import Qt
@@ -30,13 +31,15 @@ def _run_smoke_test() -> int:
     database = Database(AppConfig.database_path())
     initialize_database(database)
     first_run = FirstRunService(database)
+    smoke_username = f"smoke_{secrets.token_hex(8)}"
+    smoke_credential = secrets.token_urlsafe(32)
     if first_run.requires_setup():
         first_run.create_initial_admin(
-            username="smoke_admin",
+            username=smoke_username,
             full_name="Smoke Test Admin",
-            password="Smoke-Test-123",
+            password=smoke_credential,
         )
-    user = AuthService(database).authenticate("smoke_admin", "Smoke-Test-123")
+    user = AuthService(database).authenticate(smoke_username, smoke_credential)
     if user is None or user.role != "admin":
         raise RuntimeError("PipeERP executable smoke test failed")
     LOGGER.info("PipeERP executable smoke test passed")
