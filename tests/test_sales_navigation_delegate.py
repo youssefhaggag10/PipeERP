@@ -9,7 +9,12 @@ if os.environ.get("PIPEERP_GUI_SMOKE") != "1":
 def test_sales_item_stays_native_and_arrow_has_separate_click_area() -> None:
     from PySide6.QtCore import Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QListWidgetItem
+    from PySide6.QtWidgets import (
+        QApplication,
+        QListWidgetItem,
+        QStyle,
+        QStyleOptionViewItem,
+    )
 
     from app.ui.sales_navigation_delegate import (
         SALES_DROPDOWN_ROLE,
@@ -19,6 +24,7 @@ def test_sales_item_stays_native_and_arrow_has_separate_click_area() -> None:
 
     app = QApplication.instance() or QApplication([])
     navigation = NavigationListWidget()
+    navigation.setLayoutDirection(Qt.RightToLeft)
     navigation.setFixedWidth(240)
     font = navigation.font()
     font.setPointSize(18)
@@ -38,6 +44,24 @@ def test_sales_item_stays_native_and_arrow_has_separate_click_area() -> None:
     normal_rect = navigation.visualItemRect(normal_item)
     sales_rect = navigation.visualItemRect(sales_item)
     assert normal_rect.height() == sales_rect.height()
+
+    base_option = QStyleOptionViewItem()
+    base_option.widget = navigation
+    base_option.rect = sales_rect
+    normal_option = delegate.item_style_option(
+        base_option,
+        navigation.indexFromItem(normal_item),
+    )
+    sales_option = delegate.item_style_option(
+        base_option,
+        navigation.indexFromItem(sales_item),
+    )
+    assert sales_option.displayAlignment == normal_option.displayAlignment
+    visual_alignment = QStyle.visualAlignment(
+        Qt.RightToLeft,
+        sales_option.displayAlignment,
+    )
+    assert visual_alignment & Qt.AlignRight
 
     arrow_rect = delegate.arrow_rect(sales_rect)
     assert sales_rect.contains(arrow_rect)

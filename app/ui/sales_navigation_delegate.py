@@ -38,6 +38,16 @@ class SalesNavigationDelegate(QStyledItemDelegate):
         rect.setRight(item_rect.right() - spacing)
         return rect
 
+    def item_style_option(
+        self,
+        option: QStyleOptionViewItem,
+        index: QModelIndex,
+    ) -> QStyleOptionViewItem:
+        """Return Qt's native item option without overriding RTL alignment."""
+        styled = QStyleOptionViewItem(option)
+        self.initStyleOption(styled, index)
+        return styled
+
     def paint(
         self,
         painter: QPainter,
@@ -48,14 +58,12 @@ class SalesNavigationDelegate(QStyledItemDelegate):
             super().paint(painter, option, index)
             return
 
-        styled = QStyleOptionViewItem(option)
-        self.initStyleOption(styled, index)
-        styled.displayAlignment = Qt.AlignRight | Qt.AlignVCenter
+        styled = self.item_style_option(option, index)
         style = styled.widget.style() if styled.widget is not None else QApplication.style()
 
         painter.save()
-        # Let Qt draw the sales item text exactly like the remaining navigation
-        # items. The old manual text drawing caused the Arabic label to shift left.
+        # Qt keeps the Arabic sales label aligned exactly like every normal
+        # navigation item. Only the separate dropdown arrow is custom-painted.
         style.drawControl(QStyle.CE_ItemViewItem, styled, painter, styled.widget)
 
         arrow_option = QStyleOption()
