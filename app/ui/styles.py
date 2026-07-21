@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+FONT_SIZE_MIN = 5
+FONT_SIZE_MAX = 72
+SCALE_PERCENT_MIN = 25
+SCALE_PERCENT_MAX = 400
+
 DARK_PALETTE = {
     "window": "#0F172A",
     "surface": "#111827",
@@ -48,16 +53,29 @@ def build_stylesheet(
     scale_percent: int = 100,
 ) -> str:
     palette = LIGHT_PALETTE if theme == "light" else DARK_PALETTE
-    scale = max(90, min(140, int(scale_percent))) / 100
-    font = max(11, min(20, int(font_size)))
-    padding = max(6, round(8 * scale))
-    button_v = max(7, round(9 * scale))
-    button_h = max(11, round(14 * scale))
-    radius = max(6, round(8 * scale))
-    row_height = max(28, round(34 * scale))
-    tab_v = max(8, round(10 * scale))
-    tab_h = max(13, round(18 * scale))
-    scroll_size = max(12, round(14 * scale))
+    scale = max(
+        SCALE_PERCENT_MIN,
+        min(SCALE_PERCENT_MAX, int(scale_percent)),
+    ) / 100
+    font = max(FONT_SIZE_MIN, min(FONT_SIZE_MAX, int(font_size)))
+    padding = max(1, round(8 * scale))
+    button_v = max(1, round(9 * scale))
+    button_h = max(2, round(14 * scale))
+    radius = max(1, round(8 * scale))
+    row_height = max(14, round(34 * scale))
+    tab_v = max(1, round(10 * scale))
+    tab_h = max(2, round(18 * scale))
+    scroll_size = max(6, round(14 * scale))
+    card_radius = max(2, round(14 * scale))
+    item_padding_v = max(1, round(13 * scale))
+    item_padding_h = max(2, round(16 * scale))
+    item_margin_v = max(1, round(4 * scale))
+    item_margin_h = max(2, round(8 * scale))
+    tab_min_width = max(30, round(105 * scale))
+    menu_padding = max(1, round(6 * scale))
+    menu_item_v = max(1, round(8 * scale))
+    menu_item_h = max(2, round(14 * scale))
+    tooltip_padding = max(1, round(6 * scale))
 
     return f"""
 QWidget {{
@@ -139,20 +157,20 @@ QLabel#appHeader {{
     font-size: {round(font * 1.15)}px;
     font-weight: 800;
     color: {palette["text_strong"]};
-    padding: 4px;
+    padding: {max(1, round(4 * scale))}px;
 }}
 
 QFrame#card, QGroupBox {{
     background-color: {palette["surface"]};
     border: 1px solid {palette["border_soft"]};
-    border-radius: {max(10, round(14 * scale))}px;
-    margin-top: 10px;
+    border-radius: {card_radius}px;
+    margin-top: {max(2, round(10 * scale))}px;
 }}
 
 QGroupBox::title {{
     subcontrol-origin: margin;
     subcontrol-position: top right;
-    padding: 0 8px;
+    padding: 0 {max(2, round(8 * scale))}px;
     color: {palette["text_strong"]};
     font-weight: 700;
 }}
@@ -166,9 +184,9 @@ QListWidget {{
 
 QListWidget::item {{
     min-height: {row_height}px;
-    padding: {max(9, round(13 * scale))}px {max(12, round(16 * scale))}px;
+    padding: {item_padding_v}px {item_padding_h}px;
     border-radius: {radius}px;
-    margin: 4px 8px;
+    margin: {item_margin_v}px {item_margin_h}px;
 }}
 
 QListWidget::item:hover {{
@@ -192,7 +210,7 @@ QTabBar::tab {{
     color: {palette["text_strong"]};
     border: 1px solid {palette["border"]};
     padding: {tab_v}px {tab_h}px;
-    min-width: {round(105 * scale)}px;
+    min-width: {tab_min_width}px;
     font-weight: 700;
 }}
 
@@ -239,13 +257,13 @@ QMenu {{
     color: {palette["text_strong"]};
     border: 1px solid {palette["border"]};
     border-radius: {radius}px;
-    padding: 6px;
+    padding: {menu_padding}px;
 }}
 
 QMenu::item {{
     min-height: {row_height}px;
-    padding: 8px 14px;
-    border-radius: 6px;
+    padding: {menu_item_v}px {menu_item_h}px;
+    border-radius: {max(1, round(6 * scale))}px;
 }}
 
 QMenu::item:selected {{
@@ -257,7 +275,7 @@ QToolTip {{
     background-color: {palette["surface"]};
     color: {palette["text_strong"]};
     border: 1px solid {palette["border"]};
-    padding: 6px;
+    padding: {tooltip_padding}px;
 }}
 
 QScrollArea#contentScrollArea {{
@@ -268,14 +286,14 @@ QScrollArea#contentScrollArea {{
 QScrollBar:vertical {{
     background: {palette["header"]};
     width: {scroll_size}px;
-    margin: 2px;
+    margin: {max(1, round(2 * scale))}px;
     border-radius: {scroll_size // 2}px;
 }}
 
 QScrollBar::handle:vertical {{
     background: {palette["scroll"]};
-    min-height: 30px;
-    border-radius: {max(5, scroll_size // 2 - 1)}px;
+    min-height: {max(10, round(30 * scale))}px;
+    border-radius: {max(2, scroll_size // 2 - 1)}px;
 }}
 
 QScrollBar::handle:vertical:hover {{
@@ -285,14 +303,14 @@ QScrollBar::handle:vertical:hover {{
 QScrollBar:horizontal {{
     background: {palette["header"]};
     height: {scroll_size}px;
-    margin: 2px;
+    margin: {max(1, round(2 * scale))}px;
     border-radius: {scroll_size // 2}px;
 }}
 
 QScrollBar::handle:horizontal {{
     background: {palette["scroll"]};
-    min-width: 30px;
-    border-radius: {max(5, scroll_size // 2 - 1)}px;
+    min-width: {max(10, round(30 * scale))}px;
+    border-radius: {max(2, scroll_size // 2 - 1)}px;
 }}
 
 QScrollBar::handle:horizontal:hover {{
@@ -314,4 +332,11 @@ QScrollBar::add-page, QScrollBar::sub-page {{
 APP_STYLESHEET = build_stylesheet("dark", font_size=13, scale_percent=100)
 
 
-__all__ = ["APP_STYLESHEET", "build_stylesheet"]
+__all__ = [
+    "APP_STYLESHEET",
+    "FONT_SIZE_MAX",
+    "FONT_SIZE_MIN",
+    "SCALE_PERCENT_MAX",
+    "SCALE_PERCENT_MIN",
+    "build_stylesheet",
+]
