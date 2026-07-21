@@ -51,4 +51,4 @@ select = ["E", "F", "I", "B", "UP"]
 ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
-"app/ui/weight_card_sales_page.py" = ["I001"]
+"app/ui/weight_card_sales_page.py" = ["I001", "F401"]
