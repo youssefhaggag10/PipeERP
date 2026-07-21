@@ -9,7 +9,7 @@ if os.environ.get("PIPEERP_GUI_SMOKE") != "1":
 
 
 def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) -> None:
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QToolButton
 
     from app.database.connection import Database
     from app.database.schema import initialize_database
@@ -47,15 +47,24 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
         "CRM متابعة العملاء",
         "الأصناف",
         "المبيعات",
+        "بيع بالوزن / الكارتة",
         "التصنيع",
         "الإعدادات",
     }
     assert expected_pages.issubset(window.page_indexes)
     for title in expected_pages:
         index = window.page_indexes[title]
-        window.navigation.setCurrentRow(index)
+        window.pages_changed(index)
         app.processEvents()
+        assert window.pages.currentIndex() == index
         assert window.pages.widget(index) is not None
+
+    sales_buttons = [
+        button.text().strip()
+        for button in window.navigation.findChildren(QToolButton)
+    ]
+    assert "المبيعات" in sales_buttons
+    assert "▾" in sales_buttons
 
     window.close()
     app.processEvents()
