@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QTabWidget,
-    QWidget,
 )
 
 from app.ui.clickable_summary_accounts_page import ClickableSummaryAccountsPage
