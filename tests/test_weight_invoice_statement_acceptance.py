@@ -256,6 +256,16 @@ def test_weight_invoice_and_customer_statement_generate_real_artifacts(
     assert weight_pdf.stat().st_size > 10_000
     assert statement_pdf.stat().st_size > 10_000
     assert statement_excel.stat().st_size > 1_000
+    weight_pages = print_service.render_weight_invoice_images(invoice_document, settings)
+    statement_pages = print_service.render_customer_statement_images(statement, settings)
+    assert len(weight_pages) == 1
+    assert len(statement_pages) == 2
+    assert "سعر الكيلو" not in {
+        label for _, _, label, _ in print_service.weight_renderer.ITEM_COLUMNS
+    }
+    assert "وزن الكارتة" in {
+        label for _, _, label, _ in print_service.weight_renderer.ITEM_COLUMNS
+    }
 
     window.close()
     app.processEvents()
