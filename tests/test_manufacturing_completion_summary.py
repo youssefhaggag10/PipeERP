@@ -4,9 +4,7 @@ import pytest
 
 from app.database.connection import Database
 from app.database.schema import initialize_database
-from app.repositories.order_completion_manufacturing_repository import (
-    OrderCompletionManufacturingRepository,
-)
+from app.repositories.wizard_manufacturing_repository import WizardManufacturingRepository
 
 
 def _database(tmp_path: Path) -> Database:
@@ -83,7 +81,7 @@ def test_order_completion_records_mix_summary_and_returns_unused_materials(
         _stock(connection, raw_a, warehouse_id, 3000, 2)
         _stock(connection, raw_b, warehouse_id, 2000, 5)
 
-    repository = OrderCompletionManufacturingRepository(database)
+    repository = WizardManufacturingRepository(database)
     recipe_id = repository.create_recipe(
         code="MIX-SUMMARY",
         name="خلطة تقرير مجمع",
@@ -109,28 +107,44 @@ def test_order_completion_records_mix_summary_and_returns_unused_materials(
         (order_id,),
     )["n"] == 0
 
+    adjustments = [
+        {
+            "excluded_product_id": raw_b,
+            "batch_count": 3,
+            "reason": "تسببت في عيب بالإنتاج",
+            "actual_material_quantities": {raw_a: 600},
+        }
+    ]
+    outputs = {
+        pipe: {
+            "good_quantity": 95,
+            "defective_quantity": 5,
+            "actual_weight_kg": 2660,
+        }
+    }
+    preview = repository.preview_order_completion(
+        order_id,
+        actual_batches=10,
+        outputs=outputs,
+        scrap_weight=40,
+        notes="تم استبعاد خامة ب من آخر ثلاث خلطات",
+        adjustments=adjustments,
+    )
+    assert preview["full_batches"] == 7
+    assert preview["modified_batches"] == 3
+    assert preview["full_mix_cost"] == pytest.approx(6300)
+    assert preview["modified_mix_cost"] == pytest.approx(1200)
+    assert preview["total_cost"] == pytest.approx(7500)
+    assert preview["returns"][0]["product_id"] == raw_b
+    assert preview["returns"][0]["unused_quantity"] == pytest.approx(300)
+
     result = repository.complete_order_with_mix_summary(
         order_id,
         actual_batches=10,
-        full_batches=7,
-        modified_batches=3,
-        outputs={
-            pipe: {
-                "good_quantity": 95,
-                "defective_quantity": 5,
-                "actual_weight_kg": 2660,
-            }
-        },
+        outputs=outputs,
         scrap_weight=40,
         notes="تم استبعاد خامة ب من آخر ثلاث خلطات",
-        adjustments=[
-            {
-                "excluded_product_id": raw_b,
-                "batch_count": 3,
-                "reason": "تسببت في عيب بالإنتاج",
-                "actual_material_quantities": {raw_a: 600},
-            }
-        ],
+        adjustments=adjustments,
     )
 
     assert result["full_mix_cost"] == pytest.approx(6300)
@@ -180,6 +194,9 @@ def test_order_completion_records_mix_summary_and_returns_unused_materials(
     assert summary["modified_batches"] == 3
     assert summary["good_output_quantity"] == pytest.approx(95)
     assert summary["defective_output_quantity"] == pytest.approx(5)
+    assert summary["outputs"][0]["actual_weight_kg"] == pytest.approx(2660)
+    assert summary["returns"][0]["product_id"] == raw_b
+    assert summary["returns"][0]["unused_quantity"] == pytest.approx(300)
     assert summary["adjustments"][0]["name"] == "خامة ب"
     assert summary["adjustments"][0]["excluded_batches"] == 3
     assert "خامة أ" in summary["adjustments"][0]["actual_materials_text"]
