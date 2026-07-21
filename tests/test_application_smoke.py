@@ -122,7 +122,7 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
     assert inventory_page.lot_input.isReadOnly()
 
     accounts_page = window.pages.widget(window.page_indexes["الحسابات"])
-    tabs = accounts_pade.findChild(QTabWidget)
+    tabs = accounts_page.findChild(QTabWidget)
     assert tabs is not None
     treasury_index = next(
         index
