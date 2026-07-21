@@ -3,6 +3,18 @@ from __future__ import annotations
 EPSILON = 0.0000001
 
 
+def _issued_batch_count(materials: list[dict], actual_batches: int) -> int:
+    candidates = []
+    for material in materials:
+        if str(material.get("component_kind", "material")) == "scrap":
+            continue
+        per_batch = float(material.get("quantity_per_batch", 0) or 0)
+        issued = float(material.get("actual_quantity", 0) or 0)
+        if per_batch > EPSILON:
+            candidates.append(round(issued / per_batch))
+    return max([actual_batches, *candidates])
+
+
 def calculate_completion_preview(
     *,
     materials: list[dict],
@@ -23,16 +35,24 @@ def calculate_completion_preview(
     if full_batches < 0:
         raise ValueError("مجموع الخلطات المعدلة لا يمكن أن يتجاوز عدد الخلطات الفعلي")
 
+    issued_batches = _issued_batch_count(materials, actual_batches)
     material_by_id = {int(row["product_id"]): row for row in materials}
+    effective_per_batch = {}
+    for product_id, material in material_by_id.items():
+        recipe_quantity = float(material["quantity_per_batch"] or 0)
+        if str(material.get("component_kind", "material")) == "scrap" and issued_batches > 0:
+            issued_per_batch = float(material["actual_quantity"] or 0) / issued_batches
+            effective_per_batch[product_id] = min(recipe_quantity, issued_per_batch)
+        else:
+            effective_per_batch[product_id] = recipe_quantity
+
     used = {
-        product_id: float(material["quantity_per_batch"]) * full_batches
-        for product_id, material in material_by_id.items()
+        product_id: effective_per_batch[product_id] * full_batches
+        for product_id in material_by_id
     }
     full_mix_cost = sum(
-        float(material["quantity_per_batch"])
-        * full_batches
-        * float(material["unit_cost"] or 0)
-        for material in materials
+        used[product_id] * float(material["unit_cost"] or 0)
+        for product_id, material in material_by_id.items()
     )
 
     modified_mix_cost = 0.0
@@ -49,13 +69,15 @@ def calculate_completion_preview(
                 adjustment.get("actual_material_quantities") or {}
             ).items()
         }
+        if set(supplied).difference(material_by_id):
+            raise ValueError("تفاصيل الكميات تحتوي على خامة لا تخص أمر التصنيع")
         for product_id, material in material_by_id.items():
             if product_id == excluded_id:
                 quantity = 0.0
             elif product_id in supplied:
                 quantity = supplied[product_id]
             else:
-                quantity = float(material["quantity_per_batch"]) * batch_count
+                quantity = effective_per_batch[product_id] * batch_count
             if quantity < 0:
                 raise ValueError("كميات الخامات الفعلية لا يمكن أن تكون سالبة")
             used[product_id] += quantity
