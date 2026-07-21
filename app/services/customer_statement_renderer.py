@@ -50,6 +50,7 @@ class CustomerStatementRenderer(A4InvoiceRenderer):
             try:
                 self._draw_header(painter, settings)
                 self._draw_statement_title(painter)
+                self._clear_document_body(painter)
                 self._draw_statement_metadata(painter, statement)
                 self._draw_statement_rows(painter, chunk)
                 self._draw_footer(painter, settings, page_index + 1, total_pages)
@@ -65,6 +66,7 @@ class CustomerStatementRenderer(A4InvoiceRenderer):
         try:
             self._draw_header(painter, settings)
             self._draw_summary_title(painter)
+            self._clear_document_body(painter)
             self._draw_summary_metadata(painter, statement)
             self._draw_statement_summary(painter, statement)
             self._draw_footer(painter, settings, total_pages, total_pages)
@@ -72,6 +74,10 @@ class CustomerStatementRenderer(A4InvoiceRenderer):
             painter.end()
         pages.append(summary_page)
         return pages
+
+    def _clear_document_body(self, painter: QPainter) -> None:
+        """Remove invoice-only artwork while preserving the branded footer."""
+        painter.fillRect(QRect(31, 342, 989, 968), self.WHITE)
 
     def _paginate_rows(self, rows: list[dict]) -> list[list[dict]]:
         if not rows:
