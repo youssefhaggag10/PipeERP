@@ -1,8 +1,18 @@
+from app.repositories.return_refund_invoice_repository import (
+    ReturnRefundInvoiceRepository,
+)
 from app.repositories.return_refund_repository import ReturnRefundRepository
 
 
 class DetailedReturnRefundRepository(ReturnRefundRepository):
     """Provides drill-down rows for every account summary card."""
+
+    def __init__(self, database) -> None:
+        super().__init__(database)
+        # Customer statements query posted invoice returns directly. Ensure the
+        # shared return tables exist even when the accounts repository is used
+        # without opening the invoice screen first.
+        ReturnRefundInvoiceRepository(database)
 
     def summary_card_details(self, key: str) -> dict:
         if key in {"sales_total", "purchases_total"}:
@@ -22,7 +32,11 @@ class DetailedReturnRefundRepository(ReturnRefundRepository):
         order_fk = "sales_order_id" if is_sales else "purchase_order_id"
         partner_fk = "customer_id" if is_sales else "supplier_id"
         invoice_type = "sales" if is_sales else "purchase"
-        title = "تفاصيل إجمالي فواتير المبيعات" if is_sales else "تفاصيل إجمالي فواتير المشتريات"
+        title = (
+            "تفاصيل إجمالي فواتير المبيعات"
+            if is_sales
+            else "تفاصيل إجمالي فواتير المشتريات"
+        )
         rows = self.database.fetch_all(
             f"""
             SELECT invoice.invoice_number, orders.order_number, p.name AS partner_name,
@@ -45,15 +59,27 @@ class DetailedReturnRefundRepository(ReturnRefundRepository):
         )
         data = [
             [
-                row["invoice_number"], row["order_number"], row["partner_name"],
-                row["invoice_date"], f"{float(row['original_total']):,.2f}",
-                f"{float(row['returned_total']):,.2f}", f"{float(row['net_total']):,.2f}",
+                row["invoice_number"],
+                row["order_number"],
+                row["partner_name"],
+                row["invoice_date"],
+                f"{float(row['original_total']):,.2f}",
+                f"{float(row['returned_total']):,.2f}",
+                f"{float(row['net_total']):,.2f}",
             ]
             for row in rows
         ]
         return {
             "title": title,
-            "headers": ["الفاتورة", "الأمر", "الطرف", "التاريخ", "الأصلي", "المرتجع", "الصافي"],
+            "headers": [
+                "الفاتورة",
+                "الأمر",
+                "الطرف",
+                "التاريخ",
+                "الأصلي",
+                "المرتجع",
+                "الصافي",
+            ],
             "rows": data,
         }
 
@@ -86,15 +112,29 @@ class DetailedReturnRefundRepository(ReturnRefundRepository):
         )
         data = [
             [
-                row["transaction_number"], row["transaction_date"], row["partner_name"],
-                f"{float(row['amount']):,.2f}", row["payment_method"], row["account_name"],
-                row["reference_number"], row["notes"],
+                row["transaction_number"],
+                row["transaction_date"],
+                row["partner_name"],
+                f"{float(row['amount']):,.2f}",
+                row["payment_method"],
+                row["account_name"],
+                row["reference_number"],
+                row["notes"],
             ]
             for row in rows
         ]
         return {
             "title": title,
-            "headers": ["رقم الحركة", "التاريخ", "الطرف", "المبلغ", "الطريقة", "الحساب", "المستند", "ملاحظات"],
+            "headers": [
+                "رقم الحركة",
+                "التاريخ",
+                "الطرف",
+                "المبلغ",
+                "الطريقة",
+                "الحساب",
+                "المستند",
+                "ملاحظات",
+            ],
             "rows": data,
         }
 
@@ -104,7 +144,11 @@ class DetailedReturnRefundRepository(ReturnRefundRepository):
         reference_type = "sale" if is_customer else "purchase"
         invoice_table = "sales_invoices" if is_customer else "purchase_invoices"
         invoice_order_fk = "sales_order_id" if is_customer else "purchase_order_id"
-        title = "تفاصيل الدفعات المقدمة من العملاء" if is_customer else "تفاصيل الدفعات المقدمة للموردين"
+        title = (
+            "تفاصيل الدفعات المقدمة من العملاء"
+            if is_customer
+            else "تفاصيل الدفعات المقدمة للموردين"
+        )
         rows = self.database.fetch_all(
             f"""
             SELECT pt.transaction_number, pt.transaction_date, p.name AS partner_name,
@@ -138,34 +182,65 @@ class DetailedReturnRefundRepository(ReturnRefundRepository):
         )
         data = [
             [
-                row["transaction_number"], row["transaction_date"], row["partner_name"],
-                f"{float(row['amount']):,.2f}", row["payment_method"], row["account_name"],
-                row["reference_number"], row["notes"],
+                row["transaction_number"],
+                row["transaction_date"],
+                row["partner_name"],
+                f"{float(row['amount']):,.2f}",
+                row["payment_method"],
+                row["account_name"],
+                row["reference_number"],
+                row["notes"],
             ]
             for row in rows
         ]
         return {
             "title": title,
-            "headers": ["رقم الحركة", "التاريخ", "الطرف", "المبلغ", "الطريقة", "الحساب", "المستند", "ملاحظات"],
+            "headers": [
+                "رقم الحركة",
+                "التاريخ",
+                "الطرف",
+                "المبلغ",
+                "الطريقة",
+                "الحساب",
+                "المستند",
+                "ملاحظات",
+            ],
             "rows": data,
         }
 
     def _balance_details(self, key: str) -> dict:
         partner_type = "customer" if key == "receivables" else "supplier"
-        title = "تفاصيل مديونيات العملاء" if partner_type == "customer" else "تفاصيل مديونيات الموردين"
+        title = (
+            "تفاصيل مديونيات العملاء"
+            if partner_type == "customer"
+            else "تفاصيل مديونيات الموردين"
+        )
         rows = self.list_partner_balances(partner_type)
         data = [
             [
-                row["code"], row["name"], f"{float(row['opening_balance']):,.2f}",
-                f"{float(row['invoices_total']):,.2f}", f"{float(row['paid']):,.2f}",
-                f"{float(row['advances']):,.2f}", f"{float(row.get('refunds_total', 0)) :,.2f}",
+                row["code"],
+                row["name"],
+                f"{float(row['opening_balance']):,.2f}",
+                f"{float(row['invoices_total']):,.2f}",
+                f"{float(row['paid']):,.2f}",
+                f"{float(row['advances']):,.2f}",
+                f"{float(row.get('refunds_total', 0)):,.2f}",
                 f"{float(row['balance']):,.2f}",
             ]
             for row in rows
         ]
         return {
             "title": title,
-            "headers": ["الكود", "الطرف", "افتتاحي", "صافي الفواتير", "سداد فواتير", "دفعات مقدمة", "استردادات", "الرصيد"],
+            "headers": [
+                "الكود",
+                "الطرف",
+                "افتتاحي",
+                "صافي الفواتير",
+                "سداد فواتير",
+                "دفعات مقدمة",
+                "استردادات",
+                "الرصيد",
+            ],
             "rows": data,
         }
 
