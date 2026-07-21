@@ -36,7 +36,36 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[build]"
+          python -m pip install -e ".[build,dev]"
+
+      - name: Generate acceptance screenshots and documents
+        shell: pwsh
+        env:
+          PYTHONPATH: "."
+          QT_QPA_PLATFORM: offscreen
+          PIPEERP_GUI_SMOKE: "1"
+          PIPEERP_DATA_DIR: .pipeerp-windows-acceptance-data
+        run: |
+          python -m pytest -q tests/test_weight_invoice_statement_acceptance.py
+          $required = @(
+            ".pipeerp-acceptance-artifacts\weight-invoice-screen.png",
+            ".pipeerp-acceptance-artifacts\customer-statement-screen.png",
+            ".pipeerp-acceptance-artifacts\weight-invoice-sample.pdf",
+            ".pipeerp-acceptance-artifacts\customer-statement-sample.pdf",
+            ".pipeerp-acceptance-artifacts\customer-statement-sample.xlsx"
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path $path)) { throw "Acceptance artifact is missing: $path" }
+            if ((Get-Item $path).Length -le 0) { throw "Acceptance artifact is empty: $path" }
+          }
+
+      - name: Upload acceptance screenshots and documents
+        uses: actions/upload-artifact@v4
+        with:
+          name: PipeERP-Weight-Invoice-Customer-Statement-Acceptance
+          path: .pipeerp-acceptance-artifacts
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Generate Windows icon
         shell: pwsh
