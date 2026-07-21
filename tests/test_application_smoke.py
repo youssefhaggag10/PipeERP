@@ -27,6 +27,7 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
         AppearanceSettingsRepository,
         apply_appearance,
     )
+    from app.ui.customer_statement_page import CustomerStatementPage
     from app.ui.main_window import MainWindow, SalesNavigationDelegate
     from app.ui.treasury_order_pages import TreasurySalesAccountingPageWithPrint
     from app.ui.weight_card_sales_page import WeightCardSalesPage
@@ -115,6 +116,32 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
     assert isinstance(weight_sales_page, QWidget)
     assert isinstance(weight_sales_page, WeightCardSalesPage)
     assert not isinstance(weight_sales_page, TreasurySalesAccountingPageWithPrint)
+    assert weight_sales_page.order_number_input.isReadOnly()
+    assert weight_sales_page.invoice_number_input.isReadOnly()
+    assert weight_sales_page.card_number_input.isReadOnly()
+    assert weight_sales_page.card_number_input.text().startswith("WC")
+    assert not weight_sales_page.vehicle_scale_panel.isVisible()
+    assert weight_sales_page.lines_table.isColumnHidden(0)
+    assert weight_sales_page.lines_table.isColumnHidden(8)
+    assert weight_sales_page.lines_table.isColumnHidden(9)
+    assert {
+        weight_sales_page.weight_mode_input.itemData(index)
+        for index in range(weight_sales_page.weight_mode_input.count())
+    } == {"total_card", "per_line"}
+    assert {
+        weight_sales_page.pricing_mode_input.itemData(index)
+        for index in range(weight_sales_page.pricing_mode_input.count())
+    } == {"uniform", "per_line"}
+    weight_buttons = {
+        button.text().strip() for button in weight_sales_page.findChildren(QPushButton)
+    }
+    assert {
+        "حفظ كمسودة",
+        "اعتماد الفاتورة",
+        "اعتماد وطباعة",
+        "تفريغ البيانات",
+        "إلغاء",
+    }.issubset(weight_buttons)
 
     purchase_page = window.pages.widget(window.page_indexes["المشتريات"])
     inventory_page = window.pages.widget(window.page_indexes["رصيد المخزون"])
@@ -122,8 +149,11 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
     assert inventory_page.lot_input.isReadOnly()
 
     accounts_page = window.pages.widget(window.page_indexes["الحسابات"])
-    tabs = accounts_page.findChild(QTabWidget)
-    assert tabs is not None
+    tabs = next(
+        tab
+        for tab in accounts_page.findChildren(QTabWidget)
+        if tab.count() and tab.tabText(0).strip() == "الملخص"
+    )
     treasury_index = next(
         index
         for index in range(tabs.count())
@@ -133,6 +163,14 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
     assert isinstance(treasury_scroll, QScrollArea)
     assert treasury_scroll.widgetResizable()
     assert treasury_scroll.objectName() == "treasuryAccountsScrollArea"
+    statement_index = next(
+        index
+        for index in range(tabs.count())
+        if tabs.tabText(index).strip() == "كشف حساب العميل"
+    )
+    statement_page = tabs.widget(statement_index)
+    assert isinstance(statement_page, CustomerStatementPage)
+    assert statement_page.objectName() == "customerStatementPage"
 
     manufacturing_index = window.page_indexes["التصنيع"]
     window.pages_changed(manufacturing_index)
@@ -159,7 +197,10 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
     action_buttons = [manufacturing_buttons[label] for label in action_labels]
     assert all(button.isVisible() for button in action_buttons)
     heights = {button.height() for button in action_buttons}
-    y_positions = {button.mapTo(manufacturing_page, QPoint(0, 0)).y() for button in action_buttons}
+    y_positions = {
+        button.mapTo(manufacturing_page, QPoint(0, 0)).y()
+        for button in action_buttons
+    }
     widths = [button.width() for button in action_buttons]
     assert len(heights) == 1
     assert next(iter(heights)) >= 44
