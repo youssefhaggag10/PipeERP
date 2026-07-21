@@ -357,14 +357,12 @@ class WeightInvoiceRepository(SalesRepository):
                 raise ValueError("فاتورة الوزن لا تحتوي على بنود")
 
             required_count: dict[int, float] = defaultdict(float)
-            required_weight: dict[int, float] = defaultdict(float)
             for line in lines:
                 quantity = float(line["quantity_pieces"] or 0)
                 weight = float(line["allocated_weight_kg"] or 0)
                 if quantity <= EPSILON or weight <= EPSILON:
                     raise ValueError("كل بند يجب أن يحتوي على عدد ووزن فعلي")
                 required_count[int(line["product_id"])] += quantity
-                required_weight[int(line["product_id"])] += weight
 
             for product_id, quantity in required_count.items():
                 available_count = float(
@@ -380,30 +378,6 @@ class WeightInvoiceRepository(SalesRepository):
                 if quantity - available_count > EPSILON:
                     raise ValueError(
                         f"عدد المواسير المطلوب أكبر من المتاح بالمخزون ({available_count:g})"
-                    )
-                desired_average = required_weight[product_id] / quantity
-                capacity = 0.0
-                layers = connection.execute(
-                    """
-                    SELECT quantity_in - quantity_out AS available_quantity,
-                           weight_in_kg - weight_out_kg AS available_weight
-                    FROM finished_good_weight_layers
-                    WHERE product_id = ? AND warehouse_id = ?
-                      AND quantity_in - quantity_out > 0.0000001
-                      AND weight_in_kg - weight_out_kg > 0.0000001
-                    ORDER BY id
-                    """,
-                    (product_id, int(order["warehouse_id"])),
-                ).fetchall()
-                for layer in layers:
-                    capacity += min(
-                        float(layer["available_quantity"]),
-                        float(layer["available_weight"]) / desired_average,
-                    )
-                if quantity - capacity > EPSILON:
-                    raise ValueError(
-                        "الوزن الفعلي المتاح لهذا المقاس لا يكفي للتسليم؛ "
-                        "راجع رصيد الوزن الفعلي بالمخزون"
                     )
 
             for line in lines:
@@ -583,7 +557,21 @@ class WeightInvoiceRepository(SalesRepository):
             remaining_quantity -= take_quantity
             remaining_weight -= take_weight
         if remaining_quantity > EPSILON or remaining_weight > EPSILON:
-            raise ValueError("تعذر خصم العدد والوزن الفعلي من طبقات المخزون")
+            # Stock created before weight-layer tracking is still valid by piece count.
+            # Preserve the card's actual commercial weight without blocking approval.
+            connection.execute(
+                """
+                INSERT INTO sales_weight_inventory_allocations(
+                    weight_card_line_id, weight_layer_id,
+                    quantity_pieces, weight_kg, cost_amount
+                ) VALUES (?, NULL, ?, ?, 0)
+                """,
+                (
+                    int(line["id"]),
+                    max(remaining_quantity, EPSILON),
+                    max(remaining_weight, EPSILON),
+                ),
+            )
 
     def get_weight_sale(self, order_id: int) -> dict:
         row = self.database.fetch_one(
