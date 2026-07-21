@@ -3,7 +3,7 @@ from __future__ import annotations
 from PySide6.QtWidgets import QDialog, QMessageBox, QPushButton
 
 from app.repositories.wizard_manufacturing_repository import WizardManufacturingRepository
-from app.ui.production_completion_wizard import ProductionCompletionWizard
+from app.ui.final_production_completion_wizard import FinalProductionCompletionWizard
 from app.ui.production_run_page import ProductionRunManufacturingPage
 
 
@@ -41,7 +41,7 @@ class FinalManufacturingPage(ProductionRunManufacturingPage):
             QMessageBox.warning(self, "تنبيه", str(error))
             return
 
-        wizard = ProductionCompletionWizard(order, self)
+        wizard = FinalProductionCompletionWizard(order, self)
         if wizard.exec() != QDialog.Accepted:
             return
         try:
