@@ -1,11 +1,15 @@
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
     QLabel,
     QListWidget,
+    QListWidgetItem,
     QMainWindow,
+    QMenu,
+    QSizePolicy,
     QStackedWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -19,13 +23,16 @@ from app.repositories.partner_repository import PartnerRepository
 from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.repositories.production_run_repository import ProductionRunRepository
 from app.repositories.return_refund_invoice_repository import ReturnRefundInvoiceRepository
+from app.repositories.sales_repository import SalesRepository
+from app.repositories.standalone_weight_sales_repository import (
+    StandaloneWeightSalesRepository,
+)
 from app.repositories.strict_product_repository import StrictProductRepository
 from app.repositories.supplier_cost_purchase_repository import (
     SupplierCostPurchaseRepository,
 )
 from app.repositories.system_admin_repository import SystemAdminRepository
 from app.repositories.warehouse_repository import WarehouseRepository
-from app.repositories.weight_sales_repository import WeightSalesRepository
 from app.services.crm_customer_sync import CRMCustomerSync
 from app.ui.admin_only_crm_page import AdminOnlyCRMPage
 from app.ui.appearance import AppearanceSettingsRepository, apply_appearance
@@ -42,7 +49,10 @@ from app.ui.responsive_accounts_page import ResponsiveAccountsPage
 from app.ui.stock_card_page import StockCardPage
 from app.ui.strict_products_page import StrictProductsPage
 from app.ui.table_readability import configure_tables_in_widget
-from app.ui.treasury_order_pages import TreasuryPurchaseAccountingPage
+from app.ui.treasury_order_pages import (
+    TreasuryPurchaseAccountingPage,
+    TreasurySalesAccountingPageWithPrint,
+)
 from app.ui.warehouse_page import WarehousePage
 from app.ui.watermark_overlay import WatermarkOverlay
 from app.ui.weight_card_sales_page import WeightCardSalesPage
@@ -62,14 +72,15 @@ class MainWindow(QMainWindow):
 
         self.navigation = QListWidget()
         self.navigation.setFixedWidth(240)
-        self.navigation.currentRowChanged.connect(self.pages_changed)
+        self.navigation.currentItemChanged.connect(self._navigation_item_changed)
 
         admin_repository = SystemAdminRepository(database, current_user)
         product_repository = StrictProductRepository(database)
         inventory_repository = AutomatedInventoryRepository(database)
         partner_repository = PartnerRepository(database)
         purchase_repository = SupplierCostPurchaseRepository(database)
-        sales_repository = WeightSalesRepository(database)
+        sales_repository = SalesRepository(database)
+        weight_sales_repository = StandaloneWeightSalesRepository(database)
         warehouse_repository = WarehouseRepository(database)
         accounting_repository = DetailedReturnRefundRepository(database)
         invoice_repository = ReturnRefundInvoiceRepository(database)
@@ -113,15 +124,27 @@ class MainWindow(QMainWindow):
                 ),
             )
         if admin_repository.has_permission("sales"):
-            self.add_page(
+            normal_sales_index = self.add_page(
                 "المبيعات",
-                WeightCardSalesPage(
+                TreasurySalesAccountingPageWithPrint(
                     sales_repository,
                     partner_repository,
                     product_repository,
                     warehouse_repository,
                 ),
+                add_navigation=False,
             )
+            weight_sales_index = self.add_page(
+                "بيع بالوزن / الكارتة",
+                WeightCardSalesPage(
+                    weight_sales_repository,
+                    partner_repository,
+                    product_repository,
+                    warehouse_repository,
+                ),
+                add_navigation=False,
+            )
+            self._add_sales_navigation(normal_sales_index, weight_sales_index)
         if admin_repository.has_permission("accounts"):
             self.add_page(
                 "الحسابات",
@@ -196,19 +219,83 @@ class MainWindow(QMainWindow):
         if self.activity_center is not None:
             self.activity_center.refresh()
 
-    def add_page(self, title: str, page: QWidget) -> None:
+    def add_page(self, title: str, page: QWidget, *, add_navigation: bool = True) -> int:
         configure_tables_in_widget(page)
         index = self.pages.count()
         self.page_indexes[title] = index
-        self.navigation.addItem(title)
         self.pages.addWidget(page)
+        if add_navigation:
+            item = QListWidgetItem(title)
+            item.setData(Qt.UserRole, index)
+            self.navigation.addItem(item)
         self.watermark_overlay.raise_()
+        return index
+
+    def _add_sales_navigation(self, normal_index: int, weight_index: int) -> None:
+        item = QListWidgetItem()
+        item.setData(Qt.UserRole, normal_index)
+        item.setSizeHint(QSize(0, 44))
+        self.navigation.addItem(item)
+
+        container = QWidget()
+        container.setLayoutDirection(Qt.RightToLeft)
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(6, 2, 6, 2)
+        layout.setSpacing(2)
+
+        sales_button = QToolButton()
+        sales_button.setText("المبيعات")
+        sales_button.setAutoRaise(True)
+        sales_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        sales_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        sales_button.clicked.connect(
+            lambda: self._open_navigation_page(item, normal_index)
+        )
+
+        arrow_button = QToolButton()
+        arrow_button.setText("▾")
+        arrow_button.setToolTip("اختيارات المبيعات")
+        arrow_button.setAutoRaise(True)
+        arrow_button.setFixedWidth(32)
+        arrow_button.setPopupMode(QToolButton.InstantPopup)
+
+        menu = QMenu(arrow_button)
+        normal_action = menu.addAction("بيع عادي")
+        weight_action = menu.addAction("بيع بالوزن / الكارتة")
+        normal_action.triggered.connect(
+            lambda: self._open_navigation_page(item, normal_index)
+        )
+        weight_action.triggered.connect(
+            lambda: self._open_navigation_page(item, weight_index)
+        )
+        arrow_button.setMenu(menu)
+
+        layout.addWidget(sales_button, 1)
+        layout.addWidget(arrow_button)
+        self.navigation.setItemWidget(item, container)
+
+    def _open_navigation_page(self, item: QListWidgetItem, page_index: int) -> None:
+        self.navigation.setCurrentItem(item)
+        self.pages_changed(page_index)
+
+    def _navigation_item_changed(
+        self,
+        current: QListWidgetItem | None,
+        _previous: QListWidgetItem | None,
+    ) -> None:
+        if current is None:
+            return
+        page_index = current.data(Qt.UserRole)
+        if page_index is None:
+            return
+        self.pages_changed(int(page_index))
 
     def _open_crm_activities(self) -> None:
         index = self.page_indexes.get("CRM متابعة العملاء")
         if index is None:
             return
-        self.navigation.setCurrentRow(index)
+        self._select_navigation_for_page(index)
+        self.pages_changed(index)
         if self.crm_page is not None and hasattr(self.crm_page, "tabs"):
             for tab_index in range(self.crm_page.tabs.count()):
                 if self.crm_page.tabs.tabText(tab_index).strip() == "الأنشطة":
@@ -216,8 +303,15 @@ class MainWindow(QMainWindow):
                     break
             self.crm_page.reload()
 
+    def _select_navigation_for_page(self, page_index: int) -> None:
+        for row in range(self.navigation.count()):
+            item = self.navigation.item(row)
+            if item.data(Qt.UserRole) == page_index:
+                self.navigation.setCurrentItem(item)
+                return
+
     def pages_changed(self, index: int) -> None:
-        if index < 0:
+        if index < 0 or index >= self.pages.count():
             return
         page = self.pages.widget(index)
         if isinstance(page, CRMPage):
