@@ -71,6 +71,9 @@ class CustomerStatementRenderer(A4InvoiceRenderer):
 
     def _draw_statement_metadata(self, painter: QPainter, statement: dict) -> None:
         customer = statement.get("customer", {})
+        # The source A4 template contains invoice-specific icons in this zone.
+        # Cover it first so statement metadata and opening balance stay clean.
+        painter.fillRect(QRect(31, 342, 989, 148), self.WHITE)
         values = (
             (31, 260, "العميل", customer.get("name", "—")),
             (260, 440, "كود العميل", customer.get("code", "—")),
@@ -78,9 +81,11 @@ class CustomerStatementRenderer(A4InvoiceRenderer):
             (620, 820, "من تاريخ", statement.get("date_from", "—")),
             (820, 1020, "إلى تاريخ", statement.get("date_to", "—")),
         )
+        painter.setPen(QPen(self.GRID, 1))
         for left, right, label, value in values:
             painter.fillRect(QRect(left, 350, right - left, 44), self.DARK_BLUE)
             painter.fillRect(QRect(left, 394, right - left, 44), self.WHITE)
+            painter.drawRect(QRect(left, 350, right - left, 88))
             self._draw_text(
                 painter,
                 QRect(left + 4, 350, right - left - 8, 44),
@@ -100,10 +105,12 @@ class CustomerStatementRenderer(A4InvoiceRenderer):
                 min_size=10,
             )
         opening = float(statement.get("opening_balance", 0) or 0)
+        painter.fillRect(QRect(31, 446, 989, 42), self.WHITE)
+        painter.drawRect(QRect(31, 446, 989, 42))
         self._draw_text(
             painter,
-            QRect(31, 446, 989, 42),
-            f"رصيد أول المدة: {opening:,.2f} جنيه — "
+            QRect(45, 446, 961, 42),
+            f"رصيد أول المدة: {opening:,.2f} جنيه - "
             + ("كشف تفصيلي" if statement.get("detailed") else "كشف مختصر"),
             20,
             self.DARK_BLUE,
@@ -228,9 +235,9 @@ class CustomerStatementRenderer(A4InvoiceRenderer):
                     {
                         "is_detail": True,
                         "movement_date": "",
-                        "document_number": "↳",
+                        "document_number": "",
                         "document_type": "بند فاتورة",
-                        "description": " — ".join(detail_parts),
+                        "description": " - ".join(detail_parts),
                         "debit": 0,
                         "credit": 0,
                         "running_balance": movement.get("running_balance", 0),
