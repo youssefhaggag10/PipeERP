@@ -246,7 +246,9 @@ def test_per_line_weight_and_price_are_saved_and_approved(tmp_path: Path) -> Non
     assert [float(row["line_total"]) for row in stored] == pytest.approx([380, 775])
 
 
-def test_approval_without_actual_weight_stock_is_rejected_atomically(tmp_path: Path) -> None:
+def test_approval_with_legacy_piece_only_stock_records_untracked_weight(
+    tmp_path: Path,
+) -> None:
     database = Database(tmp_path / "missing-weight.sqlite3")
     initialize_database(database)
     customer_id = _customer(database)
@@ -281,16 +283,70 @@ def test_approval_without_actual_weight_stock_is_rejected_atomically(tmp_path: P
         uniform_price_per_kg=10,
     )
 
-    with pytest.raises(ValueError, match="رصيد الوزن الفعلي"):
-        repository.approve_weight_sale(draft["order_id"])
+    approved = repository.approve_weight_sale(draft["order_id"])
 
     assert float(
         database.fetch_one(
             "SELECT COALESCE(SUM(quantity_out), 0) AS value FROM inventory_moves "
-            "WHERE product_id = ?",
+            "WHERE product_id = ? AND reference_type = 'sale'",
             (product_id,),
         )["value"]
-    ) == 0
+    ) == pytest.approx(2)
+    invoice = database.fetch_one(
+        "SELECT status, total FROM sales_invoices WHERE id = ?",
+        (approved["invoice_id"],),
+    )
+    assert tuple(invoice) == ("posted", 200)
+    allocation = database.fetch_one(
+        """
+        SELECT weight_layer_id, quantity_pieces, weight_kg, cost_amount
+        FROM sales_weight_inventory_allocations
+        """
+    )
+    assert allocation["weight_layer_id"] is None
+    assert float(allocation["quantity_pieces"]) == pytest.approx(2)
+    assert float(allocation["weight_kg"]) == pytest.approx(20)
+    assert float(allocation["cost_amount"]) == pytest.approx(0)
+
+
+def test_approval_still_rejects_quantity_above_piece_stock(tmp_path: Path) -> None:
+    database = Database(tmp_path / "insufficient-piece-stock.sqlite3")
+    initialize_database(database)
+    customer_id = _customer(database)
+    with database.session(immediate=True) as connection:
+        warehouse_id = int(
+            connection.execute("SELECT id FROM warehouses WHERE code = 'MAIN'").fetchone()[0]
+        )
+        product_id = int(
+            connection.execute(
+                """
+                INSERT INTO products(
+                    code, name, product_type, unit, standard_weight_kg
+                ) VALUES ('LOW-STOCK', 'رصيد عدد غير كاف', 'finished_good', 'ماسورة', 10)
+                """
+            ).lastrowid
+        )
+        connection.execute(
+            """
+            INSERT INTO inventory_moves(
+                product_id, warehouse_id, quantity_in, unit_cost, reference_type
+            ) VALUES (?, ?, 1, 100, 'opening')
+            """,
+            (product_id, warehouse_id),
+        )
+    repository = WeightInvoiceRepository(database)
+    draft = repository.create_weight_sale_draft(
+        customer_id=customer_id,
+        lines=[{"product_id": product_id, "quantity": 2}],
+        weight_mode="total_card",
+        pricing_mode="uniform",
+        net_weight_kg=20,
+        uniform_price_per_kg=10,
+    )
+
+    with pytest.raises(ValueError, match="عدد المواسير المطلوب أكبر"):
+        repository.approve_weight_sale(draft["order_id"])
+
     assert database.fetch_one(
         "SELECT id FROM sales_invoices WHERE sales_order_id = ?",
         (draft["order_id"],),
