@@ -121,17 +121,31 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
     assert weight_sales_page.card_number_input.isReadOnly()
     assert weight_sales_page.card_number_input.text().startswith("WC")
     assert not weight_sales_page.vehicle_scale_panel.isVisible()
-    assert weight_sales_page.lines_table.isColumnHidden(0)
-    assert weight_sales_page.lines_table.isColumnHidden(8)
-    assert weight_sales_page.lines_table.isColumnHidden(9)
+    assert weight_sales_page.lines_table.columnCount() == 8
+    assert [
+        weight_sales_page.lines_table.horizontalHeaderItem(column).text()
+        for column in range(weight_sales_page.lines_table.columnCount())
+    ] == [
+        "م",
+        "البيان",
+        "الوحدة",
+        "الكمية",
+        "وزن الكارتة",
+        "سعر الكيلو",
+        "الإجمالي",
+        "ملاحظات",
+    ]
     assert {
         weight_sales_page.weight_mode_input.itemData(index)
         for index in range(weight_sales_page.weight_mode_input.count())
     } == {"total_card", "per_line"}
-    assert {
-        weight_sales_page.pricing_mode_input.itemData(index)
-        for index in range(weight_sales_page.pricing_mode_input.count())
-    } == {"uniform", "per_line"}
+    assert weight_sales_page.total_card_panel.isVisible()
+    weight_sales_page.weight_mode_input.setCurrentIndex(
+        weight_sales_page.weight_mode_input.findData("per_line")
+    )
+    app.processEvents()
+    assert not weight_sales_page.total_card_panel.isVisible()
+    assert "داخل صف كل بند" in weight_sales_page.mode_hint_label.text()
     weight_buttons = {
         button.text().strip() for button in weight_sales_page.findChildren(QPushButton)
     }

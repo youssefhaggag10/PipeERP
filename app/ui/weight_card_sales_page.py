@@ -38,7 +38,7 @@ STATUS_LABELS = {
     "cancelled": "ملغاة",
 }
 
-COL_CODE = 0
+COL_SERIAL = 0
 COL_NAME = 1
 COL_UNIT = 2
 COL_QUANTITY = 3
@@ -46,8 +46,6 @@ COL_ACTUAL_WEIGHT = 4
 COL_PRICE_KG = 5
 COL_LINE_TOTAL = 6
 COL_NOTES = 7
-COL_STANDARD_WEIGHT = 8
-COL_THEORETICAL_WEIGHT = 9
 
 
 class WeightCardSalesPage(QWidget):
@@ -76,8 +74,8 @@ class WeightCardSalesPage(QWidget):
         title = QLabel("فاتورة مبيعات بالوزن / الكارتة")
         title.setObjectName("titleLabel")
         intro = QLabel(
-            "فاتورة مستقلة عن البيع بالقطعة. قيمة الفاتورة تعتمد على الوزن الفعلي "
-            "فقط، بينما الوزن القياسي والنظري للمرجعية وتحليل المخزون."
+            "اختر أولًا هل ستُدخل وزنًا إجماليًا للكارتة أم وزنًا منفصلًا لكل بند، "
+            "ثم أضف البنود كما تظهر في كارتة العميل."
         )
         intro.setWordWrap(True)
         intro.setObjectName("subtitleLabel")
@@ -101,7 +99,7 @@ class WeightCardSalesPage(QWidget):
         content = QWidget()
         layout = QVBoxLayout(content)
 
-        numbers_group = QGroupBox("بيانات المستند")
+        numbers_group = QGroupBox("بيانات الفاتورة")
         numbers_layout = QGridLayout(numbers_group)
         self.order_number_input = self._readonly_line()
         self.invoice_number_input = self._readonly_line()
@@ -117,53 +115,47 @@ class WeightCardSalesPage(QWidget):
         self.notes_input.setPlaceholderText("ملاحظات عامة على الفاتورة")
         self.notes_input.setMaximumHeight(86)
 
-        fields = (
-            ("رقم أمر البيع", self.order_number_input),
-            ("رقم الفاتورة", self.invoice_number_input),
-            ("رقم كارتة الوزن", self.card_number_input),
-            ("تاريخ البيع", self.sale_date_input),
-            ("العميل", self.customer_input),
-            ("المخزن", self.warehouse_input),
-            ("السيارة / الحمولة", self.vehicle_input),
-        )
-        for index, (label, widget) in enumerate(fields):
-            row = index // 2
-            column = (index % 2) * 2
-            numbers_layout.addWidget(QLabel(label), row, column)
-            numbers_layout.addWidget(widget, row, column + 1)
-        notes_row = (len(fields) + 1) // 2
-        numbers_layout.addWidget(QLabel("ملاحظات"), notes_row, 0)
-        numbers_layout.addWidget(self.notes_input, notes_row, 1, 1, 3)
+        self.document_numbers_label = QLabel()
+        self.document_numbers_label.setObjectName("subtitleLabel")
+        self.document_numbers_label.setWordWrap(True)
+        numbers_layout.addWidget(QLabel("العميل"), 0, 0)
+        numbers_layout.addWidget(self.customer_input, 0, 1, 1, 3)
+        numbers_layout.addWidget(QLabel("تاريخ البيع"), 1, 0)
+        numbers_layout.addWidget(self.sale_date_input, 1, 1)
+        numbers_layout.addWidget(QLabel("السيارة / الحمولة"), 1, 2)
+        numbers_layout.addWidget(self.vehicle_input, 1, 3)
+        numbers_layout.addWidget(QLabel("ملاحظات عامة"), 2, 0)
+        numbers_layout.addWidget(self.notes_input, 2, 1, 1, 3)
+        numbers_layout.addWidget(self.document_numbers_label, 3, 0, 1, 4)
         numbers_layout.setColumnStretch(1, 1)
         numbers_layout.setColumnStretch(3, 1)
-        layout.addWidget(numbers_group)
 
-        modes_group = QGroupBox("طريقة الوزن والتسعير")
+        modes_group = QGroupBox("1 — اختر طريقة إدخال الوزن")
         modes_layout = QGridLayout(modes_group)
         self.weight_mode_input = QComboBox()
         self.weight_mode_input.addItem("وزن إجمالي للكارتة", "total_card")
         self.weight_mode_input.addItem("وزن منفصل لكل بند", "per_line")
-        self.pricing_mode_input = QComboBox()
-        self.pricing_mode_input.addItem("سعر كيلو موحد لكل الكارتة", "uniform")
-        self.pricing_mode_input.addItem("سعر كيلو مختلف لكل بند", "per_line")
+        self.weight_mode_input.setMinimumHeight(42)
+        self.mode_hint_label = QLabel()
+        self.mode_hint_label.setWordWrap(True)
+        self.mode_hint_label.setObjectName("subtitleLabel")
+
+        self.total_card_panel = QWidget()
+        total_card_layout = QGridLayout(self.total_card_panel)
+        total_card_layout.setContentsMargins(0, 6, 0, 0)
         self.use_vehicle_scale_input = QCheckBox("حساب الوزن من ميزان السيارة")
         self.net_weight_input = self._weight_spinbox()
         self.net_weight_input.setSuffix(" كجم")
-        self.net_weight_input.setToolTip("الوزن الصافي الفعلي للكارتة")
+        self.net_weight_input.setToolTip("وزن الكارتة الإجمالي الذي سيتم توزيعه على البنود")
         self.uniform_price_input = self._money_spinbox()
         self.uniform_price_input.setSuffix(" جنيه/كجم")
-
-        modes_layout.addWidget(QLabel("طريقة الوزن"), 0, 0)
-        modes_layout.addWidget(self.weight_mode_input, 0, 1)
-        modes_layout.addWidget(QLabel("طريقة التسعير"), 0, 2)
-        modes_layout.addWidget(self.pricing_mode_input, 0, 3)
-        modes_layout.addWidget(self.use_vehicle_scale_input, 1, 0, 1, 2)
-        modes_layout.addWidget(QLabel("الوزن الصافي الفعلي"), 1, 2)
-        modes_layout.addWidget(self.net_weight_input, 1, 3)
-        modes_layout.addWidget(QLabel("سعر الكيلو الموحد"), 2, 2)
-        modes_layout.addWidget(self.uniform_price_input, 2, 3)
-        modes_layout.setColumnStretch(1, 1)
-        modes_layout.setColumnStretch(3, 1)
+        total_card_layout.addWidget(QLabel("وزن الكارتة الإجمالي"), 0, 0)
+        total_card_layout.addWidget(self.net_weight_input, 0, 1)
+        total_card_layout.addWidget(QLabel("سعر الكيلو للكارتة"), 0, 2)
+        total_card_layout.addWidget(self.uniform_price_input, 0, 3)
+        total_card_layout.addWidget(self.use_vehicle_scale_input, 1, 0, 1, 2)
+        total_card_layout.setColumnStretch(1, 1)
+        total_card_layout.setColumnStretch(3, 1)
 
         self.vehicle_scale_panel = QWidget()
         vehicle_layout = QHBoxLayout(self.vehicle_scale_panel)
@@ -176,42 +168,50 @@ class WeightCardSalesPage(QWidget):
         vehicle_layout.addWidget(self.gross_input)
         vehicle_layout.addWidget(QLabel("وزن السيارة الفارغ"))
         vehicle_layout.addWidget(self.tare_input)
-        modes_layout.addWidget(self.vehicle_scale_panel, 2, 0, 1, 2)
-        layout.addWidget(modes_group)
+        total_card_layout.addWidget(self.vehicle_scale_panel, 1, 2, 1, 2)
 
-        add_group = QGroupBox("إضافة بند")
+        modes_layout.addWidget(QLabel("طريقة البيع بالوزن"), 0, 0)
+        modes_layout.addWidget(self.weight_mode_input, 0, 1)
+        modes_layout.addWidget(self.mode_hint_label, 0, 2, 1, 2)
+        modes_layout.addWidget(self.total_card_panel, 1, 0, 1, 4)
+        modes_layout.setColumnStretch(1, 1)
+        modes_layout.setColumnStretch(2, 1)
+        modes_layout.setColumnStretch(3, 1)
+        layout.addWidget(modes_group)
+        layout.addWidget(numbers_group)
+
+        add_group = QGroupBox("2 — إضافة بند")
         add_layout = QHBoxLayout(add_group)
         self.product_input = QComboBox()
+        self.unit_input = QLineEdit("ماسورة")
+        self.unit_input.setPlaceholderText("الوحدة")
         self.quantity_input = self._quantity_spinbox()
         add_button = QPushButton("إضافة البند")
         add_button.clicked.connect(self.add_line)
         remove_button = QPushButton("حذف البند المحدد")
         remove_button.setObjectName("dangerButton")
         remove_button.clicked.connect(self.remove_selected_line)
-        self.details_toggle = QCheckBox("تفاصيل إضافية")
-        self.details_toggle.toggled.connect(self._toggle_additional_columns)
         add_layout.addWidget(QLabel("المنتج"))
         add_layout.addWidget(self.product_input, 3)
+        add_layout.addWidget(QLabel("الوحدة"))
+        add_layout.addWidget(self.unit_input, 1)
         add_layout.addWidget(QLabel("الكمية"))
         add_layout.addWidget(self.quantity_input, 1)
         add_layout.addWidget(add_button)
         add_layout.addWidget(remove_button)
-        add_layout.addWidget(self.details_toggle)
         layout.addWidget(add_group)
 
-        self.lines_table = QTableWidget(0, 10)
+        self.lines_table = QTableWidget(0, 8)
         self.lines_table.setHorizontalHeaderLabels(
             [
-                "الكود",
+                "م",
                 "البيان",
                 "الوحدة",
                 "الكمية",
-                "الوزن الفعلي",
+                "وزن الكارتة",
                 "سعر الكيلو",
                 "الإجمالي",
-                "ملاحظات البند",
-                "الوزن القياسي",
-                "الوزن النظري",
+                "ملاحظات",
             ]
         )
         self.lines_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -282,7 +282,7 @@ class WeightCardSalesPage(QWidget):
         page_layout.addWidget(scroll)
 
         self.weight_mode_input.currentIndexChanged.connect(self._mode_changed)
-        self.pricing_mode_input.currentIndexChanged.connect(self._mode_changed)
+        self.product_input.currentIndexChanged.connect(self._product_changed)
         self.use_vehicle_scale_input.toggled.connect(self._vehicle_scale_changed)
         self.net_weight_input.valueChanged.connect(self.refresh_totals)
         self.uniform_price_input.valueChanged.connect(self.refresh_totals)
@@ -292,7 +292,7 @@ class WeightCardSalesPage(QWidget):
         self.transport_input.valueChanged.connect(self.refresh_totals)
         self.tax_input.valueChanged.connect(self.refresh_totals)
         self._vehicle_scale_changed(False)
-        self._toggle_additional_columns(False)
+        self._mode_changed()
         return page
 
     def _build_history_tab(self) -> QWidget:
@@ -395,6 +395,11 @@ class WeightCardSalesPage(QWidget):
         self.order_number_input.setText(str(numbers["order_number"]))
         self.invoice_number_input.setText(str(numbers["invoice_number"]))
         self.card_number_input.setText(str(numbers["card_number"]))
+        self.document_numbers_label.setText(
+            "الأرقام تُنشأ تلقائيًا عند الحفظ: "
+            f"أمر {numbers['order_number']}  |  فاتورة {numbers['invoice_number']}  |  "
+            f"كارتة {numbers['card_number']}"
+        )
 
     def _reload_customers(self) -> None:
         selected = self.customer_input.currentData()
@@ -448,9 +453,11 @@ class WeightCardSalesPage(QWidget):
             QMessageBox.warning(self, "تنبيه", "اختر المنتج أو المقاس")
             return
         quantity = float(self.quantity_input.value())
+        unit = self.unit_input.text().strip() or str(product["unit"] or "ماسورة")
         for line in self.lines:
             if int(line["product_id"]) == int(product_id):
                 line["quantity"] = float(line["quantity"]) + quantity
+                line["unit"] = unit
                 self.refresh_lines_table()
                 self.refresh_totals()
                 return
@@ -459,7 +466,7 @@ class WeightCardSalesPage(QWidget):
                 "product_id": int(product_id),
                 "code": str(product["code"]),
                 "name": str(product["name"]),
-                "unit": str(product["unit"]),
+                "unit": unit,
                 "quantity": quantity,
                 "standard_weight_kg": float(product["standard_weight_kg"]),
                 "actual_weight_kg": 0.0,
@@ -484,13 +491,9 @@ class WeightCardSalesPage(QWidget):
         try:
             self.lines_table.setRowCount(len(self.lines))
             weight_mode = str(self.weight_mode_input.currentData())
-            pricing_mode = str(self.pricing_mode_input.currentData())
             for row_index, line in enumerate(self.lines):
-                theoretical = float(line["quantity"]) * float(
-                    line["standard_weight_kg"]
-                )
                 values = [
-                    line["code"],
+                    str(row_index + 1),
                     line["name"],
                     line["unit"],
                     f"{float(line['quantity']):g}",
@@ -501,29 +504,25 @@ class WeightCardSalesPage(QWidget):
                     ),
                     (
                         f"{float(line.get('price_per_kg', 0)):,.2f}"
-                        if pricing_mode == "per_line"
+                        if weight_mode == "per_line"
                         else f"{float(self.uniform_price_input.value()):,.2f}"
                     ),
                     f"{float(line.get('line_total', 0)):,.2f}",
                     str(line.get("notes") or ""),
-                    f"{float(line['standard_weight_kg']):,.3f}",
-                    f"{theoretical:,.3f}",
                 ]
-                editable_columns = {COL_QUANTITY, COL_NOTES}
+                editable_columns = {COL_UNIT, COL_QUANTITY, COL_NOTES}
                 if weight_mode == "per_line":
                     editable_columns.add(COL_ACTUAL_WEIGHT)
-                if pricing_mode == "per_line":
                     editable_columns.add(COL_PRICE_KG)
                 for column, value in enumerate(values):
                     item = QTableWidgetItem(str(value))
                     if column not in editable_columns:
                         item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                    if column == COL_CODE:
+                    if column == COL_SERIAL:
                         item.setData(Qt.ItemDataRole.UserRole, int(line["product_id"]))
                     self.lines_table.setItem(row_index, column, item)
         finally:
             self._refreshing_table = False
-        self._toggle_additional_columns(self.details_toggle.isChecked())
 
     def _line_item_changed(self, item: QTableWidgetItem) -> None:
         if self._refreshing_table:
@@ -538,6 +537,11 @@ class WeightCardSalesPage(QWidget):
                 if value <= 0:
                     raise ValueError
                 line["quantity"] = value
+            elif item.column() == COL_UNIT:
+                value = item.text().strip()
+                if not value:
+                    raise ValueError
+                line["unit"] = value
             elif item.column() == COL_ACTUAL_WEIGHT:
                 value = float(item.text().replace(",", ""))
                 if value < 0:
@@ -556,9 +560,25 @@ class WeightCardSalesPage(QWidget):
             return
         self.refresh_totals()
 
-    def _mode_changed(self) -> None:
+    def _mode_changed(self, _index: int | None = None) -> None:
+        total_card = str(self.weight_mode_input.currentData()) == "total_card"
+        self.total_card_panel.setVisible(total_card)
+        if total_card:
+            self.mode_hint_label.setText(
+                "أدخل وزن الكارتة وسعر الكيلو مرة واحدة، وسيتم تطبيقهما على جميع البنود."
+            )
+        else:
+            self.mode_hint_label.setText(
+                "أدخل وزن الكارتة وسعر الكيلو يدويًا داخل صف كل بند في الجدول."
+            )
+            self.use_vehicle_scale_input.setChecked(False)
         self.refresh_lines_table()
         self.refresh_totals()
+
+    def _product_changed(self, _index: int | None = None) -> None:
+        product = self.product_input.currentData(Qt.ItemDataRole.UserRole + 1)
+        if isinstance(product, dict):
+            self.unit_input.setText(str(product.get("unit") or "ماسورة"))
 
     def _vehicle_scale_changed(self, enabled: bool) -> None:
         self.vehicle_scale_panel.setVisible(enabled)
@@ -576,15 +596,12 @@ class WeightCardSalesPage(QWidget):
         self.net_weight_input.blockSignals(False)
         self.refresh_totals()
 
-    def _toggle_additional_columns(self, visible: bool) -> None:
-        for column in (COL_CODE, COL_STANDARD_WEIGHT, COL_THEORETICAL_WEIGHT):
-            self.lines_table.setColumnHidden(column, not visible)
-
     def _calculation_payload(self) -> dict:
+        weight_mode = str(self.weight_mode_input.currentData())
         return calculate_weight_invoice(
             lines=[dict(line) for line in self.lines],
-            weight_mode=str(self.weight_mode_input.currentData()),
-            pricing_mode=str(self.pricing_mode_input.currentData()),
+            weight_mode=weight_mode,
+            pricing_mode="uniform" if weight_mode == "total_card" else "per_line",
             total_actual_weight_kg=float(self.net_weight_input.value()),
             uniform_price_per_kg=float(self.uniform_price_input.value()),
         )
@@ -645,7 +662,7 @@ class WeightCardSalesPage(QWidget):
                 total_item = self.lines_table.item(row_index, COL_LINE_TOTAL)
                 if actual_item is not None and str(self.weight_mode_input.currentData()) == "total_card":
                     actual_item.setText(f"{float(calculated['allocated_weight_kg']):,.6f}")
-                if price_item is not None and str(self.pricing_mode_input.currentData()) == "uniform":
+                if price_item is not None and str(self.weight_mode_input.currentData()) == "total_card":
                     price_item.setText(f"{float(calculated['price_per_kg']):,.2f}")
                 if total_item is not None:
                     total_item.setText(f"{float(calculated['line_total']):,.2f}")
@@ -657,11 +674,12 @@ class WeightCardSalesPage(QWidget):
             raise ValueError("اختر العميل")
         if not self.lines:
             raise ValueError("أضف بندًا واحدًا على الأقل")
+        weight_mode = str(self.weight_mode_input.currentData())
         return {
             "customer_id": int(self.customer_input.currentData()),
             "lines": [dict(line) for line in self.lines],
-            "weight_mode": str(self.weight_mode_input.currentData()),
-            "pricing_mode": str(self.pricing_mode_input.currentData()),
+            "weight_mode": weight_mode,
+            "pricing_mode": "uniform" if weight_mode == "total_card" else "per_line",
             "net_weight_kg": float(self.net_weight_input.value()),
             "uniform_price_per_kg": float(self.uniform_price_input.value()),
             "vehicle_number": self.vehicle_input.text(),
@@ -731,7 +749,6 @@ class WeightCardSalesPage(QWidget):
         self.vehicle_input.clear()
         self.notes_input.clear()
         self.weight_mode_input.setCurrentIndex(0)
-        self.pricing_mode_input.setCurrentIndex(0)
         self.use_vehicle_scale_input.setChecked(False)
         self.gross_input.setValue(0)
         self.tare_input.setValue(0)

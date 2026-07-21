@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QRect, Qt
+from PySide6.QtCore import QRect
 from PySide6.QtGui import QPainter, QPen
 
 from app.services.a4_invoice_renderer import A4InvoiceRenderer
@@ -9,7 +9,7 @@ from app.services.a4_invoice_renderer import A4InvoiceRenderer
 class WeightInvoiceRenderer(A4InvoiceRenderer):
     """Render the approved 3A weight-card invoice as a separate A4 document."""
 
-    ROWS_PER_PAGE = 8
+    ROWS_PER_PAGE = 6
     META_COLUMNS = (
         (31, 160, "السيارة/الحمولة", "vehicle_number"),
         (160, 300, "رقم الكارتة", "card_number"),
@@ -37,7 +37,7 @@ class WeightInvoiceRenderer(A4InvoiceRenderer):
             painter,
             QRect(255, 250, 545, 76),
             "فاتورة مبيعات بالوزن / الكارتة",
-            40,
+            46,
             self.BLUE,
             bold=True,
             min_size=28,
@@ -66,8 +66,8 @@ class WeightInvoiceRenderer(A4InvoiceRenderer):
                 min_size=11,
             )
 
-        body_top, body_bottom = 576, 802
-        visible_rows = max(4, len(lines))
+        body_top, body_bottom = 576, 776
+        visible_rows = max(3, len(lines))
         row_height = (body_bottom - body_top) / visible_rows
         painter.fillRect(QRect(32, body_top, 987, body_bottom - body_top), self.WHITE)
         painter.setPen(QPen(self.GRID, 1))
@@ -101,71 +101,5 @@ class WeightInvoiceRenderer(A4InvoiceRenderer):
                     bold=True,
                     min_size=9,
                 )
-
-    def _draw_totals(self, painter: QPainter, invoice: dict) -> None:
-        subtotal = float(invoice.get("subtotal", invoice.get("total", 0)) or 0)
-        discount = float(invoice.get("discount_amount", 0) or 0)
-        transport = float(invoice.get("transport_amount", 0) or 0)
-        tax = float(invoice.get("tax_amount", 0) or 0)
-        net_total = float(invoice.get("net_total", invoice.get("total", 0)) or 0)
-        paid = float(invoice.get("paid", 0) or 0)
-        remaining = float(invoice.get("remaining", 0) or 0)
-        pieces = float(invoice.get("total_pieces", 0) or 0)
-        weight = float(invoice.get("net_weight_kg", 0) or 0)
-
-        painter.fillRect(QRect(60, 818, 900, 228), self.YELLOW)
-        summaries = (
-            ("إجمالي عدد المواسير", f"{pieces:g}"),
-            ("إجمالي الوزن الفعلي", f"{weight:,.3f} كجم"),
-            ("إجمالي البنود", f"{subtotal:,.2f}"),
-            ("الخصم", f"{discount:,.2f}"),
-            ("النقل", f"{transport:,.2f}"),
-            ("الضريبة", f"{tax:,.2f}"),
-            ("صافي الفاتورة", f"{net_total:,.2f}"),
-            ("المدفوع لهذه الفاتورة", f"{paid:,.2f}"),
-            ("المتبقي على هذه الفاتورة", f"{remaining:,.2f}"),
-        )
-        columns = 3
-        cell_width = 286
-        cell_height = 68
-        for index, (label, value) in enumerate(summaries):
-            row = index // columns
-            column = index % columns
-            left = 80 + column * cell_width
-            top = 830 + row * cell_height
-            self._draw_text(
-                painter,
-                QRect(left, top, cell_width - 12, 28),
-                label,
-                15,
-                self.BLACK,
-                bold=True,
-                min_size=11,
-            )
-            self._draw_text(
-                painter,
-                QRect(left, top + 27, cell_width - 12, 34),
-                value,
-                21,
-                self.DARK_BLUE if label != "المتبقي على هذه الفاتورة" else self.GREEN,
-                bold=True,
-                min_size=14,
-            )
-
-    def _draw_terms(self, painter: QPainter) -> None:
-        self._draw_text(
-            painter,
-            QRect(55, 1065, 920, 120),
-            "ملاحظات الفاتورة:\n"
-            "• القيمة النهائية محسوبة من الوزن الفعلي فقط.\n"
-            "• الوزن القياسي والنظري بيانات مرجعية ولا يدخلان في قيمة الفاتورة.\n"
-            "• الرصيد الظاهر يخص هذه الفاتورة فقط، أما الرصيد الكامل فيظهر بكشف حساب العميل.",
-            18,
-            self.BLACK,
-            bold=True,
-            alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop,
-            min_size=13,
-        )
-
 
 __all__ = ["WeightInvoiceRenderer"]
