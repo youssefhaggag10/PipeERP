@@ -46,6 +46,7 @@ jobs:
           pytest -vv --tb=long \
             tests/test_application_smoke.py \
             tests/test_sales_navigation_delegate.py \
+            tests/test_production_completion_wizard.py \
             tests/test_manufacturing_completion_summary.py \
             tests/test_schema_v9_runs_and_weight_sales.py \
             tests/test_migrations.py \
