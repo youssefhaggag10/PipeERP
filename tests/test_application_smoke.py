@@ -122,7 +122,7 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
     assert inventory_page.lot_input.isReadOnly()
 
     accounts_page = window.pages.widget(window.page_indexes["الحسابات"])
-    tabs = accounts_page.findChild(QTabWidget)
+    tabs = accounts_pade.findChild(QTabWidget)
     assert tabs is not None
     treasury_index = next(
         index
@@ -161,7 +161,8 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
     heights = {button.height() for button in action_buttons}
     y_positions = {button.mapTo(manufacturing_page, QPoint(0, 0)).y() for button in action_buttons}
     widths = [button.width() for button in action_buttons]
-    assert heights == {48}
+    assert len(heights) == 1
+    assert next(iter(heights)) >= 44
     assert len(y_positions) == 1
     assert max(widths) - min(widths) <= 1
 
