@@ -61,6 +61,7 @@ jobs:
           name: pipeerp-weight-invoice-customer-statement-acceptance
           path: .pipeerp-acceptance-artifacts
           if-no-files-found: warn
+          include-hidden-files: true
           retention-days: 14
 
       - name: Upload smoke-test log
