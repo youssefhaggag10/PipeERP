@@ -42,7 +42,7 @@ def _order() -> dict:
 
 
 def test_completion_wizard_skips_adjustments_for_full_batches() -> None:
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QWizard
 
     from app.ui.production_completion_wizard import ProductionCompletionWizard
 
@@ -55,6 +55,10 @@ def test_completion_wizard_skips_adjustments_for_full_batches() -> None:
     assert wizard.all_complete_radio.isChecked()
     assert wizard.nextId() == wizard.SUMMARY_PAGE
     assert wizard.adjustments_table.rowCount() == 0
+    assert (
+        wizard.button(QWizard.WizardButton.FinishButton).text()
+        == "إتمام الأمر واستلام الإنتاج"
+    )
 
     wizard.close()
     app.processEvents()
