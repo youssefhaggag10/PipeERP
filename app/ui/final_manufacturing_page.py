@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QDialog, QMessageBox, QPushButton
 
+from app.repositories.wizard_manufacturing_repository import WizardManufacturingRepository
 from app.ui.production_completion_wizard import ProductionCompletionWizard
 from app.ui.production_run_page import ProductionRunManufacturingPage
 
@@ -9,8 +10,9 @@ from app.ui.production_run_page import ProductionRunManufacturingPage
 class FinalManufacturingPage(ProductionRunManufacturingPage):
     """One-time material issue followed by a simple aggregate completion wizard."""
 
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(self, repository, *args, **kwargs) -> None:
+        validated_repository = WizardManufacturingRepository(repository.database)
+        super().__init__(validated_repository, *args, **kwargs)
         self._remove_manual_batch_actions()
 
     def _remove_manual_batch_actions(self) -> None:
