@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QModelIndex, QPoint, QRect, Qt, Signal
-from PySide6.QtGui import QPainter, QPalette
+from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import (
     QApplication,
     QListWidget,
@@ -50,16 +50,16 @@ class SalesNavigationDelegate(QStyledItemDelegate):
 
         styled = QStyleOptionViewItem(option)
         self.initStyleOption(styled, index)
-        text = styled.text
-        styled.text = ""
+        styled.displayAlignment = Qt.AlignRight | Qt.AlignVCenter
         style = styled.widget.style() if styled.widget is not None else QApplication.style()
 
         painter.save()
+        # Let Qt draw the sales item text exactly like the remaining navigation
+        # items. The old manual text drawing caused the Arabic label to shift left.
         style.drawControl(QStyle.CE_ItemViewItem, styled, painter, styled.widget)
 
-        arrow = self.arrow_rect(styled.rect)
         arrow_option = QStyleOption()
-        arrow_option.rect = arrow
+        arrow_option.rect = self.arrow_rect(styled.rect)
         arrow_option.state = styled.state
         arrow_option.palette = styled.palette
         style.drawPrimitive(
@@ -67,23 +67,6 @@ class SalesNavigationDelegate(QStyledItemDelegate):
             arrow_option,
             painter,
             styled.widget,
-        )
-
-        text_rect = self.text_rect(styled.rect, styled.fontMetrics.height())
-        elided = styled.fontMetrics.elidedText(text, Qt.ElideRight, max(0, text_rect.width()))
-        color_role = (
-            QPalette.HighlightedText
-            if styled.state & QStyle.State_Selected
-            else QPalette.Text
-        )
-        style.drawItemText(
-            painter,
-            text_rect,
-            Qt.AlignRight | Qt.AlignVCenter,
-            styled.palette,
-            bool(styled.state & QStyle.State_Enabled),
-            elided,
-            color_role,
         )
         painter.restore()
 
