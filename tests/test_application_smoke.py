@@ -9,6 +9,7 @@ if os.environ.get("PIPEERP_GUI_SMOKE") != "1":
 
 
 def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) -> None:
+    from PySide6.QtCore import QPoint
     from PySide6.QtWidgets import (
         QApplication,
         QPushButton,
@@ -58,6 +59,8 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
         "الرئيسية",
         "CRM متابعة العملاء",
         "الأصناف",
+        "رصيد المخزون",
+        "المشتريات",
         "المبيعات",
         "بيع بالوزن / الكارتة",
         "الحسابات",
@@ -80,15 +83,19 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
     assert len(sales_items) == 1
     sales_item = sales_items[0]
     assert window.navigation.itemWidget(sales_item) is None
+    assert window.navigation.uniformItemSizes()
 
     delegate = window.navigation.itemDelegate()
     assert isinstance(delegate, SalesNavigationDelegate)
     item_rect = window.navigation.visualItemRect(sales_item)
     arrow_rect = delegate.arrow_rect(item_rect)
+    text_rect = delegate.text_rect(item_rect, window.navigation.fontMetrics().height())
     assert item_rect.contains(arrow_rect)
-    assert arrow_rect.left() - item_rect.left() <= 20
+    assert item_rect.contains(text_rect)
+    assert not arrow_rect.intersects(text_rect)
+    assert arrow_rect.left() - item_rect.left() <= 22
     text_width = window.navigation.fontMetrics().horizontalAdvance("المبيعات")
-    assert text_width < item_rect.right() - arrow_rect.right() - 12
+    assert text_width <= text_rect.width()
     assert [action.text() for action in window.sales_weight_menu.actions()] == [
         "البيع بالوزن / الكارتة"
     ]
@@ -109,6 +116,11 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
     assert isinstance(weight_sales_page, WeightCardSalesPage)
     assert not isinstance(weight_sales_page, TreasurySalesAccountingPageWithPrint)
 
+    purchase_page = window.pages.widget(window.page_indexes["المشتريات"])
+    inventory_page = window.pages.widget(window.page_indexes["رصيد المخزون"])
+    assert purchase_page.lot_input.isReadOnly()
+    assert inventory_page.lot_input.isReadOnly()
+
     accounts_page = window.pages.widget(window.page_indexes["الحسابات"])
     tabs = accounts_page.findChild(QTabWidget)
     assert tabs is not None
@@ -122,9 +134,12 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
     assert treasury_scroll.widgetResizable()
     assert treasury_scroll.objectName() == "treasuryAccountsScrollArea"
 
-    manufacturing_page = window.pages.widget(window.page_indexes["التصنيع"])
+    manufacturing_index = window.page_indexes["التصنيع"]
+    window.pages_changed(manufacturing_index)
+    app.processEvents()
+    manufacturing_page = window.pages.widget(manufacturing_index)
     manufacturing_buttons = {
-        button.text().strip()
+        button.text().strip(): button
         for button in manufacturing_page.findChildren(QPushButton)
     }
     assert "خلطات التشغيل" in manufacturing_buttons
@@ -134,6 +149,21 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
     assert "إنشاء خلطة جديدة" not in manufacturing_buttons
     assert "نسخ الخلطة الحالية" not in manufacturing_buttons
     assert "إضافة خلطة كاملة" not in manufacturing_buttons
+
+    action_labels = (
+        "بدء وصرف الخامات",
+        "تسجيل الناتج وإتمام الأمر",
+        "تعديل أو حذف أو إلغاء أمر التصنيع المحدد",
+        "خلطات التشغيل",
+    )
+    action_buttons = [manufacturing_buttons[label] for label in action_labels]
+    assert all(button.isVisible() for button in action_buttons)
+    heights = {button.height() for button in action_buttons}
+    y_positions = {button.mapTo(manufacturing_page, QPoint(0, 0)).y() for button in action_buttons}
+    widths = [button.width() for button in action_buttons]
+    assert heights == {48}
+    assert len(y_positions) == 1
+    assert max(widths) - min(widths) <= 1
 
     window.close()
     app.processEvents()

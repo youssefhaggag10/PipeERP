@@ -20,9 +20,10 @@ class AutomatedPurchaseAccountingPage(PurchaseAccountingPage):
         if payment_container is not None:
             payment_container.hide()
 
-        self.lot_input.setPlaceholderText("سيُنشئ النظام رقم الدفعة تلقائيًا")
+        self.lot_input.setReadOnly(True)
+        self.lot_input.setPlaceholderText("يُنشئ النظام رقم الدفعة تلقائيًا عند إضافة البند")
         self.lot_input.setToolTip(
-            "اترك الحقل فارغًا ليُنشئ النظام رقم Lot فريدًا تلقائيًا، أو أدخل رقم المورد عند الحاجة."
+            "رقم الدفعة يُنشأ تلقائيًا ولا يحتاج إلى إدخال يدوي."
         )
         self.manufacturing_price_input.setToolTip(
             "تكلفة تجهيز داخلية لكل كجم تضاف لتكلفة المخزون فقط، ولا تدخل في مديونية المورد."
@@ -60,7 +61,9 @@ class AutomatedPurchaseAccountingPage(PurchaseAccountingPage):
         try:
             quantity = float(self.qty_input.text().strip())
             unit_price = float(self.price_input.text().strip() or 0)
-            manufacturing_unit_cost = float(self.manufacturing_price_input.text().strip() or 0)
+            manufacturing_unit_cost = float(
+                self.manufacturing_price_input.text().strip() or 0
+            )
             loss_text = self.loss_input.text().strip()
             purchase_loss_quantity = (
                 float(loss_text) if loss_text else self._default_purchase_loss(quantity)

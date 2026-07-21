@@ -110,3 +110,33 @@ def test_completion_wizard_groups_three_modified_batches_and_calculates_return()
 
     wizard.close()
     app.processEvents()
+
+
+def test_final_wizard_removes_defective_output_and_recalculates_scrap() -> None:
+    from PySide6.QtWidgets import QApplication
+
+    from app.ui.final_production_completion_wizard import FinalProductionCompletionWizard
+
+    app = QApplication.instance() or QApplication([])
+    wizard = FinalProductionCompletionWizard(_order())
+    wizard.show()
+    app.processEvents()
+
+    assert wizard.outputs_table.isColumnHidden(2)
+    good, defective, actual_weight = wizard.output_inputs[3]
+    assert defective.text() == "0"
+    assert defective.isReadOnly()
+    assert wizard.summary_labels["defective_output_quantity"].isHidden()
+    assert float(wizard.scrap_input.text()) == pytest.approx(200)
+
+    good.setText("90")
+    app.processEvents()
+    assert float(actual_weight.text()) == pytest.approx(2520)
+    assert float(wizard.scrap_input.text()) == pytest.approx(480)
+
+    wizard.actual_batches_input.setText("9")
+    app.processEvents()
+    assert float(wizard.scrap_input.text()) == pytest.approx(180)
+
+    wizard.close()
+    app.processEvents()

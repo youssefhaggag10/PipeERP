@@ -15,20 +15,28 @@ SALES_DROPDOWN_ROLE = Qt.UserRole + 1
 
 
 class SalesNavigationDelegate(QStyledItemDelegate):
-    """Paint a dropdown arrow inside a normal sales QListWidgetItem."""
+    """Paint a compact dropdown arrow inside a normal sales QListWidgetItem."""
 
     def arrow_rect(self, item_rect: QRect) -> QRect:
         view = self.parent()
         font_metrics = view.fontMetrics() if isinstance(view, QListWidget) else None
         font_height = font_metrics.height() if font_metrics is not None else 16
-        arrow_size = max(11, min(18, font_height - 1))
-        left_margin = max(7, round(font_height * 0.35))
+        arrow_size = max(10, min(14, font_height - 3))
+        left_margin = max(9, round(font_height * 0.45))
         return QRect(
             item_rect.left() + left_margin,
             item_rect.center().y() - arrow_size // 2,
             arrow_size,
             arrow_size,
         )
+
+    def text_rect(self, item_rect: QRect, font_height: int) -> QRect:
+        arrow = self.arrow_rect(item_rect)
+        spacing = max(10, round(font_height * 0.5))
+        rect = QRect(item_rect)
+        rect.setLeft(arrow.right() + spacing)
+        rect.setRight(item_rect.right() - spacing)
+        return rect
 
     def paint(
         self,
@@ -61,10 +69,7 @@ class SalesNavigationDelegate(QStyledItemDelegate):
             styled.widget,
         )
 
-        spacing = max(8, round(styled.fontMetrics.height() * 0.4))
-        text_rect = QRect(styled.rect)
-        text_rect.setLeft(arrow.right() + spacing)
-        text_rect.setRight(styled.rect.right() - spacing)
+        text_rect = self.text_rect(styled.rect, styled.fontMetrics.height())
         elided = styled.fontMetrics.elidedText(text, Qt.ElideRight, max(0, text_rect.width()))
         color_role = (
             QPalette.HighlightedText
@@ -86,6 +91,13 @@ class SalesNavigationDelegate(QStyledItemDelegate):
 class NavigationListWidget(QListWidget):
     sales_dropdown_requested = Signal(object, QPoint)
 
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setUniformItemSizes(True)
+        self.setWordWrap(False)
+        self.setTextElideMode(Qt.ElideNone)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
     def mousePressEvent(self, event) -> None:
         position = event.position().toPoint()
         index = self.indexAt(position)
@@ -105,9 +117,8 @@ class NavigationListWidget(QListWidget):
         was_current_sales = is_sales_item and item is not None and self.currentItem() is item
         super().mousePressEvent(event)
         if was_current_sales:
-            # A selected QListWidgetItem does not normally emit currentItemChanged
-            # again. Re-emitting it makes clicking the sales text always reopen
-            # normal sales after the weight page was opened from the arrow menu.
+            # A selected item does not emit currentItemChanged again. Re-emitting it
+            # makes clicking the sales text reopen normal sales after weight sales.
             self.currentItemChanged.emit(item, item)
 
 
