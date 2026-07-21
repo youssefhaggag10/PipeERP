@@ -63,9 +63,12 @@ class FinalManufacturingPage(ProductionRunManufacturingPage):
         for button in buttons:
             button.show()
             button.setMinimumWidth(0)
-            button.setMinimumHeight(48)
-            button.setMaximumHeight(48)
-            button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            button.setMinimumHeight(0)
+            button.setMaximumHeight(16777215)
+            button.setSizePolicy(
+                QSizePolicy.Policy.Ignored,
+                QSizePolicy.Policy.Preferred,
+            )
             actions.addWidget(button, 1)
 
         table_index = page_layout.indexOf(self.orders_table)
