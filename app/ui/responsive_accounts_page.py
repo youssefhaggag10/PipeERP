@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -32,21 +32,31 @@ class ResponsiveAccountsPage(ClickableSummaryAccountsPage):
         self.customer_statement_repository = CustomerStatementAccountingRepository(
             self.accounting_repository.database
         )
-        self._install_customer_statement_tab()
         self._configure_financial_controls()
         self._make_treasury_tab_scrollable()
+        self._ensure_customer_statement_tab()
+        # Some Qt styles finish adopting layout-owned tab widgets on the first
+        # event-loop turn. Retry once without ever creating a duplicate tab.
+        QTimer.singleShot(0, self._ensure_customer_statement_tab)
         self._reload_open_orders()
 
     def _main_tabs(self) -> QTabWidget | None:
         for tabs in self.findChildren(QTabWidget):
-            if tabs.count() and tabs.tabText(0).strip() == "الملخص":
+            titles = {tabs.tabText(index).strip() for index in range(tabs.count())}
+            if {"الملخص", "التحصيل والسداد"}.issubset(titles):
                 return tabs
         return None
 
-    def _install_customer_statement_tab(self) -> None:
+    def _ensure_customer_statement_tab(self) -> None:
         tabs = self._main_tabs()
         if tabs is None:
             return
+        for index in range(tabs.count()):
+            if tabs.tabText(index).strip() == "كشف حساب العميل":
+                existing = tabs.widget(index)
+                if isinstance(existing, CustomerStatementPage):
+                    self.customer_statement_page = existing
+                return
         self.customer_statement_page = CustomerStatementPage(
             self.customer_statement_repository,
             self.partner_repository,
