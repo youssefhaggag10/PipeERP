@@ -9,14 +9,27 @@ if os.environ.get("PIPEERP_GUI_SMOKE") != "1":
 
 
 def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) -> None:
-    from PySide6.QtWidgets import QApplication, QToolButton
+    from PySide6.QtWidgets import (
+        QApplication,
+        QPushButton,
+        QScrollArea,
+        QTabWidget,
+        QToolButton,
+        QWidget,
+    )
 
     from app.database.connection import Database
     from app.database.schema import initialize_database
     from app.services.auth_service import AuthService
     from app.services.first_run_service import FirstRunService
-    from app.ui.appearance import AppearanceSettings, AppearanceSettingsRepository, apply_appearance
+    from app.ui.appearance import (
+        AppearanceSettings,
+        AppearanceSettingsRepository,
+        apply_appearance,
+    )
     from app.ui.main_window import MainWindow
+    from app.ui.treasury_order_pages import TreasurySalesAccountingPageWithPrint
+    from app.ui.weight_card_sales_page import WeightCardSalesPage
 
     database = Database(tmp_path / "gui-smoke.sqlite3")
     initialize_database(database)
@@ -48,6 +61,7 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
         "الأصناف",
         "المبيعات",
         "بيع بالوزن / الكارتة",
+        "الحسابات",
         "التصنيع",
         "الإعدادات",
     }
@@ -65,6 +79,35 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
     ]
     assert "المبيعات" in sales_buttons
     assert "▾" in sales_buttons
+
+    normal_sales_page = window.pages.widget(window.page_indexes["المبيعات"])
+    weight_sales_page = window.pages.widget(window.page_indexes["بيع بالوزن / الكارتة"])
+    assert isinstance(normal_sales_page, TreasurySalesAccountingPageWithPrint)
+    assert isinstance(weight_sales_page, QWidget)
+    assert isinstance(weight_sales_page, WeightCardSalesPage)
+    assert not isinstance(weight_sales_page, TreasurySalesAccountingPageWithPrint)
+
+    accounts_page = window.pages.widget(window.page_indexes["الحسابات"])
+    tabs = accounts_page.findChild(QTabWidget)
+    assert tabs is not None
+    treasury_index = next(
+        index
+        for index in range(tabs.count())
+        if tabs.tabText(index).strip() == "الخزينة والبنوك"
+    )
+    treasury_scroll = tabs.widget(treasury_index)
+    assert isinstance(treasury_scroll, QScrollArea)
+    assert treasury_scroll.widgetResizable()
+    assert treasury_scroll.objectName() == "treasuryAccountsScrollArea"
+
+    manufacturing_page = window.pages.widget(window.page_indexes["التصنيع"])
+    manufacturing_buttons = {
+        button.text().strip()
+        for button in manufacturing_page.findChildren(QPushButton)
+    }
+    assert "خلطات التشغيل" in manufacturing_buttons
+    assert "إنشاء/فتح الخلطة الحالية" not in manufacturing_buttons
+    assert "خلطة جديدة من السابقة بدون خامة" not in manufacturing_buttons
 
     window.close()
     app.processEvents()

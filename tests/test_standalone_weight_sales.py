@@ -1,15 +1,11 @@
 from pathlib import Path
 
-from PySide6.QtWidgets import QWidget
-
 from app.database.connection import Database
 from app.database.schema import initialize_database
 from app.repositories.standalone_weight_sales_repository import (
     StandaloneWeightSalesRepository,
 )
 from app.repositories.treasury_invoice_repository import TreasuryInvoiceRepository
-from app.ui.treasury_order_pages import TreasurySalesAccountingPageWithPrint
-from app.ui.weight_card_sales_page import WeightCardSalesPage
 
 
 def _database(tmp_path: Path) -> Database:
@@ -67,11 +63,6 @@ def _masters(database: Database) -> dict[str, int]:
         "customer": customer_id,
         "product": product_id,
     }
-
-
-def test_weight_sale_page_is_independent_from_normal_sales_screen() -> None:
-    assert issubclass(WeightCardSalesPage, QWidget)
-    assert not issubclass(WeightCardSalesPage, TreasurySalesAccountingPageWithPrint)
 
 
 def test_standalone_weight_sale_creates_internal_order_without_existing_sale(
