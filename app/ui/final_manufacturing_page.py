@@ -28,6 +28,8 @@ class FinalManufacturingPage(ProductionRunManufacturingPage):
             if button.text().strip() in forbidden:
                 button.hide()
                 button.setEnabled(False)
+                button.setParent(None)
+                button.deleteLater()
 
     def _complete_selected(self) -> None:
         order_id = self._selected_order_id()

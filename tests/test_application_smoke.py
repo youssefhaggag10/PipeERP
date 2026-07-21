@@ -128,8 +128,12 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
         for button in manufacturing_page.findChildren(QPushButton)
     }
     assert "خلطات التشغيل" in manufacturing_buttons
+    assert "إضافة خلطة للأمر الجاري" not in manufacturing_buttons
     assert "إنشاء/فتح الخلطة الحالية" not in manufacturing_buttons
     assert "خلطة جديدة من السابقة بدون خامة" not in manufacturing_buttons
+    assert "إنشاء خلطة جديدة" not in manufacturing_buttons
+    assert "نسخ الخلطة الحالية" not in manufacturing_buttons
+    assert "إضافة خلطة كاملة" not in manufacturing_buttons
 
     window.close()
     app.processEvents()
