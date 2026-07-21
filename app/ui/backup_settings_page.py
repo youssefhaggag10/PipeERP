@@ -22,6 +22,10 @@ from PySide6.QtWidgets import (
 from app.database.connection import Database
 from app.services.backup_service import BackupService
 from app.ui.appearance import (
+    FONT_SIZE_MAX,
+    FONT_SIZE_MIN,
+    SCALE_PERCENT_MAX,
+    SCALE_PERCENT_MIN,
     THEME_LABELS,
     AppearanceSettings,
     AppearanceSettingsRepository,
@@ -57,12 +61,13 @@ class BackupPrintSettingsPage(PrintSettingsPage):
             self.theme_input.addItem(label, code)
 
         self.font_size_input = QSpinBox()
-        self.font_size_input.setRange(11, 20)
+        self.font_size_input.setRange(FONT_SIZE_MIN, FONT_SIZE_MAX)
+        self.font_size_input.setSingleStep(1)
         self.font_size_input.setSuffix(" px")
 
         self.interface_scale_input = QSpinBox()
-        self.interface_scale_input.setRange(90, 140)
-        self.interface_scale_input.setSingleStep(5)
+        self.interface_scale_input.setRange(SCALE_PERCENT_MIN, SCALE_PERCENT_MAX)
+        self.interface_scale_input.setSingleStep(1)
         self.interface_scale_input.setSuffix(" %")
 
         group = QGroupBox("الثيم وحجم واجهة البرنامج")
@@ -74,8 +79,9 @@ class BackupPrintSettingsPage(PrintSettingsPage):
 
         note = QLabel(
             "اختيار «حسب إعداد ويندوز» يجعل البرنامج يستخدم الوضع الفاتح أو الداكن "
-            "حسب إعداد النظام عند التشغيل. إعداد التكبير يؤثر على الحقول والأزرار "
-            "والتابات والجداول، ولا يغير تنسيق الفواتير المطبوعة."
+            "حسب إعداد النظام عند التشغيل. يمكنك التحكم بحرية في حجم الخط والتكبير "
+            "بدرجة واحدة، من أصغر واجهة عملية حتى تكبير كبير جدًا. لا يؤثر ذلك على "
+            "تنسيق الفواتير المطبوعة."
         )
         note.setWordWrap(True)
         note.setObjectName("subtitleLabel")
