@@ -117,6 +117,24 @@ def ensure_sales_finance_v10_schema(connection: Connection) -> None:
         ON customer_account_adjustments(customer_id, adjustment_date, id);
         CREATE INDEX IF NOT EXISTS idx_weight_cards_invoice
         ON sales_weight_cards(sales_invoice_id, id);
+
+        CREATE TRIGGER IF NOT EXISTS trg_weight_invoice_sale_date
+        AFTER INSERT ON sales_invoices
+        WHEN NEW.invoice_type = 'weight'
+        BEGIN
+            UPDATE sales_invoices
+            SET invoice_date = COALESCE(
+                (
+                    SELECT wc.card_date
+                    FROM sales_weight_cards wc
+                    WHERE wc.sales_order_id = NEW.sales_order_id
+                    ORDER BY wc.id
+                    LIMIT 1
+                ),
+                NEW.invoice_date
+            )
+            WHERE id = NEW.id;
+        END;
         """
     )
 
@@ -134,6 +152,22 @@ def ensure_sales_finance_v10_schema(connection: Connection) -> None:
         WHERE invoice_type IS NULL
            OR TRIM(invoice_type) = ''
            OR invoice_type = 'standard'
+        """
+    )
+    connection.execute(
+        """
+        UPDATE sales_invoices
+        SET invoice_date = COALESCE(
+            (
+                SELECT wc.card_date
+                FROM sales_weight_cards wc
+                WHERE wc.sales_order_id = sales_invoices.sales_order_id
+                ORDER BY wc.id
+                LIMIT 1
+            ),
+            invoice_date
+        )
+        WHERE invoice_type = 'weight'
         """
     )
     connection.execute(
