@@ -19,9 +19,11 @@ from app.models.user import User
 from app.repositories.admin_only_crm_repository import AdminOnlyCRMRepository
 from app.repositories.automated_inventory_repository import AutomatedInventoryRepository
 from app.repositories.detailed_return_refund_repository import DetailedReturnRefundRepository
+from app.repositories.order_completion_manufacturing_repository import (
+    OrderCompletionManufacturingRepository,
+)
 from app.repositories.partner_repository import PartnerRepository
 from app.repositories.print_settings_repository import PrintSettingsRepository
-from app.repositories.production_run_repository import ProductionRunRepository
 from app.repositories.return_refund_invoice_repository import ReturnRefundInvoiceRepository
 from app.repositories.sales_repository import SalesRepository
 from app.repositories.standalone_weight_sales_repository import (
@@ -84,7 +86,7 @@ class MainWindow(QMainWindow):
         warehouse_repository = WarehouseRepository(database)
         accounting_repository = DetailedReturnRefundRepository(database)
         invoice_repository = ReturnRefundInvoiceRepository(database)
-        manufacturing_repository = ProductionRunRepository(database)
+        manufacturing_repository = OrderCompletionManufacturingRepository(database)
         self.print_settings_repository = PrintSettingsRepository(database)
         crm_repository = AdminOnlyCRMRepository(database, current_user)
         self.crm_sync = CRMCustomerSync(database, current_user)
