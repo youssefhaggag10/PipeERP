@@ -226,7 +226,7 @@ class CustomerStatementPage(QWidget):
                 if actual_weight is not None:
                     details.extend(
                         [
-                            f"الوزن الفعلي {float(actual_weight):,.3f} كجم",
+                            f"وزن الكارتة {float(actual_weight):,.3f} كجم",
                             f"سعر الكيلو {float(price or 0):,.2f}",
                         ]
                     )
