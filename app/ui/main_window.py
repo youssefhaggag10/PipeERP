@@ -15,13 +15,17 @@ from app.database.connection import Database
 from app.models.user import User
 from app.repositories.admin_only_crm_repository import AdminOnlyCRMRepository
 from app.repositories.automated_inventory_repository import AutomatedInventoryRepository
-from app.repositories.detailed_return_refund_repository import DetailedReturnRefundRepository
+from app.repositories.detailed_return_refund_repository import (
+    DetailedReturnRefundRepository,
+)
 from app.repositories.order_completion_manufacturing_repository import (
     OrderCompletionManufacturingRepository,
 )
 from app.repositories.partner_repository import PartnerRepository
 from app.repositories.print_settings_repository import PrintSettingsRepository
-from app.repositories.return_refund_invoice_repository import ReturnRefundInvoiceRepository
+from app.repositories.return_refund_invoice_repository import (
+    ReturnRefundInvoiceRepository,
+)
 from app.repositories.sales_repository import SalesRepository
 from app.repositories.standalone_weight_sales_repository import (
     StandaloneWeightSalesRepository,
@@ -46,8 +50,8 @@ from app.ui.production_run_page import ProductionRunManufacturingPage
 from app.ui.reports_page import ReportsPage
 from app.ui.responsive_accounts_page import ResponsiveAccountsPage
 from app.ui.sales_navigation_delegate import (
-    NavigationListWidget,
     SALES_DROPDOWN_ROLE,
+    NavigationListWidget,
     SalesNavigationDelegate,
 )
 from app.ui.stock_card_page import StockCardPage
