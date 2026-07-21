@@ -4,7 +4,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from app.database.connection import Database
-from app.ui.styles import build_stylesheet
+from app.ui.styles import (
+    FONT_SIZE_MAX,
+    FONT_SIZE_MIN,
+    SCALE_PERCENT_MAX,
+    SCALE_PERCENT_MIN,
+    build_stylesheet,
+)
 
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QApplication
@@ -46,15 +52,21 @@ class AppearanceSettingsRepository:
             scale_percent = 100
         return AppearanceSettings(
             theme=theme,
-            font_size=max(11, min(20, font_size)),
-            scale_percent=max(90, min(140, scale_percent)),
+            font_size=max(FONT_SIZE_MIN, min(FONT_SIZE_MAX, font_size)),
+            scale_percent=max(
+                SCALE_PERCENT_MIN,
+                min(SCALE_PERCENT_MAX, scale_percent),
+            ),
         )
 
     def save_settings(self, settings: AppearanceSettings) -> None:
         if settings.theme not in THEME_LABELS:
             raise ValueError("اختيار الثيم غير صحيح")
-        font_size = max(11, min(20, int(settings.font_size)))
-        scale_percent = max(90, min(140, int(settings.scale_percent)))
+        font_size = max(FONT_SIZE_MIN, min(FONT_SIZE_MAX, int(settings.font_size)))
+        scale_percent = max(
+            SCALE_PERCENT_MIN,
+            min(SCALE_PERCENT_MAX, int(settings.scale_percent)),
+        )
         with self.database.session(immediate=True) as connection:
             connection.executemany(
                 "INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)",
@@ -97,6 +109,10 @@ def apply_appearance(
 __all__ = [
     "AppearanceSettings",
     "AppearanceSettingsRepository",
+    "FONT_SIZE_MAX",
+    "FONT_SIZE_MIN",
+    "SCALE_PERCENT_MAX",
+    "SCALE_PERCENT_MIN",
     "THEME_LABELS",
     "apply_appearance",
 ]
