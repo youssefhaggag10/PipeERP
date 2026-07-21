@@ -26,9 +26,9 @@ def _add_columns(
 def ensure_sales_finance_v10_schema(connection: Connection) -> None:
     """Apply the non-destructive weight-invoice and statement migration.
 
-    The original migration runner owns versions 1-9.  This migration is kept in
-    a focused module because it extends sales, invoice and payment tables as one
-    atomic feature while preserving every legacy row.
+    The original migration runner owns versions 1-9. This focused migration
+    extends sales, invoice and payment tables atomically while preserving every
+    legacy row, then advances SQLite ``user_version`` to 10.
     """
 
     current_version = int(connection.execute("PRAGMA user_version").fetchone()[0])
@@ -64,6 +64,10 @@ def ensure_sales_finance_v10_schema(connection: Connection) -> None:
             "weight_mode": "TEXT NOT NULL DEFAULT 'total_card'",
             "pricing_mode": "TEXT NOT NULL DEFAULT 'uniform'",
             "use_vehicle_scale": "INTEGER NOT NULL DEFAULT 0",
+            "discount_amount": "REAL NOT NULL DEFAULT 0",
+            "transport_amount": "REAL NOT NULL DEFAULT 0",
+            "tax_amount": "REAL NOT NULL DEFAULT 0",
+            "net_amount": "REAL NOT NULL DEFAULT 0",
         },
     )
     _add_columns(
@@ -142,9 +146,14 @@ def ensure_sales_finance_v10_schema(connection: Connection) -> None:
     connection.execute(
         """
         UPDATE sales_weight_cards
-        SET weight_mode = 'total_card', pricing_mode = 'uniform'
+        SET weight_mode = 'total_card', pricing_mode = 'uniform',
+            net_amount = CASE
+                WHEN ABS(net_amount) < 0.0000001 THEN total_amount
+                ELSE net_amount
+            END
         WHERE weight_mode IS NULL OR TRIM(weight_mode) = ''
            OR pricing_mode IS NULL OR TRIM(pricing_mode) = ''
+           OR ABS(net_amount) < 0.0000001
         """
     )
     connection.execute(
