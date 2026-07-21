@@ -18,6 +18,18 @@ CREATE TABLE IF NOT EXISTS manufacturing_completion_summaries (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS manufacturing_completion_outputs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    manufacturing_order_id INTEGER NOT NULL
+        REFERENCES manufacturing_orders(id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL REFERENCES products(id),
+    good_quantity REAL NOT NULL DEFAULT 0,
+    defective_quantity REAL NOT NULL DEFAULT 0,
+    actual_weight_kg REAL NOT NULL DEFAULT 0,
+    unit_cost REAL NOT NULL DEFAULT 0,
+    UNIQUE(manufacturing_order_id, product_id)
+);
+
 CREATE TABLE IF NOT EXISTS manufacturing_mix_adjustments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     manufacturing_order_id INTEGER NOT NULL
@@ -32,6 +44,9 @@ CREATE TABLE IF NOT EXISTS manufacturing_mix_adjustments (
 
 CREATE INDEX IF NOT EXISTS idx_completion_summary_order
 ON manufacturing_completion_summaries(manufacturing_order_id);
+
+CREATE INDEX IF NOT EXISTS idx_completion_outputs_order
+ON manufacturing_completion_outputs(manufacturing_order_id, product_id);
 
 CREATE INDEX IF NOT EXISTS idx_mix_adjustments_order
 ON manufacturing_mix_adjustments(manufacturing_order_id, id);
