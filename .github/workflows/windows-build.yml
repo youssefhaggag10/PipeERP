@@ -65,6 +65,7 @@ jobs:
           name: PipeERP-Weight-Invoice-Customer-Statement-Acceptance
           path: .pipeerp-acceptance-artifacts
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 14
 
       - name: Generate Windows icon
