@@ -2,42 +2,8 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QComboBox, QLineEdit, QPushButton
 
+from app.services.material_quantity_defaults import default_actual_material_quantities
 from app.ui.production_completion_wizard import ProductionCompletionWizard
-
-
-def default_actual_material_quantities(
-    materials: list[dict],
-    *,
-    excluded_product_id: int,
-    batch_count: int,
-    issued_batches: int,
-) -> dict[int, float]:
-    """Build safe defaults from the quantities that were actually issued.
-
-    Raw materials keep their recipe quantity per batch. Optional scrap is capped
-    by the quantity issued per batch so opening the details dialog cannot create
-    an artificial over-consumption error.
-    """
-    batch_count = int(batch_count)
-    issued_batches = max(1, int(issued_batches))
-    if batch_count <= 0:
-        return {}
-
-    defaults: dict[int, float] = {}
-    for material in materials:
-        product_id = int(material["product_id"])
-        if product_id == int(excluded_product_id):
-            continue
-
-        quantity_per_batch = float(material.get("quantity_per_batch", 0) or 0)
-        if str(material.get("component_kind", "material")) == "scrap":
-            issued_quantity = float(material.get("actual_quantity", 0) or 0)
-            quantity_per_batch = min(
-                quantity_per_batch,
-                issued_quantity / issued_batches,
-            )
-        defaults[product_id] = quantity_per_batch * batch_count
-    return defaults
 
 
 class FinalProductionCompletionWizard(ProductionCompletionWizard):
@@ -71,7 +37,4 @@ class FinalProductionCompletionWizard(ProductionCompletionWizard):
         super().edit_quantities(button)
 
 
-__all__ = [
-    "FinalProductionCompletionWizard",
-    "default_actual_material_quantities",
-]
+__all__ = ["FinalProductionCompletionWizard"]

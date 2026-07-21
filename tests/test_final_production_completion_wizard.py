@@ -1,8 +1,6 @@
 import pytest
 
-from app.ui.final_production_completion_wizard import (
-    default_actual_material_quantities,
-)
+from app.services.material_quantity_defaults import default_actual_material_quantities
 
 
 def test_adjustment_defaults_cap_optional_scrap_to_issued_quantity() -> None:
