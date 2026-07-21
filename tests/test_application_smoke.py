@@ -122,6 +122,7 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
     assert weight_sales_page.card_number_input.text().startswith("WC")
     assert not weight_sales_page.vehicle_scale_panel.isVisible()
     assert weight_sales_page.lines_table.columnCount() == 8
+    assert not weight_sales_page.lines_table.verticalHeader().isVisible()
     assert [
         weight_sales_page.lines_table.horizontalHeaderItem(column).text()
         for column in range(weight_sales_page.lines_table.columnCount())

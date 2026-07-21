@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 from app.repositories.print_settings_repository import PrintSettingsRepository
 from app.services.a4_print_service import A4PrintService
 from app.services.weight_invoice_calculator import calculate_weight_invoice
+from app.ui.table_readability import configure_readable_table
 
 STATUS_LABELS = {
     "draft": "مسودة",
@@ -214,6 +215,8 @@ class WeightCardSalesPage(QWidget):
                 "ملاحظات",
             ]
         )
+        configure_readable_table(self.lines_table)
+        self.lines_table.verticalHeader().setVisible(False)
         self.lines_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.lines_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.lines_table.horizontalHeader().setSectionResizeMode(
