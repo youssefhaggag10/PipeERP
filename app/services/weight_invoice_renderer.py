@@ -43,9 +43,37 @@ class WeightInvoiceRenderer(A4InvoiceRenderer):
         )
 
     def _draw_metadata(self, painter: QPainter, invoice: dict) -> None:
+        date_value, time_value = self._date_parts(invoice.get("invoice_date"))
         values = dict(invoice)
         values["vehicle_number"] = values.get("vehicle_number") or "—"
-        super()._draw_metadata(painter, values)
+        values["invoice_date"] = date_value
+        values["invoice_time"] = time_value
+        values["payment_methods"] = invoice.get("payment_methods") or "—"
+
+        for left, right, label, key in self.META_COLUMNS:
+            self._draw_text(
+                painter,
+                QRect(left + 3, 351, right - left - 6, 45),
+                label,
+                18,
+                self.WHITE,
+                bold=True,
+            )
+            value_padding = 14 if key == "card_number" else 5
+            self._draw_text(
+                painter,
+                QRect(
+                    left + value_padding,
+                    459,
+                    right - left - (value_padding * 2),
+                    39,
+                ),
+                str(values.get(key, "") or "—"),
+                13 if key == "card_number" else 16,
+                self.BLACK,
+                bold=True,
+                min_size=9 if key == "card_number" else 11,
+            )
 
     def _draw_items(
         self,

@@ -266,6 +266,25 @@ def test_weight_invoice_and_customer_statement_generate_real_artifacts(
     assert "وزن الكارتة" in {
         label for _, _, label, _ in print_service.weight_renderer.ITEM_COLUMNS
     }
+    card_column = next(
+        column
+        for column in print_service.weight_renderer.META_COLUMNS
+        if column[3] == "card_number"
+    )
+    assert card_column[1] - card_column[0] >= 140
+    detail_blocks = print_service.statement_renderer._detail_blocks(
+        {
+            "line_description": "ماسورة 28 مم",
+            "quantity": 10,
+            "unit": "ماسورة",
+            "actual_weight_kg": 275,
+            "price": 28,
+            "line_total": 7700,
+        }
+    )
+    assert detail_blocks[0][2] == "الإجمالي"
+    assert detail_blocks[-1][2] == "البند"
+    assert not any("سعر الكيلو" in " ".join(block[2:4]) for block in detail_blocks)
 
     window.close()
     app.processEvents()

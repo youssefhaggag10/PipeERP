@@ -224,12 +224,7 @@ class CustomerStatementPage(QWidget):
                     f"{line.get('unit', '')}",
                 ]
                 if actual_weight is not None:
-                    details.extend(
-                        [
-                            f"وزن الكارتة {float(actual_weight):,.3f} كجم",
-                            f"سعر الكيلو {float(price or 0):,.2f}",
-                        ]
-                    )
+                    details.append(f"وزن الكارتة {float(actual_weight):,.3f} كجم")
                 else:
                     details.append(f"سعر الوحدة {float(price or 0):,.2f}")
                 details.append(
@@ -370,10 +365,7 @@ class CustomerStatementPage(QWidget):
                     f"{line.get('unit', '')} — "
                 )
                 if actual is not None:
-                    description += (
-                        f"الوزن {float(actual):,.3f} كجم — "
-                        f"سعر الكيلو {float(price or 0):,.2f} — "
-                    )
+                    description += f"وزن الكارتة {float(actual):,.3f} كجم — "
                 else:
                     description += f"سعر الوحدة {float(price or 0):,.2f} — "
                 description += f"الإجمالي {float(line.get('line_total', 0) or 0):,.2f}"

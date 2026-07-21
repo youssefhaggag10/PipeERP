@@ -287,53 +287,38 @@ class CustomerStatementRenderer(A4InvoiceRenderer):
         painter.setPen(QPen(self.BORDER_BLUE, 1))
         painter.drawRect(QRect(31, top, 989, bottom - top))
 
-        weight = row.get("actual_weight_kg")
-        price = row.get("price")
-        value_label = "سعر الكيلو" if weight is not None else "سعر الوحدة"
-        weight_text = (
-            f"وزن الكارتة: {float(weight):,.3f} كجم" if weight is not None else ""
-        )
-        blocks = (
-            (42, 135, "بند فاتورة", self.DARK_BLUE, self.WHITE),
-            (145, 520, str(row.get("line_description", "") or "—"), self.BLACK, None),
-            (
-                530,
-                690,
-                f"الكمية: {float(row.get('quantity', 0) or 0):g} {row.get('unit', '')}\n{weight_text}",
-                self.MUTED,
-                None,
-            ),
-            (
-                700,
-                850,
-                f"{value_label}: {float(price or 0):,.2f}",
-                self.MUTED,
-                None,
-            ),
-            (
-                860,
-                1008,
-                f"الإجمالي\n{float(row.get('line_total', 0) or 0):,.2f}",
-                self.DARK_BLUE,
-                None,
-            ),
-        )
+        blocks = self._detail_blocks(row)
         notes = str(row.get("notes", "") or "").strip()
-        for left, right, text, color, background in blocks:
-            block_bottom = bottom - 28 if notes and 145 <= left < 850 else bottom - 8
+        for left, right, label, value, color in blocks:
+            block_bottom = bottom - 28 if notes else bottom - 8
             rect = QRect(
                 left,
                 top + 8,
                 right - left,
                 max(24, block_bottom - top - 8),
             )
-            if background is not None:
-                painter.fillRect(rect, background)
+            painter.fillRect(rect, self.WHITE)
+            painter.setPen(QPen(self.BORDER_BLUE, 1))
+            painter.drawRoundedRect(rect, 5, 5)
             self._draw_text(
                 painter,
-                rect.adjusted(6, 4, -6, -4),
-                text,
-                13,
+                QRect(rect.left() + 8, rect.top() + 4, rect.width() - 16, 20),
+                label,
+                10,
+                self.MUTED,
+                bold=True,
+                min_size=8,
+            )
+            self._draw_text(
+                painter,
+                QRect(
+                    rect.left() + 8,
+                    rect.top() + 23,
+                    rect.width() - 16,
+                    max(20, rect.height() - 27),
+                ),
+                value,
+                14,
                 color,
                 bold=True,
                 min_size=8,
@@ -349,6 +334,36 @@ class CustomerStatementRenderer(A4InvoiceRenderer):
                 min_size=7,
                 alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
             )
+
+    def _detail_blocks(self, row: dict) -> tuple[tuple[int, int, str, str, QColor], ...]:
+        """Return detail cells from physical left to right for a clean RTL row."""
+        weight = row.get("actual_weight_kg")
+        price = row.get("price")
+        quantity = f"{float(row.get('quantity', 0) or 0):g} {row.get('unit', '')}".strip()
+        middle_label = "وزن الكارتة" if weight is not None else "سعر الوحدة"
+        middle_value = (
+            f"{float(weight):,.3f} كجم"
+            if weight is not None
+            else f"{float(price or 0):,.2f}"
+        )
+        return (
+            (
+                42,
+                205,
+                "الإجمالي",
+                f"{float(row.get('line_total', 0) or 0):,.2f}",
+                self.DARK_BLUE,
+            ),
+            (215, 405, middle_label, middle_value, self.MUTED),
+            (415, 585, "الكمية", quantity, self.MUTED),
+            (
+                595,
+                1008,
+                "البند",
+                str(row.get("line_description", "") or "—"),
+                self.BLACK,
+            ),
+        )
 
     def _draw_statement_summary(self, painter: QPainter, statement: dict) -> None:
         summary = statement.get("summary", {})
@@ -418,7 +433,6 @@ class CustomerStatementRenderer(A4InvoiceRenderer):
                 ]
                 if weight is not None:
                     detail_parts.append(f"الوزن {float(weight):,.3f} كجم")
-                    detail_parts.append(f"سعر الكيلو {float(price or 0):,.2f}")
                 else:
                     detail_parts.append(f"سعر الوحدة {float(price or 0):,.2f}")
                 detail_parts.append(f"الإجمالي {float(line.get('line_total', 0) or 0):,.2f}")
