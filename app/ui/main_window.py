@@ -1,15 +1,12 @@
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QPoint, QSignalBlocker, Qt
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
     QLabel,
-    QListWidget,
     QListWidgetItem,
     QMainWindow,
     QMenu,
-    QSizePolicy,
     QStackedWidget,
-    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -48,6 +45,11 @@ from app.ui.partners_page import PartnersPage
 from app.ui.production_run_page import ProductionRunManufacturingPage
 from app.ui.reports_page import ReportsPage
 from app.ui.responsive_accounts_page import ResponsiveAccountsPage
+from app.ui.sales_navigation_delegate import (
+    NavigationListWidget,
+    SALES_DROPDOWN_ROLE,
+    SalesNavigationDelegate,
+)
 from app.ui.stock_card_page import StockCardPage
 from app.ui.strict_products_page import StrictProductsPage
 from app.ui.table_readability import configure_tables_in_widget
@@ -58,6 +60,8 @@ from app.ui.treasury_order_pages import (
 from app.ui.warehouse_page import WarehousePage
 from app.ui.watermark_overlay import WatermarkOverlay
 from app.ui.weight_card_sales_page import WeightCardSalesPage
+
+PAGE_INDEX_ROLE = Qt.UserRole
 
 
 class MainWindow(QMainWindow):
@@ -71,10 +75,17 @@ class MainWindow(QMainWindow):
         self.page_indexes: dict[str, int] = {}
         self.crm_page: AdminOnlyCRMPage | None = None
         self.activity_center: CRMActivityCenter | None = None
+        self.sales_navigation_item: QListWidgetItem | None = None
+        self.weight_sales_page_index: int | None = None
 
-        self.navigation = QListWidget()
+        self.navigation = NavigationListWidget()
         self.navigation.setFixedWidth(240)
+        self.navigation.setItemDelegate(SalesNavigationDelegate(self.navigation))
         self.navigation.currentItemChanged.connect(self._navigation_item_changed)
+        self.navigation.sales_dropdown_requested.connect(self._show_sales_weight_menu)
+        self.sales_weight_menu = QMenu(self.navigation)
+        self.weight_sales_action = self.sales_weight_menu.addAction("البيع بالوزن / الكارتة")
+        self.weight_sales_action.triggered.connect(self._open_weight_sales_page)
 
         admin_repository = SystemAdminRepository(database, current_user)
         product_repository = StrictProductRepository(database)
@@ -136,7 +147,7 @@ class MainWindow(QMainWindow):
                 ),
                 add_navigation=False,
             )
-            weight_sales_index = self.add_page(
+            self.weight_sales_page_index = self.add_page(
                 "بيع بالوزن / الكارتة",
                 WeightCardSalesPage(
                     weight_sales_repository,
@@ -146,7 +157,7 @@ class MainWindow(QMainWindow):
                 ),
                 add_navigation=False,
             )
-            self._add_sales_navigation(normal_sales_index, weight_sales_index)
+            self._add_sales_navigation(normal_sales_index)
         if admin_repository.has_permission("accounts"):
             self.add_page(
                 "الحسابات",
@@ -228,57 +239,31 @@ class MainWindow(QMainWindow):
         self.pages.addWidget(page)
         if add_navigation:
             item = QListWidgetItem(title)
-            item.setData(Qt.UserRole, index)
+            item.setData(PAGE_INDEX_ROLE, index)
             self.navigation.addItem(item)
         self.watermark_overlay.raise_()
         return index
 
-    def _add_sales_navigation(self, normal_index: int, weight_index: int) -> None:
-        item = QListWidgetItem()
-        item.setData(Qt.UserRole, normal_index)
-        item.setSizeHint(QSize(0, 44))
+    def _add_sales_navigation(self, normal_index: int) -> None:
+        item = QListWidgetItem("المبيعات")
+        item.setData(PAGE_INDEX_ROLE, normal_index)
+        item.setData(SALES_DROPDOWN_ROLE, True)
         self.navigation.addItem(item)
+        self.sales_navigation_item = item
 
-        container = QWidget()
-        container.setLayoutDirection(Qt.RightToLeft)
-        layout = QHBoxLayout(container)
-        layout.setContentsMargins(6, 2, 6, 2)
-        layout.setSpacing(2)
+    def _show_sales_weight_menu(
+        self,
+        _item: QListWidgetItem,
+        global_position: QPoint,
+    ) -> None:
+        self.sales_weight_menu.popup(global_position)
 
-        sales_button = QToolButton()
-        sales_button.setText("المبيعات")
-        sales_button.setAutoRaise(True)
-        sales_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
-        sales_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        sales_button.clicked.connect(
-            lambda: self._open_navigation_page(item, normal_index)
-        )
-
-        arrow_button = QToolButton()
-        arrow_button.setText("▾")
-        arrow_button.setToolTip("اختيارات المبيعات")
-        arrow_button.setAutoRaise(True)
-        arrow_button.setFixedWidth(32)
-        arrow_button.setPopupMode(QToolButton.InstantPopup)
-
-        menu = QMenu(arrow_button)
-        normal_action = menu.addAction("بيع عادي")
-        weight_action = menu.addAction("بيع بالوزن / الكارتة")
-        normal_action.triggered.connect(
-            lambda: self._open_navigation_page(item, normal_index)
-        )
-        weight_action.triggered.connect(
-            lambda: self._open_navigation_page(item, weight_index)
-        )
-        arrow_button.setMenu(menu)
-
-        layout.addWidget(sales_button, 1)
-        layout.addWidget(arrow_button)
-        self.navigation.setItemWidget(item, container)
-
-    def _open_navigation_page(self, item: QListWidgetItem, page_index: int) -> None:
-        self.navigation.setCurrentItem(item)
-        self.pages_changed(page_index)
+    def _open_weight_sales_page(self) -> None:
+        if self.sales_navigation_item is None or self.weight_sales_page_index is None:
+            return
+        with QSignalBlocker(self.navigation):
+            self.navigation.setCurrentItem(self.sales_navigation_item)
+        self.pages_changed(self.weight_sales_page_index)
 
     def _navigation_item_changed(
         self,
@@ -287,7 +272,7 @@ class MainWindow(QMainWindow):
     ) -> None:
         if current is None:
             return
-        page_index = current.data(Qt.UserRole)
+        page_index = current.data(PAGE_INDEX_ROLE)
         if page_index is None:
             return
         self.pages_changed(int(page_index))
@@ -308,7 +293,7 @@ class MainWindow(QMainWindow):
     def _select_navigation_for_page(self, page_index: int) -> None:
         for row in range(self.navigation.count()):
             item = self.navigation.item(row)
-            if item.data(Qt.UserRole) == page_index:
+            if item.data(PAGE_INDEX_ROLE) == page_index:
                 self.navigation.setCurrentItem(item)
                 return
 
@@ -339,4 +324,8 @@ class MainWindow(QMainWindow):
         super().keyPressEvent(event)
 
 
-__all__ = ["MainWindow"]
+__all__ = [
+    "MainWindow",
+    "NavigationListWidget",
+    "SalesNavigationDelegate",
+]

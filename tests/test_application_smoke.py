@@ -14,7 +14,6 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
         QPushButton,
         QScrollArea,
         QTabWidget,
-        QToolButton,
         QWidget,
     )
 
@@ -27,7 +26,7 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
         AppearanceSettingsRepository,
         apply_appearance,
     )
-    from app.ui.main_window import MainWindow
+    from app.ui.main_window import MainWindow, SalesNavigationDelegate
     from app.ui.treasury_order_pages import TreasurySalesAccountingPageWithPrint
     from app.ui.weight_card_sales_page import WeightCardSalesPage
 
@@ -73,12 +72,35 @@ def test_offscreen_themes_and_core_windows_open_without_crash(tmp_path: Path) ->
         assert window.pages.currentIndex() == index
         assert window.pages.widget(index) is not None
 
-    sales_buttons = [
-        button.text().strip()
-        for button in window.navigation.findChildren(QToolButton)
+    sales_items = [
+        window.navigation.item(row)
+        for row in range(window.navigation.count())
+        if window.navigation.item(row).text().strip() == "المبيعات"
     ]
-    assert "المبيعات" in sales_buttons
-    assert "▾" in sales_buttons
+    assert len(sales_items) == 1
+    sales_item = sales_items[0]
+    assert window.navigation.itemWidget(sales_item) is None
+
+    delegate = window.navigation.itemDelegate()
+    assert isinstance(delegate, SalesNavigationDelegate)
+    item_rect = window.navigation.visualItemRect(sales_item)
+    arrow_rect = delegate.arrow_rect(item_rect)
+    assert item_rect.contains(arrow_rect)
+    assert arrow_rect.left() - item_rect.left() <= 20
+    text_width = window.navigation.fontMetrics().horizontalAdvance("المبيعات")
+    assert text_width < item_rect.right() - arrow_rect.right() - 12
+    assert [action.text() for action in window.sales_weight_menu.actions()] == [
+        "البيع بالوزن / الكارتة"
+    ]
+
+    window.navigation.setCurrentItem(sales_item)
+    app.processEvents()
+    assert window.pages.currentIndex() == window.page_indexes["المبيعات"]
+
+    window.weight_sales_action.trigger()
+    app.processEvents()
+    assert window.navigation.currentItem() is sales_item
+    assert window.pages.currentIndex() == window.page_indexes["بيع بالوزن / الكارتة"]
 
     normal_sales_page = window.pages.widget(window.page_indexes["المبيعات"])
     weight_sales_page = window.pages.widget(window.page_indexes["بيع بالوزن / الكارتة"])
