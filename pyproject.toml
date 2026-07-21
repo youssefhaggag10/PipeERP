@@ -52,3 +52,4 @@ ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "app/ui/weight_card_sales_page.py" = ["I001", "F401"]
+"app/ui/responsive_accounts_page.py" = ["I001"]
