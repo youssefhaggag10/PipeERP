@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QRect, Qt
-from PySide6.QtGui import QImage, QPainter, QPen
+from PySide6.QtGui import QColor, QImage, QPainter, QPen
 
 from app.services.a4_invoice_renderer import A4InvoiceRenderer
 
@@ -9,7 +9,13 @@ from app.services.a4_invoice_renderer import A4InvoiceRenderer
 class CustomerStatementRenderer(A4InvoiceRenderer):
     """Render a customer ledger independently from any single sales invoice."""
 
-    ROWS_PER_PAGE = 17
+    PAGE_ROW_CAPACITY = 9.0
+    DETAIL_ROW_WEIGHT = 0.82
+    TABLE_BOTTOM = 1265
+    PALE_BLUE = QColor("#eef5fd")
+    SOFT_GRAY = QColor("#f5f7fa")
+    MUTED = QColor("#4f5e70")
+    BORDER_BLUE = QColor("#2865a6")
     COLUMNS = (
         (31, 142, "الحالة", "status"),
         (142, 260, "الرصيد", "running_balance"),
@@ -32,10 +38,8 @@ class CustomerStatementRenderer(A4InvoiceRenderer):
             Qt.TransformationMode.SmoothTransformation,
         )
         flattened = self._flatten_rows(statement)
-        chunks = [
-            flattened[index : index + self.ROWS_PER_PAGE]
-            for index in range(0, max(1, len(flattened)), self.ROWS_PER_PAGE)
-        ] or [[]]
+        chunks = self._paginate_rows(flattened)
+        total_pages = len(chunks) + 1
         pages: list[QImage] = []
         for page_index, chunk in enumerate(chunks):
             page = background.copy()
@@ -48,13 +52,42 @@ class CustomerStatementRenderer(A4InvoiceRenderer):
                 self._draw_statement_title(painter)
                 self._draw_statement_metadata(painter, statement)
                 self._draw_statement_rows(painter, chunk)
-                if page_index == len(chunks) - 1:
-                    self._draw_statement_summary(painter, statement)
-                else:
-                    self._draw_continuation(painter, page_index + 1, len(chunks))
-                self._draw_footer(painter, settings, page_index + 1, len(chunks))
+                self._draw_footer(painter, settings, page_index + 1, total_pages)
             finally:
                 painter.end()
+            pages.append(page)
+
+        summary_page = background.copy()
+        painter = QPainter(summary_page)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+        painter.scale(self.OUTPUT_SCALE, self.OUTPUT_SCALE)
+        try:
+            self._draw_header(painter, settings)
+            self._draw_summary_title(painter)
+            self._draw_summary_metadata(painter, statement)
+            self._draw_statement_summary(painter, statement)
+            self._draw_footer(painter, settings, total_pages, total_pages)
+        finally:
+            painter.end()
+        pages.append(summary_page)
+        return pages
+
+    def _paginate_rows(self, rows: list[dict]) -> list[list[dict]]:
+        if not rows:
+            return [[]]
+        pages: list[list[dict]] = []
+        page: list[dict] = []
+        used = 0.0
+        for row in rows:
+            weight = self.DETAIL_ROW_WEIGHT if row.get("is_detail") else 1.0
+            if page and used + weight > self.PAGE_ROW_CAPACITY:
+                pages.append(page)
+                page = []
+                used = 0.0
+            page.append(row)
+            used += weight
+        if page:
             pages.append(page)
         return pages
 
@@ -67,6 +100,18 @@ class CustomerStatementRenderer(A4InvoiceRenderer):
             48,
             self.BLUE,
             bold=True,
+        )
+
+    def _draw_summary_title(self, painter: QPainter) -> None:
+        painter.fillRect(QRect(255, 250, 545, 76), self.WHITE)
+        self._draw_text(
+            painter,
+            QRect(255, 250, 545, 76),
+            "ملخص كشف حساب العميل",
+            43,
+            self.BLUE,
+            bold=True,
+            min_size=28,
         )
 
     def _draw_statement_metadata(self, painter: QPainter, statement: dict) -> None:
@@ -118,37 +163,87 @@ class CustomerStatementRenderer(A4InvoiceRenderer):
             alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
         )
 
+    def _draw_summary_metadata(self, painter: QPainter, statement: dict) -> None:
+        customer = statement.get("customer", {})
+        painter.fillRect(QRect(31, 342, 989, 148), self.WHITE)
+        values = (
+            (31, 300, "العميل", customer.get("name", "—")),
+            (300, 510, "كود العميل", customer.get("code", "—")),
+            (510, 720, "الهاتف", customer.get("phone", "—")),
+            (
+                720,
+                1020,
+                "الفترة",
+                f"{statement.get('date_from', '—')} إلى {statement.get('date_to', '—')}",
+            ),
+        )
+        painter.setPen(QPen(self.GRID, 1))
+        for left, right, label, value in values:
+            painter.fillRect(QRect(left, 350, right - left, 42), self.DARK_BLUE)
+            painter.fillRect(QRect(left, 392, right - left, 48), self.WHITE)
+            painter.drawRect(QRect(left, 350, right - left, 90))
+            self._draw_text(
+                painter,
+                QRect(left + 8, 350, right - left - 16, 42),
+                label,
+                16,
+                self.WHITE,
+                bold=True,
+                min_size=11,
+            )
+            self._draw_text(
+                painter,
+                QRect(left + 9, 397, right - left - 18, 38),
+                str(value or "—"),
+                16,
+                self.BLACK,
+                bold=True,
+                min_size=10,
+            )
+
     def _draw_statement_rows(self, painter: QPainter, rows: list[dict]) -> None:
         header_top = 500
-        body_top, body_bottom = 544, 1055
+        body_top, body_bottom = 544, self.TABLE_BOTTOM
         for left, right, label, _ in self.COLUMNS:
             painter.fillRect(QRect(left, header_top, right - left, 44), self.DARK_BLUE)
             self._draw_text(
                 painter,
-                QRect(left + 2, header_top, right - left - 4, 44),
+                QRect(left + 6, header_top, right - left - 12, 44),
                 label,
                 15,
                 self.WHITE,
                 bold=True,
                 min_size=10,
             )
-        visible_rows = max(6, len(rows))
-        row_height = (body_bottom - body_top) / visible_rows
+        row_weights = [
+            self.DETAIL_ROW_WEIGHT if row.get("is_detail") else 1.0 for row in rows
+        ]
+        used_weight = sum(row_weights)
+        layout_weight = max(7.0, used_weight)
+        unit_height = (body_bottom - body_top) / layout_weight
+        content_bottom = round(body_top + used_weight * unit_height)
         painter.fillRect(QRect(31, body_top, 989, body_bottom - body_top), self.WHITE)
         painter.setPen(QPen(self.GRID, 1))
-        for left, _, _, _ in self.COLUMNS:
-            painter.drawLine(left, body_top, left, body_bottom)
-        painter.drawLine(1020, body_top, 1020, body_bottom)
-        for row_index in range(visible_rows + 1):
-            y = round(body_top + row_index * row_height)
-            painter.drawLine(31, y, 1020, y)
+        painter.drawRect(QRect(31, body_top, 989, max(1, content_bottom - body_top)))
 
+        cursor = float(body_top)
         for row_index, row in enumerate(rows):
-            top = round(body_top + row_index * row_height)
-            bottom = round(body_top + (row_index + 1) * row_height)
+            top = round(cursor)
+            cursor += row_weights[row_index] * unit_height
+            bottom = round(cursor)
             detail = bool(row.get("is_detail"))
             if detail:
-                painter.fillRect(QRect(31, top, 989, bottom - top), self.WHITE)
+                self._draw_detail_row(painter, row, top, bottom)
+                continue
+            painter.fillRect(
+                QRect(31, top, 989, bottom - top),
+                self.WHITE if row_index % 2 == 0 else self.SOFT_GRAY,
+            )
+            painter.setPen(QPen(self.GRID, 1))
+            painter.drawLine(31, top, 1020, top)
+            for left, _, _, _ in self.COLUMNS:
+                painter.drawLine(left, top, left, bottom)
+            painter.drawLine(1020, top, 1020, bottom)
             values = {
                 "status": str(row.get("status", "") or ""),
                 "running_balance": (
@@ -164,17 +259,93 @@ class CustomerStatementRenderer(A4InvoiceRenderer):
             for left, right, _, key in self.COLUMNS:
                 self._draw_text(
                     painter,
-                    QRect(left + 3, top + 1, right - left - 6, bottom - top - 2),
+                    QRect(left + 7, top + 6, right - left - 14, bottom - top - 12),
                     values[key],
-                    13 if detail else 14,
+                    15,
                     self.BLACK,
-                    bold=not detail,
-                    min_size=8,
+                    bold=True,
+                    min_size=9,
                 )
+        if rows:
+            painter.setPen(QPen(self.GRID, 1))
+            painter.drawLine(31, content_bottom, 1020, content_bottom)
+
+    def _draw_detail_row(
+        self,
+        painter: QPainter,
+        row: dict,
+        top: int,
+        bottom: int,
+    ) -> None:
+        painter.fillRect(QRect(31, top, 989, bottom - top), self.PALE_BLUE)
+        painter.setPen(QPen(self.BORDER_BLUE, 1))
+        painter.drawRect(QRect(31, top, 989, bottom - top))
+
+        weight = row.get("actual_weight_kg")
+        price = row.get("price")
+        value_label = "سعر الكيلو" if weight is not None else "سعر الوحدة"
+        weight_text = (
+            f"وزن الكارتة: {float(weight):,.3f} كجم" if weight is not None else ""
+        )
+        blocks = (
+            (42, 135, "بند فاتورة", self.DARK_BLUE, self.WHITE),
+            (145, 520, str(row.get("line_description", "") or "—"), self.BLACK, None),
+            (
+                530,
+                690,
+                f"الكمية: {float(row.get('quantity', 0) or 0):g} {row.get('unit', '')}\n{weight_text}",
+                self.MUTED,
+                None,
+            ),
+            (
+                700,
+                850,
+                f"{value_label}: {float(price or 0):,.2f}",
+                self.MUTED,
+                None,
+            ),
+            (
+                860,
+                1008,
+                f"الإجمالي\n{float(row.get('line_total', 0) or 0):,.2f}",
+                self.DARK_BLUE,
+                None,
+            ),
+        )
+        notes = str(row.get("notes", "") or "").strip()
+        for left, right, text, color, background in blocks:
+            block_bottom = bottom - 28 if notes and 145 <= left < 850 else bottom - 8
+            rect = QRect(
+                left,
+                top + 8,
+                right - left,
+                max(24, block_bottom - top - 8),
+            )
+            if background is not None:
+                painter.fillRect(rect, background)
+            self._draw_text(
+                painter,
+                rect.adjusted(6, 4, -6, -4),
+                text,
+                13,
+                color,
+                bold=True,
+                min_size=8,
+            )
+        if notes:
+            self._draw_text(
+                painter,
+                QRect(145, bottom - 25, 705, 20),
+                f"ملاحظات: {notes}",
+                10,
+                self.MUTED,
+                bold=False,
+                min_size=7,
+                alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+            )
 
     def _draw_statement_summary(self, painter: QPainter, statement: dict) -> None:
         summary = statement.get("summary", {})
-        painter.fillRect(QRect(55, 1075, 920, 225), self.YELLOW)
         values = (
             ("رصيد أول المدة", summary.get("opening_balance", 0)),
             ("فواتير البيع العادية", summary.get("standard_sales_total", 0)),
@@ -185,16 +356,32 @@ class CustomerStatementRenderer(A4InvoiceRenderer):
             ("صافي الحركة", summary.get("net_movement", 0)),
             ("الرصيد النهائي المستحق", summary.get("closing_balance", 0)),
         )
+        painter.fillRect(QRect(55, 485, 920, 62), self.YELLOW)
+        self._draw_text(
+            painter,
+            QRect(75, 493, 880, 46),
+            "ملخص الحركة المالية خلال الفترة",
+            25,
+            self.DARK_BLUE,
+            bold=True,
+            min_size=18,
+        )
         for index, (label, value) in enumerate(values):
             row = index // 2
             column = index % 2
-            left = 75 + column * 450
-            top = 1087 + row * 49
+            left = 55 + column * 470
+            top = 575 + row * 150
+            card_color = self.PALE_BLUE if index != 7 else QColor("#edf8ef")
+            border_color = self.BORDER_BLUE if index != 7 else self.GREEN
+            painter.fillRect(QRect(left, top, 450, 118), card_color)
+            painter.setPen(QPen(border_color, 2))
+            painter.drawRoundedRect(QRect(left, top, 450, 118), 10, 10)
+            painter.fillRect(QRect(left + 432, top, 18, 118), self.YELLOW)
             self._draw_text(
                 painter,
-                QRect(left, top, 245, 40),
+                QRect(left + 190, top + 18, 225, 34),
                 label,
-                15,
+                17,
                 self.BLACK,
                 bold=True,
                 alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
@@ -202,12 +389,12 @@ class CustomerStatementRenderer(A4InvoiceRenderer):
             )
             self._draw_text(
                 painter,
-                QRect(left + 250, top, 170, 40),
-                f"{float(value or 0):,.2f}",
-                18,
-                self.DARK_BLUE,
+                QRect(left + 25, top + 48, 390, 48),
+                f"{float(value or 0):,.2f} جنيه",
+                24,
+                border_color,
                 bold=True,
-                min_size=12,
+                min_size=15,
             )
 
     @staticmethod
@@ -238,6 +425,13 @@ class CustomerStatementRenderer(A4InvoiceRenderer):
                         "document_number": "",
                         "document_type": "بند فاتورة",
                         "description": " - ".join(detail_parts),
+                        "line_description": str(line.get("description", "") or ""),
+                        "quantity": quantity,
+                        "unit": str(line.get("unit", "") or ""),
+                        "actual_weight_kg": weight,
+                        "price": price,
+                        "line_total": float(line.get("line_total", 0) or 0),
+                        "notes": str(line.get("notes", "") or ""),
                         "debit": 0,
                         "credit": 0,
                         "running_balance": movement.get("running_balance", 0),
