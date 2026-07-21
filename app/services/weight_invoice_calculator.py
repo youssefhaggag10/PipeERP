@@ -46,8 +46,9 @@ def calculate_weight_invoice(
 
     ``weight_mode`` is ``total_card`` or ``per_line``.
     ``pricing_mode`` is ``uniform`` or ``per_line``.
-    The final line absorbs the six-decimal allocation remainder so distributed
-    weight always equals the entered card weight exactly.
+    The final line absorbs allocation and money rounding remainders so the
+    distributed weight and uniform-price total remain exactly equal to the
+    values entered for the card.
     """
 
     if weight_mode not in {"total_card", "per_line"}:
@@ -122,6 +123,12 @@ def calculate_weight_invoice(
             item["allocated_weight_kg"] = actual
             total_weight += actual
 
+    expected_weight = total_weight.quantize(WEIGHT_QUANTUM, rounding=ROUND_HALF_UP)
+    exact_uniform_total = (
+        (expected_weight * uniform_price).quantize(MONEY_QUANTUM, rounding=ROUND_HALF_UP)
+        if pricing_mode == "uniform"
+        else None
+    )
     subtotal = Decimal("0")
     normalized: list[dict] = []
     for index, item in enumerate(prepared, start=1):
@@ -132,10 +139,13 @@ def calculate_weight_invoice(
         )
         if price < 0:
             raise ValueError(f"سعر كيلو البند رقم {index} لا يمكن أن يكون سالبًا")
-        line_total = (item["actual_weight_kg"] * price).quantize(
-            MONEY_QUANTUM,
-            rounding=ROUND_HALF_UP,
-        )
+        if pricing_mode == "uniform" and index == len(prepared):
+            line_total = exact_uniform_total - subtotal
+        else:
+            line_total = (item["actual_weight_kg"] * price).quantize(
+                MONEY_QUANTUM,
+                rounding=ROUND_HALF_UP,
+            )
         subtotal += line_total
         normalized.append(
             {
@@ -155,16 +165,17 @@ def calculate_weight_invoice(
         (Decimal(str(item["allocated_weight_kg"])) for item in normalized),
         Decimal("0"),
     )
-    expected_total = total_weight.quantize(WEIGHT_QUANTUM, rounding=ROUND_HALF_UP)
-    if distributed_total != expected_total:
+    if distributed_total != expected_weight:
         raise AssertionError("مجموع الأوزان الموزعة لا يساوي الوزن الفعلي")
+    if exact_uniform_total is not None and subtotal != exact_uniform_total:
+        raise AssertionError("إجمالي البنود لا يساوي وزن الكارتة في سعر الكيلو")
 
     return {
         "weight_mode": weight_mode,
         "pricing_mode": pricing_mode,
         "lines": normalized,
         "total_pieces": float(quantity_total),
-        "total_actual_weight_kg": float(expected_total),
+        "total_actual_weight_kg": float(expected_weight),
         "subtotal": float(subtotal.quantize(MONEY_QUANTUM, rounding=ROUND_HALF_UP)),
         "uniform_price_per_kg": float(uniform_price) if pricing_mode == "uniform" else 0.0,
     }
