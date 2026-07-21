@@ -89,21 +89,26 @@ class NavigationListWidget(QListWidget):
     def mousePressEvent(self, event) -> None:
         position = event.position().toPoint()
         index = self.indexAt(position)
+        item = self.item(index.row()) if index.isValid() else None
+        is_sales_item = bool(index.data(SALES_DROPDOWN_ROLE)) if index.isValid() else False
         delegate = self.itemDelegate()
-        if (
-            index.isValid()
-            and bool(index.data(SALES_DROPDOWN_ROLE))
-            and isinstance(delegate, SalesNavigationDelegate)
-        ):
+        if is_sales_item and isinstance(delegate, SalesNavigationDelegate):
             item_rect = self.visualRect(index)
             if delegate.arrow_rect(item_rect).contains(position):
                 global_position = self.viewport().mapToGlobal(
                     QPoint(item_rect.left(), item_rect.bottom())
                 )
-                self.sales_dropdown_requested.emit(self.item(index.row()), global_position)
+                self.sales_dropdown_requested.emit(item, global_position)
                 event.accept()
                 return
+
+        was_current_sales = is_sales_item and item is not None and self.currentItem() is item
         super().mousePressEvent(event)
+        if was_current_sales:
+            # A selected QListWidgetItem does not normally emit currentItemChanged
+            # again. Re-emitting it makes clicking the sales text always reopen
+            # normal sales after the weight page was opened from the arrow menu.
+            self.currentItemChanged.emit(item, item)
 
 
 __all__ = [
