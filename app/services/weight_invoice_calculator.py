@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 
 EPSILON = Decimal("0.0000001")
 WEIGHT_QUANTUM = Decimal("0.000001")
