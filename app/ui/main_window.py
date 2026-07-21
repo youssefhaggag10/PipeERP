@@ -43,10 +43,10 @@ from app.ui.backup_settings_page import BackupPrintSettingsPage
 from app.ui.crm_activity_center import CRMActivityCenter
 from app.ui.crm_page import CRMPage
 from app.ui.dashboard import DashboardPage
+from app.ui.final_manufacturing_page import FinalManufacturingPage
 from app.ui.inventory_page import InventoryPage
 from app.ui.lot_balances_page import LotBalancesPage
 from app.ui.partners_page import PartnersPage
-from app.ui.production_run_page import ProductionRunManufacturingPage
 from app.ui.reports_page import ReportsPage
 from app.ui.responsive_accounts_page import ResponsiveAccountsPage
 from app.ui.sales_navigation_delegate import (
@@ -176,7 +176,7 @@ class MainWindow(QMainWindow):
         if admin_repository.has_permission("manufacturing"):
             self.add_page(
                 "التصنيع",
-                ProductionRunManufacturingPage(
+                FinalManufacturingPage(
                     manufacturing_repository,
                     product_repository,
                     warehouse_repository,
