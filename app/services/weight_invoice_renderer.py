@@ -20,13 +20,12 @@ class WeightInvoiceRenderer(A4InvoiceRenderer):
         (863, 1021, "رقم الفاتورة", "invoice_number"),
     )
     ITEM_COLUMNS = (
-        (31, 172, "ملاحظات", "notes"),
-        (172, 302, "الإجمالي", "line_total"),
-        (302, 414, "سعر الكيلو", "price_per_kg"),
-        (414, 548, "الوزن الفعلي", "actual_weight_kg"),
-        (548, 642, "الكمية", "quantity"),
-        (642, 742, "الوحدة", "unit"),
-        (742, 955, "البيان", "name"),
+        (31, 205, "ملاحظات", "notes"),
+        (205, 350, "الإجمالي", "line_total"),
+        (350, 515, "وزن الكارتة", "actual_weight_kg"),
+        (515, 620, "الكمية", "quantity"),
+        (620, 735, "الوحدة", "unit"),
+        (735, 955, "البيان", "name"),
         (955, 1020, "م", "serial"),
     )
 
@@ -58,12 +57,12 @@ class WeightInvoiceRenderer(A4InvoiceRenderer):
         for left, right, label, _ in self.ITEM_COLUMNS:
             self._draw_text(
                 painter,
-                QRect(left + 3, 522, right - left - 6, 52),
+                QRect(left + 7, 522, right - left - 14, 52),
                 label,
-                16,
+                17,
                 self.WHITE if label != "م" else self.BLACK,
                 bold=True,
-                min_size=11,
+                min_size=10,
             )
 
         body_top, body_bottom = 576, 776
@@ -84,7 +83,6 @@ class WeightInvoiceRenderer(A4InvoiceRenderer):
             values = {
                 "notes": str(line.get("notes", "") or ""),
                 "line_total": self._money(line.get("line_total")),
-                "price_per_kg": self._money(line.get("price_per_kg")),
                 "actual_weight_kg": f"{float(line.get('actual_weight_kg', 0) or 0):,.3f}",
                 "quantity": f"{float(line.get('quantity', 0) or 0):g}",
                 "unit": str(line.get("unit", "") or "ماسورة"),
@@ -94,9 +92,9 @@ class WeightInvoiceRenderer(A4InvoiceRenderer):
             for left, right, _, key in self.ITEM_COLUMNS:
                 self._draw_text(
                     painter,
-                    QRect(left + 4, top + 2, right - left - 8, bottom - top - 4),
+                    QRect(left + 8, top + 7, right - left - 16, bottom - top - 14),
                     values[key],
-                    15 if key not in {"name", "notes"} else 14,
+                    16 if key not in {"name", "notes"} else 15,
                     self.BLACK,
                     bold=True,
                     min_size=9,
