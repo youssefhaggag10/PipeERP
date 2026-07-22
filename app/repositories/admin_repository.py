@@ -22,8 +22,122 @@ PERMISSIONS: tuple[tuple[str, str], ...] = (
     ("reports", "التقارير"),
     ("settings", "الإعدادات"),
     ("user_management", "إدارة المستخدمين والصلاحيات"),
-    ("system_reset", "إعادة ضبط النظام"),
+    ("system_reset", "تصفير حركات النظام"),
 )
+
+
+# These tables contain reusable setup data, not day-to-day business movements.
+# A system reset must leave them intact.
+MASTER_DATA_TABLES = frozenset(
+    {
+        "users",
+        "user_permissions",
+        "settings",
+        "schema_migrations",
+        "warehouses",
+        "partners",
+        "products",
+        "manufacturing_recipes",
+        "manufacturing_recipe_outputs",
+        "manufacturing_recipe_components",
+        "financial_accounts",
+        "crm_sources",
+        "crm_stages",
+    }
+)
+
+# Keep this deletion list explicit: resetting data is destructive, so an
+# unfamiliar future table must never be deleted until it is deliberately
+# classified as operational or master data.
+OPERATIONAL_DATA_TABLES = frozenset(
+    {
+        "crm_activities",
+        "crm_leads",
+        "customer_account_adjustments",
+        "financial_account_adjustments",
+        "financial_account_transfers",
+        "finished_good_weight_layers",
+        "inventory_cost_allocations",
+        "inventory_moves",
+        "invoice_return_lines",
+        "invoice_returns",
+        "lots",
+        "manufacturing_completion_outputs",
+        "manufacturing_completion_summaries",
+        "manufacturing_mix_adjustments",
+        "manufacturing_order_materials",
+        "manufacturing_order_outputs",
+        "manufacturing_orders",
+        "manufacturing_run_events",
+        "manufacturing_run_materials",
+        "manufacturing_run_outputs",
+        "manufacturing_runs",
+        "payment_allocations",
+        "payment_reversals",
+        "payment_transactions",
+        "purchase_invoices",
+        "purchase_order_lines",
+        "purchase_orders",
+        "return_refunds",
+        "sales_invoices",
+        "sales_order_lines",
+        "sales_orders",
+        "sales_quotation_lines",
+        "sales_quotations",
+        "sales_weight_card_lines",
+        "sales_weight_cards",
+        "sales_weight_inventory_allocations",
+    }
+)
+
+
+def _clear_operational_data(database: Database) -> None:
+    """Delete transactions atomically while preserving reusable master data."""
+    connection = database.connect()
+    try:
+        # SQLite only applies this pragma outside an active transaction.
+        connection.execute("PRAGMA foreign_keys = OFF")
+        connection.execute("BEGIN IMMEDIATE")
+        tables = [
+            str(row[0])
+            for row in connection.execute(
+                """
+                SELECT name FROM sqlite_master
+                WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+                """
+            ).fetchall()
+        ]
+        reset_tables = [table for table in tables if table in OPERATIONAL_DATA_TABLES]
+        for table in reset_tables:
+            connection.execute(f'DELETE FROM "{table}"')
+
+        sequence_exists = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='sqlite_sequence'"
+        ).fetchone()
+        if sequence_exists is not None:
+            for table in reset_tables:
+                connection.execute("DELETE FROM sqlite_sequence WHERE name = ?", (table,))
+
+        # This value is calculated from purchase/inventory history, which has
+        # just been cleared. Keep the recipe itself but discard the stale cost.
+        recipe_columns = {
+            str(row[1])
+            for row in connection.execute(
+                "PRAGMA table_info(manufacturing_recipes)"
+            ).fetchall()
+        }
+        if "estimated_scrap_unit_cost" in recipe_columns:
+            connection.execute(
+                "UPDATE manufacturing_recipes SET estimated_scrap_unit_cost = 0"
+            )
+
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.close()
 
 
 class AdminRepository:
@@ -185,72 +299,7 @@ class AdminRepository:
         if row is None or not verify_password(admin_password, str(row["password_hash"])):
             raise ValueError("كلمة مرور الأدمن غير صحيحة")
 
-        preserve = {"users", "user_permissions", "settings", "schema_migrations", "sqlite_sequence"}
-        with self.database.session(immediate=True) as connection:
-            connection.execute("PRAGMA foreign_keys = OFF")
-            tables = [
-                str(row[0])
-                for row in connection.execute(
-                    """
-                    SELECT name FROM sqlite_master
-                    WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
-                    """
-                ).fetchall()
-            ]
-            for table in tables:
-                if table in preserve:
-                    continue
-                connection.execute(f'DELETE FROM "{table}"')
-
-            if "sqlite_sequence" in {
-                str(row[0])
-                for row in connection.execute(
-                    "SELECT name FROM sqlite_master WHERE type = 'table'"
-                ).fetchall()
-            }:
-                reset_tables = [table for table in tables if table not in preserve]
-                for table in reset_tables:
-                    connection.execute("DELETE FROM sqlite_sequence WHERE name = ?", (table,))
-
-            # Restore the single required warehouse and CRM reference data.
-            connection.execute(
-                "INSERT OR IGNORE INTO warehouses(code, name, is_active) VALUES ('MAIN', 'المصنع', 1)"
-            )
-            connection.execute(
-                "UPDATE warehouses SET name = 'المصنع', is_active = 1 WHERE code = 'MAIN'"
-            )
-            connection.executemany(
-                "INSERT OR IGNORE INTO crm_sources(code, name, sequence) VALUES (?, ?, ?)",
-                (
-                    ("facebook", "فيسبوك", 10), ("instagram", "إنستجرام", 20),
-                    ("whatsapp", "واتساب", 30), ("website", "الموقع", 40),
-                    ("paid_ad", "إعلان ممول", 50), ("referral", "ترشيح عميل", 60),
-                    ("sales_rep", "مندوب", 70), ("inbound_call", "اتصال وارد", 80),
-                    ("exhibition", "معرض", 90), ("other", "مصدر آخر", 100),
-                ),
-            )
-            connection.executemany(
-                """
-                INSERT OR IGNORE INTO crm_stages(code, name, sequence, is_won, is_lost)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    ("new", "عميل جديد", 10, 0, 0),
-                    ("not_contacted", "لم يتم التواصل", 20, 0, 0),
-                    ("contacted", "تم التواصل", 30, 0, 0),
-                    ("interested", "مهتم", 40, 0, 0),
-                    ("quotation", "إرسال عرض سعر", 50, 0, 0),
-                    ("negotiation", "تفاوض", 60, 0, 0),
-                    ("waiting", "انتظار قرار", 70, 0, 0),
-                    ("won", "تم البيع", 80, 1, 0),
-                    ("postponed", "مؤجل", 90, 0, 0),
-                    ("no_answer", "لا يرد", 100, 0, 0),
-                    ("not_interested", "غير مهتم", 110, 0, 1),
-                    ("invalid_phone", "رقم غير صحيح", 120, 0, 1),
-                    ("lost", "خسارة الصفقة", 130, 0, 1),
-                ),
-            )
-            connection.execute("PRAGMA foreign_keys = ON")
+        _clear_operational_data(self.database)
 
     def _require_admin(self) -> None:
         if not self.is_admin:

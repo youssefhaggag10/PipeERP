@@ -31,14 +31,14 @@ class SettingsPage(QWidget):
 
         title = QLabel("الإعدادات")
         title.setObjectName("titleLabel")
-        subtitle = QLabel("إدارة المستخدمين والصلاحيات وإعادة ضبط النظام")
+        subtitle = QLabel("إدارة المستخدمين والصلاحيات وتصفير حركات النظام")
         subtitle.setObjectName("subtitleLabel")
 
         self.tabs = QTabWidget()
         if self.admin_repository.has_permission("user_management"):
             self.tabs.addTab(self._build_users_tab(), "المستخدمون والصلاحيات")
         if self.admin_repository.has_permission("system_reset"):
-            self.tabs.addTab(self._build_reset_tab(), "إعادة ضبط النظام")
+            self.tabs.addTab(self._build_reset_tab(), "تصفير الحركات")
         if self.tabs.count() == 0:
             empty_tab = QWidget()
             empty_layout = QVBoxLayout(empty_tab)
@@ -121,13 +121,15 @@ class SettingsPage(QWidget):
     def _build_reset_tab(self) -> QWidget:
         tab = QWidget()
         warning = QLabel(
-            "إعادة ضبط النظام تمسح كل بيانات التشغيل: العملاء، الموردين، الأصناف، CRM، "
-            "المخزون، أوامر البيع والشراء، الفواتير والمدفوعات. سيتم الاحتفاظ بالمستخدمين "
-            "والصلاحيات فقط. لا يمكن التراجع إلا من نسخة احتياطية خارجية."
+            "تصفير الحركات يمسح فواتير وأوامر البيع والشراء، حركات المدفوعات والخزينة، "
+            "حركات المخزون، أوامر ونتائج التصنيع، المرتجعات، عروض الأسعار وبيانات CRM. "
+            "سيتم الاحتفاظ بالأصناف، خلطات التصنيع، العملاء، الموردين، المخازن، "
+            "الحسابات المالية، المستخدمين والإعدادات. لا يمكن التراجع إلا من نسخة "
+            "احتياطية خارجية."
         )
         warning.setWordWrap(True)
         warning.setStyleSheet("font-weight: bold; color: #dc2626;")
-        reset_button = QPushButton("حذف كل البيانات وإرجاع النظام للصفر")
+        reset_button = QPushButton("مسح الحركات وتصفير النظام")
         reset_button.setObjectName("dangerButton")
         reset_button.clicked.connect(self._confirm_reset)
         layout = QVBoxLayout(tab)
@@ -243,7 +245,8 @@ class SettingsPage(QWidget):
         first = QMessageBox.warning(
             self,
             "تحذير شديد",
-            "سيتم حذف كل بيانات النظام نهائيًا مع الإبقاء على المستخدمين والصلاحيات.\n"
+            "سيتم حذف كل الحركات نهائيًا مع الاحتفاظ بالبيانات الأساسية.\n"
+            "الأصناف والخلطات والعملاء والموردون لن يتم حذفهم.\n"
             "هل تريد الاستمرار؟",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
@@ -260,8 +263,9 @@ class SettingsPage(QWidget):
             return
         QMessageBox.information(
             self,
-            "تمت إعادة الضبط",
-            "تم حذف كل بيانات التشغيل وإرجاع النظام للصفر. أغلق البرنامج وافتحه مرة أخرى.",
+            "تم تصفير الحركات",
+            "تم حذف كل الحركات مع الاحتفاظ بالبيانات الأساسية. "
+            "أغلق البرنامج وافتحه مرة أخرى.",
         )
 
 
