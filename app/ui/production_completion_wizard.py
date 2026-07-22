@@ -58,7 +58,8 @@ class ProductionCompletionWizard(QWizard):
         page = QWizardPage()
         page.setTitle("1 — الإنتاج الفعلي")
         page.setSubTitle(
-            "سجل الناتج مرة واحدة. الخامات صُرفت عند بدء الأمر ولن تُصرف مرة أخرى."
+            "سجل الناتج مرة واحدة. إذا زاد عدد الخلطات الفعلي، "
+            "ستُصرف خامات الزيادة تلقائيًا عند إتمام الأمر."
         )
         info = QLabel(
             f"الخلطات المخططة: {int(self.order['planned_batches'])} — "
@@ -330,11 +331,6 @@ class ProductionCompletionWizard(QWizard):
             raise ValueError("أعداد الخلطات والإنتاج والأوزان يجب أن تكون أرقامًا") from error
         if actual_batches <= 0:
             raise ValueError("عدد الخلطات الفعلي يجب أن يكون أكبر من صفر")
-        issued_batches = int(self.order["actual_batches"])
-        if actual_batches > issued_batches:
-            raise ValueError(
-                f"عدد الخلطات الفعلي لا يمكن أن يتجاوز الخلطات المصروفة ({issued_batches})"
-            )
         return {
             "actual_batches": actual_batches,
             "outputs": outputs,

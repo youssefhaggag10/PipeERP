@@ -43,11 +43,6 @@ def build_completion_plan(
         raise ValueError("يمكن إتمام أمر تصنيع جارٍ فقط")
 
     issued_batches = int(order["actual_batches"] or 0)
-    if actual_batches > issued_batches:
-        raise ValueError(
-            f"عدد الخلطات الفعلي لا يمكن أن يتجاوز الخلطات المصروفة ({issued_batches})"
-        )
-
     materials = connection.execute(
         """
         SELECT mom.*, p.code, p.name
@@ -71,6 +66,37 @@ def build_completion_plan(
         int(row["product_id"]): _effective_quantity_per_batch(row, issued_batches)
         for row in materials
     }
+    extra_batches = max(0, actual_batches - issued_batches)
+    projected_issued: dict[int, float] = {}
+    for material in materials:
+        product_id = int(material["product_id"])
+        issued_quantity = float(material["actual_quantity"] or 0)
+        if extra_batches:
+            additional_quantity = float(material["quantity_per_batch"] or 0) * extra_batches
+            available_row = connection.execute(
+                """
+                SELECT COALESCE(SUM(quantity_in - quantity_out), 0) AS quantity
+                FROM inventory_moves
+                WHERE product_id = ? AND warehouse_id = ?
+                """,
+                (product_id, int(order["warehouse_id"])),
+            ).fetchone()
+            available_quantity = float(available_row["quantity"] or 0)
+            if str(material["component_kind"]) == "scrap":
+                additional_quantity = min(additional_quantity, available_quantity)
+            elif additional_quantity - available_quantity > EPSILON:
+                raise ValueError(
+                    f"رصيد {material['name']} لا يكفي لصرف "
+                    f"{extra_batches} خلطة إضافية"
+                )
+            issued_quantity += additional_quantity
+        projected_issued[product_id] = issued_quantity
+        if str(material["component_kind"]) == "scrap" and actual_batches > 0:
+            effective_per_batch[product_id] = min(
+                float(material["quantity_per_batch"] or 0),
+                issued_quantity / actual_batches,
+            )
+
     used_quantities = {
         product_id: quantity * full_batches
         for product_id, quantity in effective_per_batch.items()
@@ -133,7 +159,7 @@ def build_completion_plan(
     used_input_weight = 0.0
     for material in materials:
         product_id = int(material["product_id"])
-        issued_quantity = float(material["actual_quantity"] or 0)
+        issued_quantity = projected_issued[product_id]
         used_quantity = float(used_quantities.get(product_id, 0))
         if used_quantity - issued_quantity > EPSILON:
             raise ValueError(

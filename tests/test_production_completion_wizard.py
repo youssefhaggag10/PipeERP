@@ -138,5 +138,9 @@ def test_final_wizard_removes_defective_output_and_recalculates_scrap() -> None:
     app.processEvents()
     assert float(wizard.scrap_input.text()) == pytest.approx(180)
 
+    wizard.actual_batches_input.setText("11")
+    app.processEvents()
+    assert float(wizard.scrap_input.text()) == pytest.approx(780)
+
     wizard.close()
     app.processEvents()

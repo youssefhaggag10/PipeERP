@@ -96,6 +96,17 @@ def test_scrap_recalculates_when_batches_or_output_change() -> None:
     assert nine_batches == pytest.approx(180)
 
 
+def test_scrap_recalculates_for_batch_added_at_completion() -> None:
+    scrap = calculate_suggested_scrap_weight(
+        materials=_materials(),
+        actual_batches=11,
+        issued_batches=10,
+        output_weights={3: 2800},
+    )
+
+    assert scrap == pytest.approx(500)
+
+
 def test_modified_batches_reduce_input_and_scrap_automatically() -> None:
     adjustments = [
         {

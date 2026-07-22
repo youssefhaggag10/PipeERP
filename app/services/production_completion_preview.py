@@ -12,7 +12,7 @@ def _issued_batch_count(materials: list[dict], actual_batches: int) -> int:
         issued = float(material.get("actual_quantity", 0) or 0)
         if per_batch > EPSILON:
             candidates.append(round(issued / per_batch))
-    return max([actual_batches, *candidates])
+    return max(candidates) if candidates else actual_batches
 
 
 def calculate_completion_preview(
@@ -36,6 +36,7 @@ def calculate_completion_preview(
         raise ValueError("مجموع الخلطات المعدلة لا يمكن أن يتجاوز عدد الخلطات الفعلي")
 
     issued_batches = _issued_batch_count(materials, actual_batches)
+    extra_batches = max(0, actual_batches - issued_batches)
     material_by_id = {int(row["product_id"]): row for row in materials}
     effective_per_batch = {}
     for product_id, material in material_by_id.items():
@@ -87,6 +88,7 @@ def calculate_completion_preview(
     used_input_weight = 0.0
     for product_id, material in material_by_id.items():
         issued = float(material["actual_quantity"] or 0)
+        issued += effective_per_batch[product_id] * extra_batches
         consumed = float(used.get(product_id, 0))
         if consumed - issued > EPSILON:
             raise ValueError(

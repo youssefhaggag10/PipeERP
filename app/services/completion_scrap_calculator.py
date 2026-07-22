@@ -27,11 +27,6 @@ def calculate_completion_input_weight(
         raise ValueError("عدد الخلطات الفعلي يجب أن يكون أكبر من صفر")
     if issued_batches <= 0:
         raise ValueError("عدد الخلطات المصروفة يجب أن يكون أكبر من صفر")
-    if actual_batches > issued_batches:
-        raise ValueError(
-            f"عدد الخلطات الفعلي لا يمكن أن يتجاوز الخلطات المصروفة ({issued_batches})"
-        )
-
     material_by_id = {int(row["product_id"]): row for row in materials}
     effective_per_batch = {
         product_id: _effective_quantity_per_batch(material, issued_batches)
@@ -72,6 +67,8 @@ def calculate_completion_input_weight(
     for product_id, material in material_by_id.items():
         consumed = float(used.get(product_id, 0) or 0)
         issued = float(material.get("actual_quantity", 0) or 0)
+        if actual_batches > issued_batches:
+            issued += effective_per_batch[product_id] * (actual_batches - issued_batches)
         if consumed - issued > EPSILON:
             raise ValueError(
                 f"استخدام {material.get('name', product_id)} يتجاوز المصروف"

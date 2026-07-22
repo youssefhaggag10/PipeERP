@@ -53,6 +53,11 @@ class WizardManufacturingRepository(OrderCompletionManufacturingRepository):
     ) -> dict:
         with self.database.session(immediate=True) as connection:
             ensure_completion_summary_schema(connection)
+            self._issue_additional_batches(
+                connection,
+                int(order_id),
+                target_batches=int(actual_batches),
+            )
             plan = build_completion_plan(
                 connection,
                 int(order_id),
@@ -234,6 +239,59 @@ class WizardManufacturingRepository(OrderCompletionManufacturingRepository):
             self._store_completion_summary(connection, int(order_id), plan)
 
         return public_completion_plan(plan)
+
+    def _issue_additional_batches(
+        self,
+        connection,
+        order_id: int,
+        *,
+        target_batches: int,
+    ) -> None:
+        order = connection.execute(
+            "SELECT * FROM manufacturing_orders WHERE id = ?",
+            (int(order_id),),
+        ).fetchone()
+        if order is None or str(order["status"]) != "in_progress":
+            raise ValueError("يمكن إتمام أمر تصنيع جارٍ فقط")
+
+        issued_batches = int(order["actual_batches"] or 0)
+        additional_batches = int(target_batches) - issued_batches
+        if additional_batches <= 0:
+            return
+
+        materials = connection.execute(
+            """
+            SELECT * FROM manufacturing_order_materials
+            WHERE manufacturing_order_id = ?
+            ORDER BY id
+            """,
+            (int(order_id),),
+        ).fetchall()
+        for material in materials:
+            quantity = float(material["quantity_per_batch"] or 0) * additional_batches
+            if str(material["component_kind"]) == "scrap":
+                quantity = min(
+                    quantity,
+                    self.costing.available_quantity(
+                        connection,
+                        int(material["product_id"]),
+                        int(order["warehouse_id"]),
+                    ),
+                )
+            self._issue_material(
+                connection,
+                order_id=int(order_id),
+                warehouse_id=int(order["warehouse_id"]),
+                material_id=int(material["id"]),
+                product_id=int(material["product_id"]),
+                quantity=quantity,
+            )
+
+        connection.execute(
+            "UPDATE manufacturing_orders SET actual_batches = ? WHERE id = ?",
+            (int(target_batches), int(order_id)),
+        )
+        self._refresh_material_cost(connection, int(order_id))
 
     @staticmethod
     def _store_completion_summary(connection, order_id: int, plan: dict) -> None:
