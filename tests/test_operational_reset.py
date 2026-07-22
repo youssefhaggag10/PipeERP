@@ -3,14 +3,20 @@ from pathlib import Path
 from app.database.connection import Database
 from app.database.schema import initialize_database
 from app.models.user import User
-from app.repositories.admin_repository import MASTER_DATA_TABLES, OPERATIONAL_DATA_TABLES
-from app.repositories.base_material_scrap_cost_repository import BaseMaterialScrapCostRepository
+from app.repositories.admin_repository import (
+    MASTER_DATA_TABLES,
+    OPERATIONAL_DATA_TABLES,
+)
+from app.repositories.base_material_scrap_cost_repository import (
+    BaseMaterialScrapCostRepository,
+)
 from app.repositories.crm_repository import CRMRepository
-from app.repositories.detailed_return_refund_repository import DetailedReturnRefundRepository
+from app.repositories.detailed_return_refund_repository import (
+    DetailedReturnRefundRepository,
+)
 from app.repositories.quotation_repository import QuotationRepository
 from app.repositories.system_admin_repository import SystemAdminRepository
 from app.security.passwords import hash_password
-
 
 ADMIN_PASSWORD = "reset-test-password"
 
