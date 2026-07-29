@@ -36,6 +36,7 @@ MASTER_DATA_TABLES = frozenset(
         "schema_migrations",
         "warehouses",
         "partners",
+        "partner_opening_balance_entries",
         "products",
         "manufacturing_recipes",
         "manufacturing_recipe_outputs",

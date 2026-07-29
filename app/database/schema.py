@@ -3,8 +3,14 @@ import os
 from app.database.completion_summary_schema import ensure_completion_summary_schema
 from app.database.connection import Database
 from app.database.migrations import LATEST_SCHEMA_VERSION, run_migrations
-from app.database.sales_finance_v10_schema import (
+from app.database.partner_opening_balance_schema import (
     SCHEMA_VERSION,
+    ensure_partner_opening_balance_schema,
+)
+from app.database.sales_finance_v10_schema import (
+    SCHEMA_VERSION as SALES_FINANCE_SCHEMA_VERSION,
+)
+from app.database.sales_finance_v10_schema import (
     ensure_sales_finance_v10_schema,
 )
 from app.security.passwords import hash_password
@@ -19,7 +25,9 @@ def initialize_database(database: Database) -> None:
             )
         if current_version <= LATEST_SCHEMA_VERSION:
             run_migrations(connection)
-        ensure_sales_finance_v10_schema(connection)
+        if current_version <= SALES_FINANCE_SCHEMA_VERSION:
+            ensure_sales_finance_v10_schema(connection)
+        ensure_partner_opening_balance_schema(connection)
         ensure_completion_summary_schema(connection)
         connection.execute(
             "INSERT OR IGNORE INTO warehouses(code, name) VALUES (?, ?)",

@@ -193,6 +193,40 @@ class DetailedReturnRefundRepository(ReturnRefundRepository):
             ]
             for row in rows
         ]
+        opening_nature = "credit" if is_customer else "debit"
+        opening_rows = self.database.fetch_all(
+            """
+            SELECT entry.entry_number AS transaction_number,
+                   entry.entry_date AS transaction_date,
+                   p.name AS partner_name, entry.amount,
+                   COALESCE(entry.notes, '') AS notes
+            FROM partner_opening_balance_entries entry
+            JOIN partners p ON p.id = entry.partner_id
+            WHERE p.partner_type = ?
+              AND entry.nature = ?
+              AND entry.reversal_of_id IS NULL
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM partner_opening_balance_entries reversal
+                  WHERE reversal.reversal_of_id = entry.id
+              )
+            ORDER BY entry.entry_date DESC, entry.id DESC
+            """,
+            ("customer" if is_customer else "supplier", opening_nature),
+        )
+        data.extend(
+            [
+                row["transaction_number"],
+                row["transaction_date"],
+                row["partner_name"],
+                f"{float(row['amount']):,.2f}",
+                "رصيد افتتاحي",
+                "-",
+                "قيد افتتاحي",
+                row["notes"],
+            ]
+            for row in opening_rows
+        )
         return {
             "title": title,
             "headers": [

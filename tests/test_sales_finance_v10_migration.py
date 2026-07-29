@@ -10,7 +10,9 @@ def _columns(database: Database, table_name: str) -> set[str]:
     return {str(row["name"]) for row in rows}
 
 
-def test_schema_v9_upgrades_to_v10_without_losing_invoice_or_payment(tmp_path: Path) -> None:
+def test_schema_v9_upgrades_through_v11_without_losing_invoice_or_payment(
+    tmp_path: Path,
+) -> None:
     database = Database(tmp_path / "legacy-v9.sqlite3")
     with database.session(immediate=True) as connection:
         run_migrations(connection)
@@ -58,7 +60,7 @@ def test_schema_v9_upgrades_to_v10_without_losing_invoice_or_payment(tmp_path: P
     initialize_database(database)
 
     with database.session() as connection:
-        assert int(connection.execute("PRAGMA user_version").fetchone()[0]) == 10
+        assert int(connection.execute("PRAGMA user_version").fetchone()[0]) == 11
         invoice = connection.execute(
             "SELECT invoice_type, net_total FROM sales_invoices WHERE id = ?",
             (invoice_id,),
@@ -77,7 +79,7 @@ def test_schema_v9_upgrades_to_v10_without_losing_invoice_or_payment(tmp_path: P
 
     initialize_database(database)
     with database.session() as connection:
-        assert int(connection.execute("PRAGMA user_version").fetchone()[0]) == 10
+        assert int(connection.execute("PRAGMA user_version").fetchone()[0]) == 11
         assert int(
             connection.execute("SELECT COUNT(*) FROM payment_allocations").fetchone()[0]
         ) == 1
@@ -111,3 +113,4 @@ def test_schema_v10_exposes_weight_invoice_fields(tmp_path: Path) -> None:
     }
     assert "payment_allocations" in tables
     assert "customer_account_adjustments" in tables
+    assert "partner_opening_balance_entries" in tables

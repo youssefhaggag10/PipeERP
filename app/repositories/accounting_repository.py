@@ -93,6 +93,24 @@ class AccountingRepository:
             """
         )
         result = dict(row or {})
+        opening_entry_totals = self._opening_entry_totals()
+        customer_entry_total = opening_entry_totals.get("customer", 0.0)
+        supplier_entry_total = opening_entry_totals.get("supplier", 0.0)
+        result["customer_opening"] = (
+            float(result.get("customer_opening", 0)) + customer_entry_total
+        )
+        result["supplier_opening"] = (
+            float(result.get("supplier_opening", 0)) + supplier_entry_total
+        )
+        opening_advances = self._opening_advance_totals()
+        result["customer_advances"] = (
+            float(result.get("customer_advances", 0))
+            + opening_advances.get("customer", 0.0)
+        )
+        result["supplier_advances"] = (
+            float(result.get("supplier_advances", 0))
+            + opening_advances.get("supplier", 0.0)
+        )
         result["receivables"] = (
             float(result.get("sales_total", 0))
             + float(result.get("customer_opening", 0))
@@ -169,8 +187,13 @@ class AccountingRepository:
             (payment_type, payment_type, reference_type, partner_type),
         )
         result = []
+        opening_entries = self._opening_entries_by_partner(partner_type)
         for row in rows:
             item = dict(row)
+            opening_entry_total = opening_entries.get(int(item["id"]), 0.0)
+            item["opening_balance"] = (
+                float(item["opening_balance"]) + opening_entry_total
+            )
             item["orders_total"] = float(item["invoices_total"])
             item["balance"] = (
                 float(item["opening_balance"])
@@ -179,6 +202,306 @@ class AccountingRepository:
             )
             result.append(item)
         return result
+
+    def _opening_entry_totals(self) -> dict[str, float]:
+        rows = self.database.fetch_all(
+            """
+            SELECT p.partner_type,
+                   COALESCE(SUM(
+                       CASE
+                           WHEN p.partner_type = 'customer' AND entry.nature = 'debit'
+                               THEN entry.amount
+                           WHEN p.partner_type = 'customer' AND entry.nature = 'credit'
+                               THEN -entry.amount
+                           WHEN p.partner_type = 'supplier' AND entry.nature = 'credit'
+                               THEN entry.amount
+                           ELSE -entry.amount
+                       END
+                   ), 0) AS total
+            FROM partner_opening_balance_entries entry
+            JOIN partners p ON p.id = entry.partner_id
+            GROUP BY p.partner_type
+            """
+        )
+        return {
+            str(row["partner_type"]): float(row["total"])
+            for row in rows
+        }
+
+    def _opening_entries_by_partner(self, partner_type: str) -> dict[int, float]:
+        rows = self.database.fetch_all(
+            """
+            SELECT entry.partner_id,
+                   COALESCE(SUM(
+                       CASE
+                           WHEN p.partner_type = 'customer' AND entry.nature = 'debit'
+                               THEN entry.amount
+                           WHEN p.partner_type = 'customer' AND entry.nature = 'credit'
+                               THEN -entry.amount
+                           WHEN p.partner_type = 'supplier' AND entry.nature = 'credit'
+                               THEN entry.amount
+                           ELSE -entry.amount
+                       END
+                   ), 0) AS total
+            FROM partner_opening_balance_entries entry
+            JOIN partners p ON p.id = entry.partner_id
+            WHERE p.partner_type = ?
+            GROUP BY entry.partner_id
+            """,
+            (partner_type,),
+        )
+        return {
+            int(row["partner_id"]): float(row["total"])
+            for row in rows
+        }
+
+    def _opening_advance_totals(self) -> dict[str, float]:
+        rows = self.database.fetch_all(
+            """
+            SELECT partner_type,
+                   COALESCE(SUM(
+                       CASE WHEN opening_total < 0
+                            THEN -opening_total ELSE 0 END
+                   ), 0) AS total
+            FROM (
+                SELECT p.id, p.partner_type,
+                       p.opening_balance
+                       + COALESCE(SUM(
+                           CASE
+                               WHEN p.partner_type = 'customer'
+                                    AND entry.nature = 'debit'
+                                   THEN entry.amount
+                               WHEN p.partner_type = 'customer'
+                                    AND entry.nature = 'credit'
+                                   THEN -entry.amount
+                               WHEN p.partner_type = 'supplier'
+                                    AND entry.nature = 'credit'
+                                   THEN entry.amount
+                               WHEN entry.id IS NOT NULL
+                                   THEN -entry.amount
+                               ELSE 0
+                           END
+                       ), 0) AS opening_total
+                FROM partners p
+                LEFT JOIN partner_opening_balance_entries entry
+                    ON entry.partner_id = p.id
+                WHERE p.is_active = 1
+                GROUP BY p.id, p.partner_type, p.opening_balance
+            )
+            GROUP BY partner_type
+            """
+        )
+        return {
+            str(row["partner_type"]): float(row["total"])
+            for row in rows
+        }
+
+    def record_partner_opening_balance(
+        self,
+        *,
+        partner_type: str,
+        partner_id: int,
+        nature: str,
+        amount: float,
+        entry_date: date | str,
+        notes: str = "",
+        created_by_user_id: int,
+    ) -> int:
+        if partner_type not in {"customer", "supplier"}:
+            raise ValueError("نوع الطرف غير صحيح")
+        if nature not in {"debit", "credit"}:
+            raise ValueError("طبيعة الرصيد غير صحيحة")
+        amount = float(amount)
+        if amount <= 0:
+            raise ValueError("المبلغ يجب أن يكون أكبر من صفر")
+        entry_date_value = self._validated_entry_date(entry_date)
+
+        with self.database.session(immediate=True) as connection:
+            creator_name = self._require_opening_balance_permission(
+                connection,
+                int(created_by_user_id),
+            )
+            partner = connection.execute(
+                """
+                SELECT id FROM partners
+                WHERE id = ? AND partner_type = ? AND is_active = 1
+                """,
+                (int(partner_id), partner_type),
+            ).fetchone()
+            if partner is None:
+                raise ValueError("العميل أو المورد غير موجود أو غير نشط")
+
+            active_entry = connection.execute(
+                """
+                SELECT entry.entry_number
+                FROM partner_opening_balance_entries entry
+                WHERE entry.partner_id = ?
+                  AND entry.reversal_of_id IS NULL
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM partner_opening_balance_entries reversal
+                      WHERE reversal.reversal_of_id = entry.id
+                  )
+                ORDER BY entry.id DESC
+                LIMIT 1
+                """,
+                (int(partner_id),),
+            ).fetchone()
+            if active_entry is not None:
+                raise ValueError(
+                    "يوجد رصيد افتتاحي معتمد لهذا الطرف. "
+                    "اعكس القيد الحالي أولًا ثم سجّل الرصيد الصحيح."
+                )
+
+            next_id = int(
+                connection.execute(
+                    "SELECT COALESCE(MAX(id), 0) + 1 "
+                    "FROM partner_opening_balance_entries"
+                ).fetchone()[0]
+            )
+            cursor = connection.execute(
+                """
+                INSERT INTO partner_opening_balance_entries(
+                    entry_number, entry_date, partner_id, nature, amount,
+                    source, notes, created_by_user_id, created_by_name
+                ) VALUES (?, ?, ?, ?, ?, 'manual', ?, ?, ?)
+                """,
+                (
+                    f"OB{next_id:06d}",
+                    entry_date_value,
+                    int(partner_id),
+                    nature,
+                    amount,
+                    notes.strip(),
+                    int(created_by_user_id),
+                    creator_name,
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def reverse_partner_opening_balance(
+        self,
+        entry_id: int,
+        *,
+        reason: str,
+        created_by_user_id: int,
+    ) -> int:
+        reason = reason.strip()
+        if not reason:
+            raise ValueError("سبب عكس القيد مطلوب")
+
+        with self.database.session(immediate=True) as connection:
+            creator_name = self._require_opening_balance_permission(
+                connection,
+                int(created_by_user_id),
+            )
+            original = connection.execute(
+                """
+                SELECT id, entry_number, partner_id, nature, amount
+                FROM partner_opening_balance_entries
+                WHERE id = ? AND reversal_of_id IS NULL
+                """,
+                (int(entry_id),),
+            ).fetchone()
+            if original is None:
+                raise ValueError("القيد المحدد غير موجود أو هو قيد عكسي")
+            already_reversed = connection.execute(
+                """
+                SELECT id FROM partner_opening_balance_entries
+                WHERE reversal_of_id = ?
+                """,
+                (int(entry_id),),
+            ).fetchone()
+            if already_reversed is not None:
+                raise ValueError("تم عكس هذا القيد بالفعل")
+
+            next_id = int(
+                connection.execute(
+                    "SELECT COALESCE(MAX(id), 0) + 1 "
+                    "FROM partner_opening_balance_entries"
+                ).fetchone()[0]
+            )
+            reverse_nature = "credit" if str(original["nature"]) == "debit" else "debit"
+            cursor = connection.execute(
+                """
+                INSERT INTO partner_opening_balance_entries(
+                    entry_number, entry_date, partner_id, nature, amount,
+                    source, reversal_of_id, notes,
+                    created_by_user_id, created_by_name
+                ) VALUES (?, ?, ?, ?, ?, 'reversal', ?, ?, ?, ?)
+                """,
+                (
+                    f"OBR{next_id:06d}",
+                    date.today().isoformat(),
+                    int(original["partner_id"]),
+                    reverse_nature,
+                    float(original["amount"]),
+                    int(entry_id),
+                    f"عكس القيد {original['entry_number']} — {reason}",
+                    int(created_by_user_id),
+                    creator_name,
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def list_partner_opening_balance_entries(self) -> list[dict]:
+        rows = self.database.fetch_all(
+            """
+            SELECT entry.id, entry.entry_number, entry.entry_date,
+                   p.partner_type, p.code AS partner_code,
+                   p.name AS partner_name, entry.nature, entry.amount,
+                   entry.source, entry.reversal_of_id, entry.notes,
+                   entry.created_by_name, entry.created_at,
+                   CASE
+                       WHEN entry.reversal_of_id IS NOT NULL THEN 'reversal'
+                       WHEN EXISTS (
+                           SELECT 1
+                           FROM partner_opening_balance_entries reversal
+                           WHERE reversal.reversal_of_id = entry.id
+                       ) THEN 'reversed'
+                       ELSE 'posted'
+                   END AS status
+            FROM partner_opening_balance_entries entry
+            JOIN partners p ON p.id = entry.partner_id
+            ORDER BY entry.entry_date DESC, entry.id DESC
+            """
+        )
+        return [dict(row) for row in rows]
+
+    @staticmethod
+    def _validated_entry_date(value: date | str) -> str:
+        if isinstance(value, date):
+            return value.isoformat()
+        try:
+            return date.fromisoformat(str(value).strip()).isoformat()
+        except ValueError as error:
+            raise ValueError("تاريخ الرصيد الافتتاحي غير صحيح") from error
+
+    @staticmethod
+    def _require_opening_balance_permission(connection, user_id: int) -> str:
+        user = connection.execute(
+            """
+            SELECT id, username, full_name, role
+            FROM users
+            WHERE id = ? AND is_active = 1
+            """,
+            (int(user_id),),
+        ).fetchone()
+        if user is None:
+            raise PermissionError("المستخدم غير موجود أو غير نشط")
+        if str(user["role"]).lower() != "admin":
+            allowed = connection.execute(
+                """
+                SELECT 1 FROM user_permissions
+                WHERE user_id = ? AND permission_code = 'accounts' AND allowed = 1
+                """,
+                (int(user_id),),
+            ).fetchone()
+            if allowed is None:
+                raise PermissionError(
+                    "تسجيل الأرصدة الافتتاحية متاح للأدمن أو مستخدم الحسابات فقط"
+                )
+        return str(user["full_name"] or user["username"])
 
     def list_open_orders(self, partner_type: str, partner_id: int | None = None) -> list[dict]:
         if partner_type == "customer":

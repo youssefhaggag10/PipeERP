@@ -169,6 +169,7 @@ class MainWindow(QMainWindow):
                     accounting_repository,
                     partner_repository,
                     invoice_repository,
+                    current_user=current_user,
                 ),
             )
         if admin_repository.has_permission("stock_card"):

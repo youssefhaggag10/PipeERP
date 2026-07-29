@@ -213,6 +213,53 @@ class CustomerStatementAccountingRepository(DetailedReturnRefundRepository):
         opening_balance += self._movement_balance_before(int(customer_id), start)
 
         movements: list[dict] = []
+        opening_entry_rows = self.database.fetch_all(
+            """
+            SELECT entry.id, entry.entry_number AS document_number,
+                   entry.entry_date AS movement_date, entry.nature,
+                   entry.amount, entry.reversal_of_id,
+                   COALESCE(entry.notes, '') AS notes,
+                   CASE
+                       WHEN entry.reversal_of_id IS NOT NULL THEN 'reversal'
+                       WHEN EXISTS (
+                           SELECT 1
+                           FROM partner_opening_balance_entries reversal
+                           WHERE reversal.reversal_of_id = entry.id
+                       ) THEN 'reversed'
+                       ELSE 'posted'
+                   END AS entry_status
+            FROM partner_opening_balance_entries entry
+            WHERE entry.partner_id = ?
+              AND entry.entry_date BETWEEN ? AND ?
+            ORDER BY entry.entry_date, entry.id
+            """,
+            (int(customer_id), start, end),
+        )
+        for sequence, row in enumerate(opening_entry_rows):
+            is_debit = str(row["nature"]) == "debit"
+            if str(row["entry_status"]) == "reversal":
+                status = "قيد عكسي"
+            elif str(row["entry_status"]) == "reversed":
+                status = "معتمد — تم عكسه"
+            else:
+                status = "معتمد"
+            movements.append(
+                {
+                    "movement_date": str(row["movement_date"]),
+                    "document_number": str(row["document_number"]),
+                    "document_type": (
+                        "رصيد افتتاحي مدين"
+                        if is_debit
+                        else "رصيد افتتاحي دائن"
+                    ),
+                    "description": str(row["notes"] or ""),
+                    "debit": float(row["amount"] or 0) if is_debit else 0.0,
+                    "credit": 0.0 if is_debit else float(row["amount"] or 0),
+                    "status": status,
+                    "sort_order": (str(row["movement_date"]), 5, sequence),
+                }
+            )
+
         invoice_rows = self.database.fetch_all(
             """
             SELECT si.id, si.invoice_number AS document_number,
@@ -490,6 +537,15 @@ class CustomerStatementAccountingRepository(DetailedReturnRefundRepository):
                       AND rr.refund_date < ?
                 ), 0)
                 + COALESCE((
+                    SELECT SUM(
+                        CASE WHEN entry.nature = 'debit'
+                             THEN entry.amount ELSE -entry.amount END
+                    )
+                    FROM partner_opening_balance_entries entry
+                    WHERE entry.partner_id = ?
+                      AND entry.entry_date < ?
+                ), 0)
+                + COALESCE((
                     SELECT SUM(CASE WHEN caa.adjustment_type = 'debit'
                                     THEN caa.amount ELSE -caa.amount END)
                     FROM customer_account_adjustments caa
@@ -498,6 +554,8 @@ class CustomerStatementAccountingRepository(DetailedReturnRefundRepository):
                 ), 0) AS balance
             """,
             (
+                customer_id,
+                start,
                 customer_id,
                 start,
                 customer_id,
