@@ -5,19 +5,56 @@ on:
     workflows: ["Windows Build"]
     types: [completed]
     branches: [main]
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/release.yml"
 
 jobs:
   release:
     permissions:
       actions: read
       contents: write
-    if: github.event.workflow_run.conclusion == 'success'
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
+      - name: Resolve validated Windows build
+        id: source
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let source;
+            if (context.eventName === "workflow_run") {
+              source = context.payload.workflow_run;
+            } else {
+              const response = await github.rest.actions.listWorkflowRunsForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                branch: "main",
+                status: "success",
+                per_page: 100,
+              });
+              source = response.data.workflow_runs.find(
+                (run) => run.name === "Windows Build" && run.conclusion === "success"
+              );
+            }
+            if (!source) {
+              core.setFailed("No successful Windows Build was found on main.");
+              return;
+            }
+            core.setOutput("run_id", String(source.id));
+            core.setOutput("head_sha", source.head_sha);
+            core.info(`Using Windows Build ${source.id} at ${source.head_sha}.`);
+
       - name: Verify all main quality gates
         uses: actions/github-script@v7
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.head_sha }}
         with:
           script: |
             const required = new Set([
@@ -26,7 +63,7 @@ jobs:
               "PipeERP Smoke Tests",
               "Windows Build",
             ]);
-            const sha = context.payload.workflow_run.head_sha;
+            const sha = process.env.SOURCE_SHA;
             for (let attempt = 0; attempt < 30; attempt++) {
               const response = await github.rest.actions.listWorkflowRunsForRepo({
                 owner: context.repo.owner,
@@ -63,19 +100,19 @@ jobs:
             }
             core.setFailed("Timed out waiting for all main quality gates.");
 
+      - name: Checkout validated source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.source.outputs.head_sha }}
+          persist-credentials: false
+
       - name: Download validated Windows installer
         uses: actions/download-artifact@v4
         with:
           name: PipeERP-Windows-Release
           path: release-assets
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id }}
-
-      - name: Checkout validated source
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          persist-credentials: false
+          run-id: ${{ steps.source.outputs.run_id }}
 
       - name: Resolve release metadata
         shell: bash
@@ -98,7 +135,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+          TARGET_SHA: ${{ steps.source.outputs.head_sha }}
         run: |
           tag="v${APP_VERSION}"
           if gh release view "$tag" >/dev/null 2>&1; then
