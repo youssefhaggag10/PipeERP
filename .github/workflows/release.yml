@@ -66,29 +66,33 @@ jobs:
       - name: Download validated Windows installer
         uses: actions/download-artifact@v4
         with:
-          name: PipeERP-Setup-0.2.0
+          name: PipeERP-Windows-Release
           path: release-assets
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.workflow_run.id }}
 
+      - name: Checkout validated source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Resolve release metadata
+        shell: bash
+        run: |
+          version="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          installer="PipeERP-Setup-${version}.exe"
+          checksum="${installer}.sha256"
+          test -s "release-assets/${installer}"
+          test -s "release-assets/${checksum}"
+          grep -Fq "# PipeERP v${version}" docs/RELEASE_NOTES.md
+          echo "APP_VERSION=${version}" >> "$GITHUB_ENV"
+          echo "INSTALLER_NAME=${installer}" >> "$GITHUB_ENV"
+          echo "CHECKSUM_NAME=${checksum}" >> "$GITHUB_ENV"
+
       - name: Verify installer checksum
         working-directory: release-assets
-        run: sha256sum --check PipeERP-Setup-0.2.0.exe.sha256
-
-      - name: Write release notes
-        run: |
-          cat > release-notes.md <<'EOF'
-          ## PipeERP v0.2.0
-
-          - Appearance themes: Dark, Light, and System.
-          - CRM activities and follow-up center.
-          - Manufacturing operating runs with independent material and cost snapshots.
-          - Materials can be removed from later operating mixes without changing previous runs.
-          - Weight-card sales using actual weight × price per kg.
-          - Multi-size weight allocation and inventory weight tracking.
-          - Schema 9 migration with safe database upgrades.
-          - Automated regression, GUI smoke, and Windows installer tests.
-          EOF
+        run: sha256sum --check "$CHECKSUM_NAME"
 
       - name: Publish GitHub release
         env:
@@ -96,19 +100,14 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          if gh release view v0.2.0 >/dev/null 2>&1; then
-            gh release upload v0.2.0 \
-              release-assets/PipeERP-Setup-0.2.0.exe \
-              release-assets/PipeERP-Setup-0.2.0.exe.sha256 \
-              --clobber
-            gh release edit v0.2.0 \
-              --title "PipeERP v0.2.0" \
-              --notes-file release-notes.md
-          else
-            gh release create v0.2.0 \
-              release-assets/PipeERP-Setup-0.2.0.exe \
-              release-assets/PipeERP-Setup-0.2.0.exe.sha256 \
-              --target "$TARGET_SHA" \
-              --title "PipeERP v0.2.0" \
-              --notes-file release-notes.md
+          tag="v${APP_VERSION}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release ${tag} already exists; keeping its published assets unchanged."
+            exit 0
           fi
+          gh release create "$tag" \
+            "release-assets/${INSTALLER_NAME}" \
+            "release-assets/${CHECKSUM_NAME}" \
+            --target "$TARGET_SHA" \
+            --title "PipeERP ${tag}" \
+            --notes-file docs/RELEASE_NOTES.md

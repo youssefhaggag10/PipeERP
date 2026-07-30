@@ -17,8 +17,6 @@ jobs:
       contents: read
     runs-on: windows-latest
     timeout-minutes: 60
-    env:
-      APP_VERSION: "0.2.0"
 
     steps:
       - name: Checkout repository
@@ -31,6 +29,15 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+
+      - name: Read application version
+        shell: pwsh
+        run: |
+          $version = python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])"
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Invalid application version: $version"
+          }
+          "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Install build dependencies
         shell: pwsh
@@ -84,15 +91,23 @@ jobs:
       - name: Build standalone application
         shell: pwsh
         run: |
+          $windowsVersion = "${env:APP_VERSION}.0"
           python -m nuitka `
             --standalone `
             --assume-yes-for-downloads `
             --enable-plugin=pyside6 `
             --windows-console-mode=disable `
             --windows-icon-from-ico=build/PipeERP.ico `
+            --include-package=tzdata `
+            --include-package-data=tzdata `
             --include-data-dir=app/assets=app/assets `
             --output-dir=build/windows `
             --output-filename=PipeERP.exe `
+            --company-name="3A PIPE" `
+            --product-name="PipeERP" `
+            --file-description="3A PIPE ERP" `
+            --file-version="$windowsVersion" `
+            --product-version="$windowsVersion" `
             main.py
           if (-not (Test-Path "build/windows/main.dist/PipeERP.exe")) {
             throw "Nuitka executable was not produced"
@@ -159,9 +174,9 @@ jobs:
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
-          name: PipeERP-Setup-0.2.0
+          name: PipeERP-Windows-Release
           path: |
-            dist/installer/PipeERP-Setup-0.2.0.exe
-            dist/installer/PipeERP-Setup-0.2.0.exe.sha256
+            dist/installer/PipeERP-Setup-*.exe
+            dist/installer/PipeERP-Setup-*.exe.sha256
           if-no-files-found: error
           retention-days: 14

@@ -1,19 +1,7 @@
-name: Build Windows Installer
+name: Build Windows Installer (Manual)
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    tags:
-      - "v*"
-    paths:
-      - ".github/workflows/windows-installer.yml"
-      - "installer/**"
-      - "pyproject.toml"
-      - "main.py"
-      - "app/**"
-      - "tests/**"
 
 permissions:
   contents: read
