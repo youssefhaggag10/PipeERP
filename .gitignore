@@ -9,6 +9,7 @@ venv/
 env/
 .pytest_cache/
 .ruff_cache/
+.coverage
 *.egg-info/
 
 # PySide / Qt
@@ -25,6 +26,18 @@ backups/
 # Packaging
 build/
 dist/
+
+# Web application
+node_modules/
+.env
+.env.*
+!.env.example
+coverage/
+htmlcov/
+web/frontend/.vite/
+*.tsbuildinfo
+web/frontend/vite.config.js
+web/frontend/vite.config.d.ts
 
 # IDE
 .vscode/
