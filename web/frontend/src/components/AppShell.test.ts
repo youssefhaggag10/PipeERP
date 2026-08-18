@@ -14,4 +14,11 @@ describe("permission-aware navigation", () => {
 
     expect(labels).toEqual(["لوحة التشغيل"]);
   });
+
+  it("exposes the purchasing workspace only to purchasing readers", () => {
+    const items = visibleNavigationItems(["purchases.read"]);
+
+    expect(items.map((item) => item.label)).toEqual(["لوحة التشغيل", "المشتريات"]);
+    expect(items[1]?.to).toBe("/purchases");
+  });
 });

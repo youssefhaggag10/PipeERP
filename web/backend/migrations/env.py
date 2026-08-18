@@ -8,6 +8,7 @@ from app.infrastructure.database.base import Base
 from app.modules.identity import models as identity_models  # noqa: F401
 from app.modules.inventory import models as inventory_models  # noqa: F401
 from app.modules.master_data import models as master_data_models  # noqa: F401
+from app.modules.purchasing import models as purchasing_models  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

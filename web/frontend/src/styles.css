@@ -319,6 +319,64 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .reversal-bar .danger-button { color: #fff; border-color: #a8463f; }
 .muted-action { color: #aab3bc; }
 
+.purchase-heading { background: linear-gradient(118deg,#10283e 0%,#17445a 62%,#8a6118 145%); }
+.purchasing-layout { grid-template-columns: minmax(0,1.25fr) minmax(420px,.9fr); }
+.purchase-order-list { padding: 12px; display: grid; gap: 8px; }
+.purchase-order-card { width: 100%; min-width: 0; padding: 14px; display: grid; grid-template-columns: 42px minmax(0,1fr) auto auto; align-items: center; gap: 12px; border: 1px solid #dce5e9; border-radius: 13px; background: linear-gradient(145deg,#fff,#f8fafb); color: var(--ink); text-align: right; transition: .17s ease; }
+.purchase-order-card:hover { border-color: #abd3cc; transform: translateY(-1px); box-shadow: var(--shadow-soft); }
+.purchase-order-card--selected { border-color: #79bbae; background: linear-gradient(145deg,#fff,#eef8f6); box-shadow: 0 0 0 3px rgba(15,139,120,.07); }
+.purchase-order-card__icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 11px; color: #9b6715; background: #fff4df; }
+.purchase-order-card strong, .purchase-order-card small { display: block; }
+.purchase-order-card strong { font-size: 12px; }
+.purchase-order-card small { margin-top: 4px; color: var(--muted); font-size: 9px; }
+.purchase-order-card__value { min-width: 100px; color: var(--navy-900); font-size: 11px; font-weight: 900; text-align: left; }
+.purchase-status { width: fit-content; padding: 6px 9px; border-radius: 999px; font-size: 9px; font-weight: 850; white-space: nowrap; }
+.purchase-status--draft { color: #647384; background: #edf1f3; }
+.purchase-status--approved { color: #356d9d; background: #e8f2fa; }
+.purchase-status--partial { color: #a56313; background: #fff2dc; }
+.purchase-status--received { color: #087060; background: #e5f6f1; }
+.purchase-status--cancelled { color: #a24740; background: #fbeceb; }
+.purchase-create-card { overflow: visible; }
+.purchase-form { max-height: calc(100vh - 150px); overflow-y: auto; scrollbar-color: #a9c7c1 transparent; scrollbar-width: thin; }
+.purchase-form textarea { min-height: 68px; padding: 10px 12px; resize: vertical; border: 1px solid #d5dfe5; border-radius: 10px; background: #fff; font: inherit; }
+.purchase-lines-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.purchase-lines-head strong { font-size: 11px; }
+.purchase-draft-lines { display: grid; gap: 11px; }
+.purchase-draft-line { position: relative; padding: 15px; display: grid; gap: 11px; border: 1px solid #dbe5e9; border-radius: 13px; background: #f7fafb; }
+.purchase-line-number { position: absolute; top: -8px; right: -7px; width: 23px; height: 23px; display: grid; place-items: center; border-radius: 8px; color: #fff; background: var(--navy-900); font-size: 9px; font-weight: 900; box-shadow: 0 4px 10px rgba(13,34,52,.18); }
+.purchase-line-delete { position: absolute; top: 10px; left: 10px; color: #a24740; }
+.purchase-detail { margin-top: 16px; }
+.purchase-lines-table td > small { display: block; margin-top: 4px; color: var(--muted); font-size: 8px; }
+.purchase-progress { position: relative; width: 120px; height: 8px; overflow: visible; border-radius: 999px; background: #e6edef; }
+.purchase-progress > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#0f8b78,#45c7af); }
+.purchase-progress small { position: absolute; top: -5px; right: calc(100% + 7px); color: #637484; font-size: 8px; }
+.purchase-actions-zone { padding: 16px; display: grid; gap: 12px; border-top: 1px solid #e7edef; background: #f7fafb; }
+.purchase-action-callout { padding: 15px; display: grid; grid-template-columns: 42px 1fr auto; align-items: center; gap: 12px; border: 1px solid #cce3de; border-radius: 13px; background: #eef9f6; }
+.purchase-action-callout > span, .purchase-receipt-form > header > span, .purchase-invoice-form > span { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 11px; color: var(--accent-dark); background: #dff3ee; }
+.purchase-action-callout strong, .purchase-action-callout p { display: block; }
+.purchase-action-callout strong { font-size: 11px; }
+.purchase-action-callout p { margin: 4px 0 0; color: var(--muted); font-size: 9px; }
+.purchase-receipt-form { overflow: hidden; border: 1px solid #d9e3e7; border-radius: 14px; background: #fff; }
+.purchase-receipt-form > header { padding: 15px; display: grid; grid-template-columns: 42px 1fr; align-items: center; gap: 11px; border-bottom: 1px solid #e7edef; }
+.purchase-receipt-form header strong, .purchase-receipt-form header p { display: block; }
+.purchase-receipt-form header strong { font-size: 12px; }
+.purchase-receipt-form header p { margin: 4px 0 0; color: var(--muted); font-size: 9px; }
+.purchase-receipt-lines { padding: 13px; display: grid; gap: 10px; }
+.purchase-receipt-line { padding: 12px; display: grid; grid-template-columns: minmax(140px,1.1fr) repeat(5,minmax(95px,.7fr)); align-items: end; gap: 8px; border: 1px solid #e0e7ea; border-radius: 11px; background: #f9fbfc; }
+.purchase-receipt-line > strong { align-self: center; font-size: 10px; }
+.purchase-receipt-line label, .purchase-receipt-foot label { display: grid; gap: 5px; color: #596b7b; font-size: 8px; font-weight: 800; }
+.purchase-receipt-line input, .purchase-receipt-foot input, .purchase-invoice-form input { min-width: 0; height: 38px; padding: 0 9px; border: 1px solid #d5dfe4; border-radius: 8px; background: #fff; outline: 0; }
+.purchase-receipt-line input:focus, .purchase-receipt-foot input:focus, .purchase-invoice-form input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(15,139,120,.08); }
+.purchase-receipt-foot { padding: 13px; display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 10px; border-top: 1px solid #e7edef; background: #f7fafb; }
+.purchase-invoice-form { padding: 13px; display: grid; grid-template-columns: 42px minmax(150px,1fr) minmax(190px,.8fr) auto; align-items: center; gap: 11px; border: 1px solid #e5ddca; border-radius: 13px; background: #fffaf0; }
+.purchase-invoice-form > span { color: #9b6715; background: #fff0d4; }
+.purchase-invoice-form strong, .purchase-invoice-form small { display: block; }
+.purchase-invoice-form strong { font-size: 11px; }
+.purchase-invoice-form small { margin-top: 4px; color: #8d7a60; font-size: 8px; }
+.purchase-detail-total { padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-top: 1px solid #e7edef; background: linear-gradient(90deg,#10283e,#173b51); color: #fff; }
+.purchase-detail-total span { display: flex; align-items: center; gap: 8px; color: #b9cbd6; font-size: 10px; }
+.purchase-detail-total strong { font-size: 18px; }
+
 @media (max-width: 1100px) {
   .app-shell { grid-template-columns: 82px minmax(0,1fr); }
   .sidebar__head { padding-inline: 20px; }
@@ -331,6 +389,10 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .custom-role__form fieldset { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .settings-form { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .reference-form, .reference-form--four { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .purchasing-layout { grid-template-columns: 1fr; }
+  .purchase-create-card { position: static; }
+  .purchase-form { max-height: none; }
+  .purchase-receipt-line { grid-template-columns: repeat(3,minmax(0,1fr)); }
 }
 
 @media (max-width: 760px) {
@@ -351,6 +413,11 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .settings-company, .settings-form__wide { grid-column: auto; }
   .reference-row { grid-template-columns: 68px minmax(0,1fr) auto; }
   .reference-row > .status-badge { display: none; }
+  .purchase-order-card { grid-template-columns: 38px minmax(0,1fr) auto; }
+  .purchase-order-card__value { grid-column: 2; text-align: right; }
+  .purchase-receipt-line, .purchase-receipt-foot, .purchase-invoice-form, .purchase-action-callout { grid-template-columns: 1fr; }
+  .purchase-receipt-line > strong { grid-column: 1 / -1; }
+  .purchase-detail-total { align-items: flex-start; flex-direction: column; }
 }
 
 @media (prefers-reduced-motion: reduce) {
