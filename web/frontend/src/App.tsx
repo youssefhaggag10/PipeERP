@@ -4,6 +4,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { IdentityPage } from "./pages/IdentityPage";
+import { InventoryPage } from "./pages/InventoryPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PartnersPage } from "./pages/PartnersPage";
 import { ProductsPage } from "./pages/ProductsPage";
@@ -18,6 +19,7 @@ export function App() {
       <Route path="/products" element={<ProtectedRoute requiredPermissions={["products.read"]}><ProductsPage /></ProtectedRoute>} />
       <Route path="/partners" element={<ProtectedRoute requiredPermissions={["partners.read"]}><PartnersPage /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute requiredPermissions={["settings.read"]}><SettingsPage /></ProtectedRoute>} />
+      <Route path="/inventory" element={<ProtectedRoute requiredPermissions={["inventory.read"]}><InventoryPage /></ProtectedRoute>} />
       <Route path="/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
       {import.meta.env.DEV ? (
         <Route path="/design-preview" element={<DashboardPage />} />

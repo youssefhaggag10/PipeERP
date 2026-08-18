@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
@@ -56,6 +57,11 @@ class TransactionView(InventoryView):
     total_cost: Decimal
     reference_type: str
     reference_id: str | None
+    product_code: str
+    product_name_ar: str
+    warehouse_name_ar: str
+    notes: str
+    posted_at: datetime
 
 
 class BalanceView(InventoryView):
@@ -64,3 +70,17 @@ class BalanceView(InventoryView):
     quantity_on_hand: Decimal
     weight_on_hand_kg: Decimal
     version: int
+    product_code: str
+    product_name_ar: str
+    warehouse_name_ar: str
+
+
+class InventoryOption(InventoryView):
+    id: UUID
+    code: str
+    name_ar: str
+
+
+class InventoryOptionsView(BaseModel):
+    products: list[InventoryOption]
+    warehouses: list[InventoryOption]

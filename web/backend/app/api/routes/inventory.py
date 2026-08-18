@@ -13,17 +13,21 @@ from app.api.dependencies import (
 from app.modules.identity.permissions import PermissionCode
 from app.modules.inventory.schemas import (
     BalanceView,
+    InventoryOptionsView,
     IssueRequest,
     ReceiptRequest,
     TransactionView,
 )
 from app.modules.inventory.service import (
     InsufficientStock,
+    InventoryConflict,
     InventoryNotFound,
+    inventory_options,
     list_balances,
     list_transactions,
     post_issue,
     post_receipt,
+    transaction_view,
 )
 
 router = APIRouter(prefix="/inventory")
@@ -32,7 +36,7 @@ router = APIRouter(prefix="/inventory")
 def _translate_error(exc: Exception) -> HTTPException:
     if isinstance(exc, InventoryNotFound):
         return HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
-    if isinstance(exc, (InsufficientStock, IntegrityError)):
+    if isinstance(exc, (InsufficientStock, InventoryConflict, IntegrityError)):
         detail = str(exc) if isinstance(exc, InsufficientStock) else "تعارضت الحركة مع عملية أخرى"
         return HTTPException(status.HTTP_409_CONFLICT, detail)
     return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
@@ -45,7 +49,17 @@ def balances(
     db: DatabaseSession,
 ) -> list[BalanceView]:
     enforce_permission(request, db, principal, PermissionCode.INVENTORY_READ)
-    return [BalanceView.model_validate(item) for item in list_balances(db)]
+    return list_balances(db)
+
+
+@router.get("/options", response_model=InventoryOptionsView)
+def options(
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DatabaseSession,
+) -> InventoryOptionsView:
+    enforce_permission(request, db, principal, PermissionCode.INVENTORY_READ)
+    return inventory_options(db)
 
 
 @router.get("/transactions", response_model=list[TransactionView])
@@ -56,7 +70,7 @@ def transactions(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ) -> list[TransactionView]:
     enforce_permission(request, db, principal, PermissionCode.INVENTORY_READ)
-    return [TransactionView.model_validate(item) for item in list_transactions(db, limit=limit)]
+    return list_transactions(db, limit=limit)
 
 
 @router.post("/receipts", response_model=TransactionView, status_code=status.HTTP_201_CREATED)
@@ -77,10 +91,16 @@ def receipt(
             actor_user_id=principal.user.id,
             client=client_context(request),
         )
-    except (InventoryNotFound, InsufficientStock, IntegrityError, ValueError) as exc:
+    except (
+        InventoryNotFound,
+        InsufficientStock,
+        InventoryConflict,
+        IntegrityError,
+        ValueError,
+    ) as exc:
         db.rollback()
         raise _translate_error(exc) from exc
-    view = TransactionView.model_validate(item)
+    view = transaction_view(db, item)
     db.commit()
     return view
 
@@ -103,9 +123,15 @@ def issue(
             actor_user_id=principal.user.id,
             client=client_context(request),
         )
-    except (InventoryNotFound, InsufficientStock, IntegrityError, ValueError) as exc:
+    except (
+        InventoryNotFound,
+        InsufficientStock,
+        InventoryConflict,
+        IntegrityError,
+        ValueError,
+    ) as exc:
         db.rollback()
         raise _translate_error(exc) from exc
-    view = TransactionView.model_validate(item)
+    view = transaction_view(db, item)
     db.commit()
     return view

@@ -27,7 +27,7 @@ const navigation: NavigationItem[] = [
   { label: "المبيعات", icon: ShoppingCart, permission: "sales.read" },
   { label: "البيع بالوزن", icon: Scale, permission: "weight_sales.read" },
   { label: "المشتريات", icon: PackageCheck, permission: "purchases.read" },
-  { label: "المخزون", icon: Boxes, permission: "inventory.read" },
+  { label: "المخزون", icon: Boxes, to: "/inventory", permission: "inventory.read" },
   { label: "التصنيع", icon: Factory, permission: "manufacturing.read" },
   { label: "الحسابات", icon: CircleDollarSign, permission: "accounts.read" },
   {

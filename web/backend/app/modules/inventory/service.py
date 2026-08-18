@@ -16,7 +16,14 @@ from app.modules.inventory.models import (
     InventoryLot,
     InventoryTransaction,
 )
-from app.modules.inventory.schemas import IssueRequest, ReceiptRequest
+from app.modules.inventory.schemas import (
+    BalanceView,
+    InventoryOption,
+    InventoryOptionsView,
+    IssueRequest,
+    ReceiptRequest,
+    TransactionView,
+)
 from app.modules.master_data.models import Product, Warehouse
 
 
@@ -32,10 +39,30 @@ class InsufficientStock(InventoryError):
     pass
 
 
+class InventoryConflict(InventoryError):
+    pass
+
+
 def _existing_transaction(db: Session, idempotency_key: str) -> InventoryTransaction | None:
     return db.scalar(
         select(InventoryTransaction).where(InventoryTransaction.idempotency_key == idempotency_key)
     )
+
+
+def _validate_idempotent_request(
+    transaction: InventoryTransaction,
+    *,
+    transaction_type: str,
+    product_id: UUID,
+    warehouse_id: UUID,
+) -> InventoryTransaction:
+    if (
+        transaction.transaction_type != transaction_type
+        or transaction.product_id != product_id
+        or transaction.warehouse_id != warehouse_id
+    ):
+        raise InventoryConflict("مفتاح منع التكرار مستخدم بالفعل لطلب مختلف")
+    return transaction
 
 
 def _lock_context(db: Session, product_id: UUID, warehouse_id: UUID) -> None:
@@ -108,11 +135,21 @@ def post_receipt(
 ) -> InventoryTransaction:
     existing = _existing_transaction(db, idempotency_key)
     if existing is not None:
-        return existing
+        return _validate_idempotent_request(
+            existing,
+            transaction_type="receipt",
+            product_id=payload.product_id,
+            warehouse_id=payload.warehouse_id,
+        )
     _lock_context(db, payload.product_id, payload.warehouse_id)
     existing = _existing_transaction(db, idempotency_key)
     if existing is not None:
-        return existing
+        return _validate_idempotent_request(
+            existing,
+            transaction_type="receipt",
+            product_id=payload.product_id,
+            warehouse_id=payload.warehouse_id,
+        )
 
     lot = _get_or_create_lot(
         db,
@@ -194,11 +231,21 @@ def post_issue(
 ) -> InventoryTransaction:
     existing = _existing_transaction(db, idempotency_key)
     if existing is not None:
-        return existing
+        return _validate_idempotent_request(
+            existing,
+            transaction_type="issue",
+            product_id=payload.product_id,
+            warehouse_id=payload.warehouse_id,
+        )
     _lock_context(db, payload.product_id, payload.warehouse_id)
     existing = _existing_transaction(db, idempotency_key)
     if existing is not None:
-        return existing
+        return _validate_idempotent_request(
+            existing,
+            transaction_type="issue",
+            product_id=payload.product_id,
+            warehouse_id=payload.warehouse_id,
+        )
     balance = _locked_balance(db, payload.product_id, payload.warehouse_id)
     layers = list(
         db.scalars(
@@ -295,21 +342,112 @@ def post_issue(
     return transaction
 
 
-def list_balances(db: Session) -> list[InventoryBalance]:
-    return list(
-        db.scalars(
-            select(InventoryBalance).order_by(
-                InventoryBalance.product_id, InventoryBalance.warehouse_id
-            )
+def list_balances(db: Session) -> list[BalanceView]:
+    rows = db.execute(
+        select(
+            InventoryBalance,
+            Product.code,
+            Product.name_ar,
+            Warehouse.name_ar.label("warehouse_name_ar"),
         )
+        .join(Product, Product.id == InventoryBalance.product_id)
+        .join(Warehouse, Warehouse.id == InventoryBalance.warehouse_id)
+        .order_by(Product.code, Warehouse.name_ar)
+    )
+    return [
+        BalanceView(
+            product_id=balance.product_id,
+            warehouse_id=balance.warehouse_id,
+            quantity_on_hand=balance.quantity_on_hand,
+            weight_on_hand_kg=balance.weight_on_hand_kg,
+            version=balance.version,
+            product_code=product_code,
+            product_name_ar=product_name_ar,
+            warehouse_name_ar=warehouse_name_ar,
+        )
+        for balance, product_code, product_name_ar, warehouse_name_ar in rows
+    ]
+
+
+def list_transactions(db: Session, *, limit: int = 100) -> list[TransactionView]:
+    rows = db.execute(
+        select(
+            InventoryTransaction,
+            Product.code,
+            Product.name_ar,
+            Warehouse.name_ar.label("warehouse_name_ar"),
+        )
+        .join(Product, Product.id == InventoryTransaction.product_id)
+        .join(Warehouse, Warehouse.id == InventoryTransaction.warehouse_id)
+        .order_by(InventoryTransaction.posted_at.desc(), InventoryTransaction.id.desc())
+        .limit(limit)
+    )
+    return [
+        TransactionView(
+            id=transaction.id,
+            idempotency_key=transaction.idempotency_key,
+            transaction_type=transaction.transaction_type,
+            product_id=transaction.product_id,
+            warehouse_id=transaction.warehouse_id,
+            lot_id=transaction.lot_id,
+            quantity_delta=transaction.quantity_delta,
+            weight_delta_kg=transaction.weight_delta_kg,
+            unit_cost=transaction.unit_cost,
+            total_cost=transaction.total_cost,
+            reference_type=transaction.reference_type,
+            reference_id=transaction.reference_id,
+            product_code=product_code,
+            product_name_ar=product_name_ar,
+            warehouse_name_ar=warehouse_name_ar,
+            notes=transaction.notes,
+            posted_at=transaction.posted_at,
+        )
+        for transaction, product_code, product_name_ar, warehouse_name_ar in rows
+    ]
+
+
+def transaction_view(db: Session, transaction: InventoryTransaction) -> TransactionView:
+    product = db.get(Product, transaction.product_id)
+    warehouse = db.get(Warehouse, transaction.warehouse_id)
+    if product is None or warehouse is None:
+        raise InventoryNotFound("تعذر تحميل بيانات المنتج أو المخزن المرتبطة بالحركة")
+    return TransactionView(
+        id=transaction.id,
+        idempotency_key=transaction.idempotency_key,
+        transaction_type=transaction.transaction_type,
+        product_id=transaction.product_id,
+        warehouse_id=transaction.warehouse_id,
+        lot_id=transaction.lot_id,
+        quantity_delta=transaction.quantity_delta,
+        weight_delta_kg=transaction.weight_delta_kg,
+        unit_cost=transaction.unit_cost,
+        total_cost=transaction.total_cost,
+        reference_type=transaction.reference_type,
+        reference_id=transaction.reference_id,
+        product_code=product.code,
+        product_name_ar=product.name_ar,
+        warehouse_name_ar=warehouse.name_ar,
+        notes=transaction.notes,
+        posted_at=transaction.posted_at,
     )
 
 
-def list_transactions(db: Session, *, limit: int = 100) -> list[InventoryTransaction]:
-    return list(
-        db.scalars(
-            select(InventoryTransaction)
-            .order_by(InventoryTransaction.posted_at.desc(), InventoryTransaction.id.desc())
-            .limit(limit)
-        )
+def inventory_options(db: Session) -> InventoryOptionsView:
+    products = db.execute(
+        select(Product.id, Product.code, Product.name_ar)
+        .where(Product.is_active.is_(True), Product.product_type != "service")
+        .order_by(Product.code)
+    )
+    warehouses = db.execute(
+        select(Warehouse.id, Warehouse.code, Warehouse.name_ar)
+        .where(Warehouse.is_active.is_(True))
+        .order_by(Warehouse.is_default.desc(), Warehouse.code)
+    )
+    return InventoryOptionsView(
+        products=[
+            InventoryOption(id=row.id, code=row.code, name_ar=row.name_ar) for row in products
+        ],
+        warehouses=[
+            InventoryOption(id=row.id, code=row.code, name_ar=row.name_ar) for row in warehouses
+        ],
     )

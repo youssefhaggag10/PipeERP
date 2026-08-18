@@ -144,6 +144,8 @@ def test_receipt_issue_fifo_idempotency_and_negative_stock_protection() -> None:
             headers=headers(test_client, "receipt-test-0001"),
         )
         assert receipt.status_code == 201, receipt.text
+        assert receipt.json()["product_name_ar"] == "منتج مخزون"
+        assert receipt.json()["warehouse_name_ar"] == "المصنع"
         repeated = test_client.post(
             "/api/v1/inventory/receipts",
             json=receipt_payload,
@@ -151,6 +153,19 @@ def test_receipt_issue_fifo_idempotency_and_negative_stock_protection() -> None:
         )
         assert repeated.status_code == 201
         assert repeated.json()["id"] == receipt.json()["id"]
+
+        conflicting_replay = test_client.post(
+            "/api/v1/inventory/issues",
+            json={
+                "product_id": product_id,
+                "warehouse_id": warehouse_id,
+                "amount": "1",
+                "cost_basis": "quantity",
+                "reference_type": "adjustment",
+            },
+            headers=headers(test_client, "receipt-test-0001"),
+        )
+        assert conflicting_replay.status_code == 409
 
         rejected = test_client.post(
             "/api/v1/inventory/issues",
@@ -186,6 +201,17 @@ def test_receipt_issue_fifo_idempotency_and_negative_stock_protection() -> None:
         assert balances.status_code == 200
         assert balances.json()[0]["quantity_on_hand"] == "6.000000"
         assert balances.json()[0]["weight_on_hand_kg"] == "60.000000"
+        assert balances.json()[0]["product_code"] == "FG-INV"
+
+        options = test_client.get("/api/v1/inventory/options")
+        assert options.status_code == 200
+        assert options.json()["products"][0]["name_ar"] == "منتج مخزون"
+        assert options.json()["warehouses"][0]["name_ar"] == "المصنع"
+
+        transactions = test_client.get("/api/v1/inventory/transactions")
+        assert transactions.status_code == 200
+        assert transactions.json()[0]["transaction_type"] == "issue"
+        assert transactions.json()[0]["product_name_ar"] == "منتج مخزون"
 
     with factory() as db:
         assert db.scalar(select(func.count(InventoryTransaction.id))) == 2
