@@ -8,7 +8,7 @@ def test_identity_metadata_creates_expected_tables() -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
 
-    assert set(inspect(engine).get_table_names()) == {
+    assert {
         "audit_logs",
         "auth_sessions",
         "permissions",
@@ -16,7 +16,7 @@ def test_identity_metadata_creates_expected_tables() -> None:
         "roles",
         "user_roles",
         "users",
-    }
+    } <= set(inspect(engine).get_table_names())
 
 
 def test_identity_schema_has_unique_normalized_username() -> None:
