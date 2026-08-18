@@ -1,8 +1,10 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import RequestResponseEndpoint
 
 from app.api.router import api_router
 from app.core.settings import get_settings
@@ -30,4 +32,21 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "X-CSRF-Token", "Idempotency-Key"],
 )
+
+
+@app.middleware("http")
+async def security_headers(
+    request: Request,
+    call_next: RequestResponseEndpoint,
+) -> Response:
+    request.state.request_id = request.headers.get("x-request-id", str(uuid4()))[:80]
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Request-ID"] = request.state.request_id
+    return response
+
+
 app.include_router(api_router, prefix="/api/v1")

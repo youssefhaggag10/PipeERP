@@ -1,11 +1,16 @@
 import hashlib
+import hmac
 import secrets
 import unicodedata
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
+import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 from argon2.low_level import Type
+from jwt import InvalidTokenError
 
 MINIMUM_PASSWORD_LENGTH = 12
 
@@ -23,6 +28,13 @@ _password_hasher = PasswordHasher(
 class SessionSecrets:
     refresh_token: str
     csrf_token: str
+
+
+@dataclass(frozen=True, slots=True)
+class AccessClaims:
+    user_id: UUID
+    session_id: UUID
+    user_version: int
 
 
 def normalize_username(username: str) -> str:
@@ -69,3 +81,49 @@ def generate_session_secrets() -> SessionSecrets:
 
 def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def token_matches(token: str, expected_hash: str) -> bool:
+    return hmac.compare_digest(hash_token(token), expected_hash)
+
+
+def create_access_token(
+    *,
+    user_id: UUID,
+    session_id: UUID,
+    user_version: int,
+    secret_key: str,
+    lifetime_minutes: int,
+    now: datetime | None = None,
+) -> str:
+    issued_at = now or datetime.now(UTC)
+    payload = {
+        "sub": str(user_id),
+        "sid": str(session_id),
+        "ver": user_version,
+        "iat": issued_at,
+        "nbf": issued_at,
+        "exp": issued_at + timedelta(minutes=lifetime_minutes),
+        "iss": "pipeerp",
+        "aud": "pipeerp-web",
+    }
+    return jwt.encode(payload, secret_key, algorithm="HS256")
+
+
+def decode_access_token(token: str, secret_key: str) -> AccessClaims | None:
+    try:
+        payload = jwt.decode(
+            token,
+            secret_key,
+            algorithms=["HS256"],
+            audience="pipeerp-web",
+            issuer="pipeerp",
+            options={"require": ["sub", "sid", "ver", "exp", "iat", "nbf"]},
+        )
+        return AccessClaims(
+            user_id=UUID(payload["sub"]),
+            session_id=UUID(payload["sid"]),
+            user_version=int(payload["ver"]),
+        )
+    except (InvalidTokenError, KeyError, TypeError, ValueError):
+        return None

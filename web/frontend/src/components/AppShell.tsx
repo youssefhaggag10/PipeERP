@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { NavLink } from "react-router-dom";
 import {
   BarChart3,
   Boxes,
@@ -12,12 +13,14 @@ import {
   Settings,
   ShoppingCart,
   UsersRound,
+  LogOut,
 } from "lucide-react";
 
+import { useAuth } from "../auth/AuthContext";
 import { BrandMark } from "./BrandMark";
 
 const navigation = [
-  { label: "لوحة التشغيل", icon: Gauge, active: true },
+  { label: "لوحة التشغيل", icon: Gauge, to: "/" },
   { label: "المبيعات", icon: ShoppingCart },
   { label: "البيع بالوزن", icon: Scale },
   { label: "المشتريات", icon: PackageCheck },
@@ -29,6 +32,7 @@ const navigation = [
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const { user, logout } = useAuth();
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -37,24 +41,28 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
         <nav className="sidebar__nav" aria-label="التنقل الرئيسي">
           <p className="sidebar__eyebrow">مساحة العمل</p>
-          {navigation.map(({ label, icon: Icon, active }) => (
-            <button className={`nav-item ${active ? "nav-item--active" : ""}`} key={label}>
+          {navigation.map(({ label, icon: Icon, to }) => to ? (
+            <NavLink className={({ isActive }) => `nav-item ${isActive ? "nav-item--active" : ""}`} key={label} to={to} end>
               <Icon size={19} strokeWidth={1.8} />
               <span>{label}</span>
-              {active ? <span className="nav-item__marker" /> : null}
-            </button>
-          ))}
+            </NavLink>
+          ) : <button className="nav-item" key={label} disabled><Icon size={19} strokeWidth={1.8} /><span>{label}</span></button>)}
+          {user?.permissions.includes("users.read") ? <NavLink className={({ isActive }) => `nav-item ${isActive ? "nav-item--active" : ""}`} to="/identity"><UsersRound size={19} /><span>المستخدمون والصلاحيات</span></NavLink> : null}
         </nav>
         <div className="sidebar__foot">
-          <button className="nav-item">
+          <button className="nav-item" disabled>
             <Settings size={19} strokeWidth={1.8} />
             <span>الإعدادات</span>
           </button>
+          <button className="nav-item" onClick={() => void logout()}>
+            <LogOut size={19} strokeWidth={1.8} />
+            <span>تسجيل الخروج</span>
+          </button>
           <div className="profile-chip">
-            <span className="profile-chip__avatar">م</span>
+            <span className="profile-chip__avatar">{user?.display_name.charAt(0) ?? "م"}</span>
             <span>
-              <strong>مدير النظام</strong>
-              <small>الإدارة الكاملة</small>
+              <strong>{user?.display_name ?? "مستخدم"}</strong>
+              <small>{user?.roles.includes("system_admin") ? "الإدارة الكاملة" : "مستخدم النظام"}</small>
             </span>
             <ChevronLeft size={17} />
           </div>

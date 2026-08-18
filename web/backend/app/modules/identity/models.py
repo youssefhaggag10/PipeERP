@@ -130,6 +130,7 @@ class AuditLog(Base):
         CheckConstraint("outcome IN ('success', 'denied', 'failure')", name="outcome_valid"),
         Index("ix_audit_logs_entity", "entity_type", "entity_id"),
         Index("ix_audit_logs_actor_created", "actor_user_id", "created_at"),
+        Index("ix_audit_logs_login_rate", "event_type", "ip_address", "created_at"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)

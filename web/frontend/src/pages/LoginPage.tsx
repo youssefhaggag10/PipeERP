@@ -1,14 +1,37 @@
 import { ArrowLeft, Eye, LockKeyhole, ShieldCheck, UserRound } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
+import { useAuth } from "../auth/AuthContext";
 import { BrandMark } from "../components/BrandMark";
+import { ApiError } from "../lib/api";
 
 export function LoginPage() {
+  const { user, login } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [showPassword, setShowPassword] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      const authenticated = await login(username, password);
+      const requested = (location.state as { from?: string } | null)?.from ?? "/";
+      navigate(authenticated.must_change_password ? "/change-password" : requested, { replace: true });
+    } catch (reason) {
+      setError(reason instanceof ApiError ? reason.message : "تعذر تسجيل الدخول");
+    } finally {
+      setSubmitting(false);
+    }
   }
+
+  if (user) return <Navigate to={user.must_change_password ? "/change-password" : "/"} replace />;
 
   return (
     <main className="login-page">
@@ -20,12 +43,20 @@ export function LoginPage() {
           <p>سجّل الدخول للوصول إلى مساحة العمل والعمليات المصرّح لك بها.</p>
         </div>
 
-        <form className="login-form" onSubmit={submit}>
+        <form className="login-form" onSubmit={submit} aria-describedby={error ? "login-error" : undefined}>
           <label className="field">
             <span>اسم المستخدم</span>
             <span className="field__control">
               <UserRound size={19} />
-              <input name="username" autoComplete="username" placeholder="أدخل اسم المستخدم" />
+              <input
+                name="username"
+                autoComplete="username"
+                placeholder="أدخل اسم المستخدم"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                required
+                autoFocus
+              />
             </span>
           </label>
           <label className="field">
@@ -37,6 +68,9 @@ export function LoginPage() {
                 type={showPassword ? "text" : "password"}
                 autoComplete="current-password"
                 placeholder="أدخل كلمة المرور"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
               />
               <button
                 type="button"
@@ -48,8 +82,9 @@ export function LoginPage() {
               </button>
             </span>
           </label>
-          <button className="primary-button" type="submit">
-            <span>تسجيل الدخول</span>
+          {error ? <p className="form-error" id="login-error" role="alert">{error}</p> : null}
+          <button className="primary-button" type="submit" disabled={submitting}>
+            <span>{submitting ? "جارٍ التحقق…" : "تسجيل الدخول"}</span>
             <ArrowLeft size={19} />
           </button>
         </form>
