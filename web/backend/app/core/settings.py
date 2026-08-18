@@ -1,7 +1,8 @@
 from functools import lru_cache
+from typing import Annotated
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -10,7 +11,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     database_url: str = "postgresql+psycopg://localhost/pipeerp"
     secret_key: str = Field(min_length=32)
-    allowed_origins: list[str] = ["http://localhost:5173"]
+    allowed_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
     access_token_minutes: int = Field(default=15, ge=5, le=60)
     refresh_session_hours: int = Field(default=12, ge=1, le=72)
     login_lock_minutes: int = Field(default=15, ge=1, le=60)
