@@ -1,13 +1,9 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 import { api } from "../lib/api";
+import type { Permission } from "./permissions";
 
-export type Permission =
-  | "users.read"
-  | "users.manage"
-  | "roles.read"
-  | "roles.manage"
-  | "audit.read";
+export type { Permission } from "./permissions";
 
 export type AuthUser = {
   id: string;

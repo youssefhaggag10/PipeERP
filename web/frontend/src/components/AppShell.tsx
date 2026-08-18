@@ -1,38 +1,20 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import {
-  BarChart3,
-  Boxes,
   ChevronLeft,
-  CircleDollarSign,
-  Factory,
-  Gauge,
-  PackageCheck,
-  Scale,
   Search,
   Settings,
-  ShoppingCart,
   UsersRound,
   LogOut,
 } from "lucide-react";
 
 import { useAuth } from "../auth/AuthContext";
 import { BrandMark } from "./BrandMark";
-
-const navigation = [
-  { label: "لوحة التشغيل", icon: Gauge, to: "/" },
-  { label: "المبيعات", icon: ShoppingCart },
-  { label: "البيع بالوزن", icon: Scale },
-  { label: "المشتريات", icon: PackageCheck },
-  { label: "المخزون", icon: Boxes },
-  { label: "التصنيع", icon: Factory },
-  { label: "الحسابات", icon: CircleDollarSign },
-  { label: "العملاء والموردون", icon: UsersRound },
-  { label: "التقارير", icon: BarChart3 },
-];
+import { visibleNavigationItems } from "./navigation";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
+  const visibleNavigation = visibleNavigationItems(user?.permissions ?? []);
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -41,7 +23,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
         <nav className="sidebar__nav" aria-label="التنقل الرئيسي">
           <p className="sidebar__eyebrow">مساحة العمل</p>
-          {navigation.map(({ label, icon: Icon, to }) => to ? (
+          {visibleNavigation.map(({ label, icon: Icon, to }) => to ? (
             <NavLink className={({ isActive }) => `nav-item ${isActive ? "nav-item--active" : ""}`} key={label} to={to} end>
               <Icon size={19} strokeWidth={1.8} />
               <span>{label}</span>
@@ -50,10 +32,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           {user?.permissions.includes("users.read") ? <NavLink className={({ isActive }) => `nav-item ${isActive ? "nav-item--active" : ""}`} to="/identity"><UsersRound size={19} /><span>المستخدمون والصلاحيات</span></NavLink> : null}
         </nav>
         <div className="sidebar__foot">
-          <button className="nav-item" disabled>
-            <Settings size={19} strokeWidth={1.8} />
-            <span>الإعدادات</span>
-          </button>
+          {user?.permissions.includes("settings.read") ? <button className="nav-item" disabled>
+              <Settings size={19} strokeWidth={1.8} />
+              <span>الإعدادات</span>
+            </button> : null}
           <button className="nav-item" onClick={() => void logout()}>
             <LogOut size={19} strokeWidth={1.8} />
             <span>تسجيل الخروج</span>

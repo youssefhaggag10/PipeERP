@@ -53,3 +53,5 @@ def test_system_admin_role_receives_every_identity_permission() -> None:
     assert name_ar == "مدير النظام"
     assert permissions == set(PermissionCode)
     assert PermissionCode.ROLES_MANAGE not in SYSTEM_ROLES["operations_manager"][1]
+    assert PermissionCode.SALES_READ in SYSTEM_ROLES["operations_manager"][1]
+    assert PermissionCode.SALES_MANAGE not in SYSTEM_ROLES["operations_manager"][1]

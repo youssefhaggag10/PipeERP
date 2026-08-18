@@ -11,7 +11,7 @@ export function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-      <Route path="/identity" element={<ProtectedRoute><IdentityPage /></ProtectedRoute>} />
+      <Route path="/identity" element={<ProtectedRoute requiredPermissions={["users.read", "roles.read"]}><IdentityPage /></ProtectedRoute>} />
       <Route path="/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
       {import.meta.env.DEV ? (
         <Route path="/design-preview" element={<DashboardPage />} />

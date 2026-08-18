@@ -14,7 +14,7 @@ from app.modules.identity.models import (
     User,
     UserRole,
 )
-from app.modules.identity.permissions import SYSTEM_ROLES, PermissionCode
+from app.modules.identity.permissions import PERMISSION_NAMES_AR, SYSTEM_ROLES, PermissionCode
 from app.modules.identity.schemas import RoleView, UserView
 from app.modules.identity.security import (
     SessionSecrets,
@@ -76,15 +76,6 @@ class Principal:
 class AuthenticationResult:
     principal: Principal
     secrets: SessionSecrets
-
-
-PERMISSION_NAMES_AR: dict[PermissionCode, str] = {
-    PermissionCode.USERS_READ: "عرض المستخدمين",
-    PermissionCode.USERS_MANAGE: "إدارة المستخدمين",
-    PermissionCode.ROLES_READ: "عرض الأدوار",
-    PermissionCode.ROLES_MANAGE: "إدارة الأدوار",
-    PermissionCode.AUDIT_READ: "عرض سجل التدقيق",
-}
 
 
 def utc_now() -> datetime:

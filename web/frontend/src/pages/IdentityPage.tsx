@@ -2,7 +2,8 @@ import { Check, Plus, RefreshCw, Shield, UserRoundCheck, UserRoundX, Users } fro
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Navigate } from "react-router-dom";
 
-import { type AuthUser, type Permission, useAuth } from "../auth/AuthContext";
+import { type AuthUser, useAuth } from "../auth/AuthContext";
+import { permissionLabels, type Permission } from "../auth/permissions";
 import { AppShell } from "../components/AppShell";
 import { api, ApiError } from "../lib/api";
 
@@ -22,14 +23,6 @@ type AuditEntry = {
   entity_id: string | null;
   outcome: string;
   created_at: string;
-};
-
-const permissionLabels: Record<Permission, string> = {
-  "users.read": "عرض المستخدمين",
-  "users.manage": "إدارة المستخدمين",
-  "roles.read": "عرض الأدوار",
-  "roles.manage": "إدارة الأدوار",
-  "audit.read": "عرض سجل التدقيق",
 };
 
 const allPermissions = Object.keys(permissionLabels) as Permission[];
