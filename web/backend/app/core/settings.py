@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_env: str = "development"
-    database_url: str = "postgresql+psycopg://pipeerp_app:pipeerp@localhost:5432/pipeerp"
+    database_url: str = "postgresql+psycopg://localhost/pipeerp"
     secret_key: str = Field(min_length=32)
     allowed_origins: list[str] = ["http://localhost:5173"]
 
