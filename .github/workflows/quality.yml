@@ -37,7 +37,7 @@ jobs:
         run: python -m compileall -q app tests
 
       - name: Run regression tests
-        run: pytest -q
+        run: pytest -q tests
 
       - name: Run lint checks
         run: ruff check app tests
