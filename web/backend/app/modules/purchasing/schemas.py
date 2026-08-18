@@ -77,6 +77,10 @@ class PostPurchaseReceiptRequest(BaseModel):
         return self
 
 
+class ReversePurchaseReceiptRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+
 class CreateSupplierInvoiceRequest(BaseModel):
     supplier_invoice_number: str = Field(min_length=1, max_length=80)
 
@@ -137,6 +141,8 @@ class PurchaseReceiptView(PurchasingView):
     status: Literal["posted", "reversed"]
     notes: str
     posted_at: datetime
+    reversed_at: datetime | None
+    reversal_reason: str
     lines: list[PurchaseReceiptLineView]
 
 

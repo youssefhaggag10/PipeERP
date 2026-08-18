@@ -373,6 +373,26 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .purchase-invoice-form strong, .purchase-invoice-form small { display: block; }
 .purchase-invoice-form strong { font-size: 11px; }
 .purchase-invoice-form small { margin-top: 4px; color: #8d7a60; font-size: 8px; }
+.purchase-receipt-history { border-top: 1px solid #e5ecef; background: #fff; }
+.purchase-receipt-history > header { padding: 15px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #f5f8f9; border-bottom: 1px solid #e5ecef; }
+.purchase-receipt-history > header strong, .purchase-receipt-history > header small { display: block; }
+.purchase-receipt-history > header strong { font-size: 11px; }
+.purchase-receipt-history > header small { margin-top: 3px; color: var(--muted); font-size: 8px; }
+.purchase-receipt-history > header > span { padding: 5px 8px; border-radius: 999px; color: #3977a9; background: #e8f2fa; font-size: 8px; font-weight: 850; }
+.purchase-receipt-history__row { position: relative; min-height: 66px; margin: 0 18px; display: grid; grid-template-columns: 38px minmax(0,1fr) auto minmax(100px,.3fr) 34px; align-items: center; gap: 10px; border-bottom: 1px solid #e9eef1; }
+.purchase-receipt-history__row--reversed { opacity: .65; }
+.purchase-receipt-history__row .purchase-order-card__icon { width: 36px; height: 36px; }
+.purchase-receipt-history__row strong, .purchase-receipt-history__row small { display: block; }
+.purchase-receipt-history__row strong { font-size: 10px; }
+.purchase-receipt-history__row small { margin-top: 3px; color: var(--muted); font-size: 8px; }
+.purchase-reversal-trigger { color: #a24740; }
+.purchase-reversal-reason { grid-column: 2 / -1; margin: -5px 0 9px !important; color: #9b554f !important; }
+.purchase-reversal-bar { margin: 14px 18px 18px; padding: 13px; display: grid; grid-template-columns: auto minmax(180px,.8fr) minmax(230px,1.2fr) auto auto; align-items: center; gap: 10px; border: 1px solid #efc9c5; border-radius: 12px; background: #fff6f5; }
+.purchase-reversal-bar > svg { color: #a24740; }
+.purchase-reversal-bar strong, .purchase-reversal-bar small { display: block; }
+.purchase-reversal-bar strong { font-size: 10px; }
+.purchase-reversal-bar small { margin-top: 3px; color: var(--muted); font-size: 8px; }
+.purchase-reversal-bar input { min-height: 40px; padding: 0 11px; border: 1px solid #dfcfcd; border-radius: 9px; background: #fff; }
 .purchase-detail-total { padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-top: 1px solid #e7edef; background: linear-gradient(90deg,#10283e,#173b51); color: #fff; }
 .purchase-detail-total span { display: flex; align-items: center; gap: 8px; color: #b9cbd6; font-size: 10px; }
 .purchase-detail-total strong { font-size: 18px; }
@@ -416,6 +436,11 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .purchase-order-card { grid-template-columns: 38px minmax(0,1fr) auto; }
   .purchase-order-card__value { grid-column: 2; text-align: right; }
   .purchase-receipt-line, .purchase-receipt-foot, .purchase-invoice-form, .purchase-action-callout { grid-template-columns: 1fr; }
+  .purchase-receipt-history__row { grid-template-columns: 36px minmax(0,1fr) auto; }
+  .purchase-receipt-history__row > .numeric-cell { grid-column: 2; }
+  .purchase-reversal-trigger { grid-column: 3; grid-row: 2; }
+  .purchase-reversal-bar { grid-template-columns: auto 1fr; }
+  .purchase-reversal-bar input, .purchase-reversal-bar button { grid-column: 1 / -1; }
   .purchase-receipt-line > strong { grid-column: 1 / -1; }
   .purchase-detail-total { align-items: flex-start; flex-direction: column; }
 }

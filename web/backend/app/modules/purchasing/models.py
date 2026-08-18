@@ -108,6 +108,7 @@ class PurchaseReceipt(Base):
     receipt_number: Mapped[str] = mapped_column(String(40), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    reversal_idempotency_key: Mapped[str | None] = mapped_column(String(120), unique=True)
     purchase_order_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey("purchase_orders.id", ondelete="RESTRICT"), nullable=False
     )
@@ -119,6 +120,11 @@ class PurchaseReceipt(Base):
     posted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    reversed_by_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    reversed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reversal_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
 
 class PurchaseReceiptLine(TimestampMixin, Base):

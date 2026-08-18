@@ -1,6 +1,7 @@
 import os
 from collections.abc import Generator
 from decimal import Decimal
+from uuid import UUID
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, func, select
@@ -368,3 +369,165 @@ def test_purchase_read_permission_cannot_create_or_receive_orders() -> None:
             )
             == 1
         )
+
+
+def test_purchase_receipt_reversal_restores_order_and_exact_fifo_layer() -> None:
+    factory = _database()
+    product_id, warehouse_id, supplier_id = _seed(factory)
+    with _client(factory) as test_client:
+        _login(test_client)
+        created = test_client.post(
+            "/api/v1/purchases/orders",
+            headers=_headers(test_client),
+            json={
+                "supplier_id": supplier_id,
+                "warehouse_id": warehouse_id,
+                "lines": [
+                    {
+                        "product_id": product_id,
+                        "cost_basis": "quantity",
+                        "ordered_quantity": "10",
+                        "ordered_weight_kg": "5",
+                        "unit_price": "20",
+                    }
+                ],
+            },
+        ).json()
+        approved = test_client.post(
+            f"/api/v1/purchases/orders/{created['id']}/approval",
+            headers=_headers(test_client),
+            json={"version": created["version"]},
+        ).json()
+        receipt = test_client.post(
+            f"/api/v1/purchases/orders/{created['id']}/receipts",
+            headers=_headers(test_client, "purchase-reversal-source-0001"),
+            json={
+                "lines": [
+                    {
+                        "purchase_order_line_id": approved["lines"][0]["id"],
+                        "gross_quantity": "10",
+                        "gross_weight_kg": "5",
+                        "loss_quantity": "1",
+                        "loss_weight_kg": "0.5",
+                        "lot_number": "REV-LOT-001",
+                    }
+                ]
+            },
+        )
+        assert receipt.status_code == 201, receipt.text
+
+        reversed_receipt = test_client.post(
+            f"/api/v1/purchases/receipts/{receipt.json()['id']}/reversal",
+            headers=_headers(test_client, "purchase-reversal-action-0001"),
+            json={"reason": "رفض التشغيلة بالكامل بعد الفحص"},
+        )
+        assert reversed_receipt.status_code == 200, reversed_receipt.text
+        assert reversed_receipt.json()["status"] == "reversed"
+        assert reversed_receipt.json()["reversal_reason"] == "رفض التشغيلة بالكامل بعد الفحص"
+
+        replay = test_client.post(
+            f"/api/v1/purchases/receipts/{receipt.json()['id']}/reversal",
+            headers=_headers(test_client, "purchase-reversal-action-0001"),
+            json={"reason": "رفض التشغيلة بالكامل بعد الفحص"},
+        )
+        assert replay.status_code == 200
+        assert replay.json()["id"] == receipt.json()["id"]
+        duplicate = test_client.post(
+            f"/api/v1/purchases/receipts/{receipt.json()['id']}/reversal",
+            headers=_headers(test_client, "purchase-reversal-action-0002"),
+            json={"reason": "محاولة عكس ثانية"},
+        )
+        assert duplicate.status_code == 409
+
+        order = test_client.get(f"/api/v1/purchases/orders/{created['id']}").json()
+        assert order["status"] == "approved"
+        assert order["lines"][0]["received_quantity"] == "0.000000"
+        history = test_client.get(f"/api/v1/purchases/orders/{created['id']}/receipts")
+        assert history.status_code == 200
+        assert history.json()[0]["status"] == "reversed"
+
+    with factory() as db:
+        balance = db.scalar(select(InventoryBalance))
+        assert balance is not None
+        assert balance.quantity_on_hand == Decimal("0.000000")
+        assert balance.weight_on_hand_kg == Decimal("0.000000")
+        layer = db.scalar(select(InventoryLayer))
+        assert layer is not None
+        assert layer.quantity_remaining == Decimal("0.000000")
+        assert (
+            db.scalar(
+                select(func.count(AuditLog.id)).where(
+                    AuditLog.event_type == "purchasing.receipt.reverse"
+                )
+            )
+            == 1
+        )
+
+
+def test_purchase_receipt_reversal_is_atomic_after_fifo_layer_consumption() -> None:
+    factory = _database()
+    product_id, warehouse_id, supplier_id = _seed(factory)
+    with _client(factory) as test_client:
+        _login(test_client)
+        created = test_client.post(
+            "/api/v1/purchases/orders",
+            headers=_headers(test_client),
+            json={
+                "supplier_id": supplier_id,
+                "warehouse_id": warehouse_id,
+                "lines": [
+                    {
+                        "product_id": product_id,
+                        "cost_basis": "quantity",
+                        "ordered_quantity": "10",
+                        "unit_price": "20",
+                    }
+                ],
+            },
+        ).json()
+        approved = test_client.post(
+            f"/api/v1/purchases/orders/{created['id']}/approval",
+            headers=_headers(test_client),
+            json={"version": created["version"]},
+        ).json()
+        receipt = test_client.post(
+            f"/api/v1/purchases/orders/{created['id']}/receipts",
+            headers=_headers(test_client, "purchase-consumed-source-0001"),
+            json={
+                "lines": [
+                    {
+                        "purchase_order_line_id": approved["lines"][0]["id"],
+                        "gross_quantity": "10",
+                    }
+                ]
+            },
+        )
+        assert receipt.status_code == 201, receipt.text
+        issue = test_client.post(
+            "/api/v1/inventory/issues",
+            headers=_headers(test_client, "purchase-consumed-issue-0001"),
+            json={
+                "product_id": product_id,
+                "warehouse_id": warehouse_id,
+                "amount": "2",
+                "cost_basis": "quantity",
+                "reference_type": "production_test",
+            },
+        )
+        assert issue.status_code == 201, issue.text
+
+        rejected = test_client.post(
+            f"/api/v1/purchases/receipts/{receipt.json()['id']}/reversal",
+            headers=_headers(test_client, "purchase-consumed-reversal-0001"),
+            json={"reason": "محاولة عكس بعد بدء الاستهلاك"},
+        )
+        assert rejected.status_code == 409
+        assert "صرف جزء" in rejected.json()["detail"]
+
+    with factory() as db:
+        stored_receipt = db.get(PurchaseReceipt, UUID(receipt.json()["id"]))
+        order = db.get(PurchaseOrder, UUID(created["id"]))
+        balance = db.scalar(select(InventoryBalance))
+        assert stored_receipt is not None and stored_receipt.status == "posted"
+        assert order is not None and order.status == "received"
+        assert balance is not None and balance.quantity_on_hand == Decimal("8.000000")

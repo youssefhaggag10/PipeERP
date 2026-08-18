@@ -12,6 +12,7 @@ import {
   ShoppingBag,
   Trash2,
   Truck,
+  Undo2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
@@ -75,6 +76,23 @@ type ReceiptDraft = {
   lot_number: string;
 };
 
+type PurchaseReceipt = {
+  id: string;
+  receipt_number: string;
+  status: "posted" | "reversed";
+  notes: string;
+  posted_at: string;
+  reversed_at: string | null;
+  reversal_reason: string;
+  lines: Array<{
+    id: string;
+    product_name_ar: string;
+    net_quantity: string;
+    net_weight_kg: string;
+    capitalized_cost: string;
+  }>;
+};
+
 const currency = new Intl.NumberFormat("ar-EG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const number = new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 3 });
 
@@ -113,7 +131,10 @@ export function PurchasesPage() {
   const [notes, setNotes] = useState("");
   const [draftLines, setDraftLines] = useState<DraftLine[]>([newDraftLine()]);
   const [receiptDrafts, setReceiptDrafts] = useState<Record<string, ReceiptDraft>>({});
+  const [receipts, setReceipts] = useState<PurchaseReceipt[]>([]);
   const [receiptNotes, setReceiptNotes] = useState("");
+  const [reversalTargetId, setReversalTargetId] = useState("");
+  const [reversalReason, setReversalReason] = useState("");
   const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -147,6 +168,18 @@ export function PurchasesPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setReceipts([]);
+      return;
+    }
+    void api<PurchaseReceipt[]>(`/purchases/orders/${selectedId}/receipts`)
+      .then(setReceipts)
+      .catch((reason: unknown) => {
+        setError(reason instanceof ApiError ? reason.message : "تعذر تحميل سندات الاستلام");
+      });
+  }, [selectedId]);
 
   const selected = orders.find((item) => item.id === selectedId) ?? null;
   const stats = useMemo(() => ({
@@ -282,6 +315,33 @@ export function PurchasesPage() {
     }
   }
 
+  async function reverseReceipt(event: FormEvent) {
+    event.preventDefault();
+    if (!reversalTargetId || !selected) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await api(`/purchases/receipts/${reversalTargetId}/reversal`, {
+        method: "POST",
+        headers: { "Idempotency-Key": freshKey() },
+        body: JSON.stringify({ reason: reversalReason }),
+      });
+      setReversalTargetId("");
+      setReversalReason("");
+      setNotice("تم عكس سند الاستلام وطبقة FIFO المرتبطة به وإعادة فتح أمر الشراء.");
+      const [orderRows, receiptRows] = await Promise.all([
+        api<PurchaseOrder[]>("/purchases/orders?limit=150"),
+        api<PurchaseReceipt[]>(`/purchases/orders/${selected.id}/receipts`),
+      ]);
+      setOrders(orderRows);
+      setReceipts(receiptRows);
+    } catch (reason) {
+      setError(reason instanceof ApiError ? reason.message : "تعذر عكس سند الاستلام");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const setupReady = options.suppliers.length > 0 && options.warehouses.length > 0 && options.products.length > 0;
 
   return (
@@ -363,6 +423,18 @@ export function PurchasesPage() {
             <div className="purchase-receipt-foot"><label>ملاحظات الاستلام<input value={receiptNotes} onChange={(event) => setReceiptNotes(event.target.value)} /></label><button className="primary-button" disabled={submitting}><ClipboardCheck size={17} /> ترحيل الاستلام</button></div>
           </form> : null}
           {["approved", "partially_received", "received"].includes(selected.status) ? <form className="purchase-invoice-form" onSubmit={createInvoice}><span><ReceiptText size={20} /></span><div><strong>فاتورة المورد</strong><small>اربط رقم فاتورة المورد بقيمة الأمر المعتمدة</small></div><input value={supplierInvoiceNumber} onChange={(event) => setSupplierInvoiceNumber(event.target.value)} placeholder="رقم فاتورة المورد" required /><button className="secondary-button" disabled={submitting}><ReceiptText size={16} /> تسجيل الفاتورة</button></form> : null}
+        </div> : null}
+        {receipts.length ? <div className="purchase-receipt-history">
+          <header><div><strong>سندات الاستلام</strong><small>سجل غير قابل للتعديل لكل دفعة تم ترحيلها</small></div><span>{receipts.length} سند</span></header>
+          {receipts.map((receipt) => <div className={`purchase-receipt-history__row ${receipt.status === "reversed" ? "purchase-receipt-history__row--reversed" : ""}`} key={receipt.id}>
+            <span className="purchase-order-card__icon"><ReceiptText size={17} /></span>
+            <span><strong dir="ltr">{receipt.receipt_number}</strong><small>{new Date(receipt.posted_at).toLocaleString("ar-EG")} · {receipt.lines.length} بند</small></span>
+            <span className={`purchase-status ${receipt.status === "posted" ? "purchase-status--received" : "purchase-status--cancelled"}`}>{receipt.status === "posted" ? "مرحّل" : "معكوس"}</span>
+            <strong className="numeric-cell">{currency.format(receipt.lines.reduce((sum, line) => sum + Number(line.capitalized_cost), 0))} ج.م</strong>
+            {canManage && receipt.status === "posted" ? <button type="button" className="mini-action purchase-reversal-trigger" aria-label="عكس سند الاستلام" onClick={() => { setReversalTargetId(receipt.id); setReversalReason(""); }}><Undo2 size={15} /></button> : null}
+            {receipt.status === "reversed" ? <small className="purchase-reversal-reason">سبب العكس: {receipt.reversal_reason}</small> : null}
+          </div>)}
+          {reversalTargetId ? <form className="purchase-reversal-bar" onSubmit={reverseReceipt}><Undo2 size={18} /><span><strong>عكس سند الاستلام</strong><small>لن يتم العكس إذا صُرف أي جزء من طبقة FIFO أو وُجدت فاتورة مورد مرحّلة.</small></span><input value={reversalReason} onChange={(event) => setReversalReason(event.target.value)} minLength={3} placeholder="سبب العكس بالتفصيل" required /><button className="danger-button secondary-button" disabled={submitting}><Undo2 size={15} /> تأكيد العكس</button><button type="button" className="secondary-button" onClick={() => setReversalTargetId("")}>إلغاء</button></form> : null}
         </div> : null}
         <footer className="purchase-detail-total"><span><Scale size={18} /> التكلفة تشمل السعر والمصاريف الإضافية</span><strong>{currency.format(Number(selected.total))} ج.م</strong></footer>
       </section> : null}

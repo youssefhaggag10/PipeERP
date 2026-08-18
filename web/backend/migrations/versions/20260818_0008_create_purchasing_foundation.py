@@ -175,6 +175,7 @@ def upgrade() -> None:
         sa.Column("receipt_number", sa.String(length=40), nullable=False),
         sa.Column("idempotency_key", sa.String(length=120), nullable=False),
         sa.Column("request_hash", sa.String(length=64), nullable=False),
+        sa.Column("reversal_idempotency_key", sa.String(length=120), nullable=True),
         sa.Column("purchase_order_id", sa.Uuid(), nullable=False),
         sa.Column("status", sa.String(length=20), nullable=False),
         sa.Column("notes", sa.Text(), nullable=False),
@@ -182,6 +183,9 @@ def upgrade() -> None:
         sa.Column(
             "posted_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False
         ),
+        sa.Column("reversed_by_id", sa.Uuid(), nullable=True),
+        sa.Column("reversed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("reversal_reason", sa.Text(), nullable=False),
         sa.CheckConstraint(
             "status IN ('posted', 'reversed')", name=op.f("ck_purchase_receipts_status_valid")
         ),
@@ -189,6 +193,12 @@ def upgrade() -> None:
             ["posted_by_id"],
             ["users.id"],
             name=op.f("fk_purchase_receipts_posted_by_id_users"),
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["reversed_by_id"],
+            ["users.id"],
+            name=op.f("fk_purchase_receipts_reversed_by_id_users"),
             ondelete="RESTRICT",
         ),
         sa.ForeignKeyConstraint(
@@ -200,6 +210,10 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id", name=op.f("pk_purchase_receipts")),
         sa.UniqueConstraint("idempotency_key", name=op.f("uq_purchase_receipts_idempotency_key")),
         sa.UniqueConstraint("receipt_number", name=op.f("uq_purchase_receipts_receipt_number")),
+        sa.UniqueConstraint(
+            "reversal_idempotency_key",
+            name=op.f("uq_purchase_receipts_reversal_idempotency_key"),
+        ),
     )
     op.create_index(
         "ix_purchase_receipts_order",

@@ -10,7 +10,13 @@ from app.domain.common.decimal import money, quantity
 from app.domain.purchasing.costing import calculate_receipt_cost, validate_partial_receipt
 from app.modules.identity.service import ClientContext, Principal, add_audit
 from app.modules.inventory.schemas import ReceiptRequest
-from app.modules.inventory.service import post_receipt
+from app.modules.inventory.service import (
+    InsufficientStock,
+    InventoryConflict,
+    InventoryNotFound,
+    post_receipt,
+    reverse_purchase_receipt_inventory,
+)
 from app.modules.master_data.models import Partner, Product, Warehouse
 from app.modules.master_data.service import allocate_document_number
 from app.modules.purchasing.models import (
@@ -30,6 +36,7 @@ from app.modules.purchasing.schemas import (
     PurchaseOrderView,
     PurchaseReceiptLineView,
     PurchaseReceiptView,
+    ReversePurchaseReceiptRequest,
     SupplierInvoiceView,
 )
 
@@ -276,6 +283,8 @@ def _receipt_view(db: Session, receipt: PurchaseReceipt) -> PurchaseReceiptView:
         status=receipt.status,  # type: ignore[arg-type]
         notes=receipt.notes,
         posted_at=receipt.posted_at,
+        reversed_at=receipt.reversed_at,
+        reversal_reason=receipt.reversal_reason,
         lines=[
             PurchaseReceiptLineView(
                 id=receipt_line.id,
@@ -296,6 +305,19 @@ def _receipt_view(db: Session, receipt: PurchaseReceipt) -> PurchaseReceiptView:
             for receipt_line, _, product in rows
         ],
     )
+
+
+def list_purchase_receipts(db: Session, *, order_id: UUID) -> list[PurchaseReceiptView]:
+    if db.get(PurchaseOrder, order_id) is None:
+        raise PurchasingNotFound("أمر الشراء غير موجود")
+    receipts = list(
+        db.scalars(
+            select(PurchaseReceipt)
+            .where(PurchaseReceipt.purchase_order_id == order_id)
+            .order_by(PurchaseReceipt.posted_at.desc(), PurchaseReceipt.id.desc())
+        )
+    )
+    return [_receipt_view(db, receipt) for receipt in receipts]
 
 
 def post_purchase_receipt(
@@ -491,3 +513,123 @@ def create_supplier_invoice(
         },
     )
     return SupplierInvoiceView.model_validate(invoice)
+
+
+def reverse_purchase_receipt(
+    db: Session,
+    *,
+    receipt_id: UUID,
+    payload: ReversePurchaseReceiptRequest,
+    idempotency_key: str,
+    actor: Principal,
+    client: ClientContext,
+) -> PurchaseReceiptView:
+    receipt = db.scalar(
+        select(PurchaseReceipt).where(PurchaseReceipt.id == receipt_id).with_for_update()
+    )
+    if receipt is None:
+        raise PurchasingNotFound("سند الاستلام غير موجود")
+    if receipt.status == "reversed":
+        if receipt.reversal_idempotency_key == idempotency_key:
+            return _receipt_view(db, receipt)
+        raise PurchasingConflict("تم عكس سند الاستلام من قبل")
+    invoice = db.scalar(
+        select(SupplierInvoice).where(
+            SupplierInvoice.purchase_order_id == receipt.purchase_order_id,
+            SupplierInvoice.status == "posted",
+        )
+    )
+    if invoice is not None:
+        raise PurchasingConflict("يجب عكس فاتورة المورد قبل عكس سند الاستلام")
+    order = db.scalar(
+        select(PurchaseOrder).where(PurchaseOrder.id == receipt.purchase_order_id).with_for_update()
+    )
+    if order is None:
+        raise PurchasingNotFound("أمر الشراء المرتبط بسند الاستلام غير موجود")
+    order_lines = {
+        line.id: line
+        for line in db.scalars(
+            select(PurchaseOrderLine)
+            .where(PurchaseOrderLine.purchase_order_id == order.id)
+            .with_for_update()
+        )
+    }
+    receipt_lines = list(
+        db.scalars(
+            select(PurchaseReceiptLine)
+            .where(PurchaseReceiptLine.purchase_receipt_id == receipt.id)
+            .order_by(PurchaseReceiptLine.id)
+        )
+    )
+    for receipt_line in receipt_lines:
+        order_line = order_lines.get(receipt_line.purchase_order_line_id)
+        if order_line is None:
+            raise PurchasingConflict("تعذر تحميل بند أمر الشراء المرتبط بالاستلام")
+        child_key = sha256(
+            f"purchase-reversal:{idempotency_key}:{receipt_line.id}".encode()
+        ).hexdigest()
+        try:
+            reverse_purchase_receipt_inventory(
+                db,
+                transaction_id=receipt_line.inventory_transaction_id,
+                purchase_receipt_id=receipt.id,
+                purchase_order_line_id=order_line.id,
+                idempotency_key=child_key,
+                actor_user_id=actor.user.id,
+                client=client,
+                reason=payload.reason,
+            )
+        except InventoryNotFound as exc:
+            raise PurchasingNotFound(str(exc)) from exc
+        except (InventoryConflict, InsufficientStock) as exc:
+            raise PurchasingConflict(str(exc)) from exc
+        order_line.received_quantity = quantity(
+            order_line.received_quantity - receipt_line.gross_quantity
+        )
+        order_line.received_weight_kg = quantity(
+            order_line.received_weight_kg - receipt_line.gross_weight_kg
+        )
+        if order_line.received_quantity < 0 or order_line.received_weight_kg < 0:
+            raise PurchasingConflict("عكس الاستلام سينتج كميات مستلمة سالبة")
+        order_line.version += 1
+
+    any_received = any(
+        (
+            line.received_quantity > 0
+            if line.cost_basis == "quantity"
+            else line.received_weight_kg > 0
+        )
+        for line in order_lines.values()
+    )
+    all_received = all(
+        (line.received_quantity >= line.ordered_quantity)
+        if line.cost_basis == "quantity"
+        else (line.received_weight_kg >= line.ordered_weight_kg)
+        for line in order_lines.values()
+    )
+    order.status = (
+        "received" if all_received else "partially_received" if any_received else "approved"
+    )
+    order.version += 1
+    receipt.status = "reversed"
+    receipt.reversal_idempotency_key = idempotency_key
+    receipt.reversed_by_id = actor.user.id
+    receipt.reversed_at = datetime.now(UTC)
+    receipt.reversal_reason = payload.reason.strip()
+    add_audit(
+        db,
+        actor_user_id=actor.user.id,
+        event_type="purchasing.receipt.reverse",
+        entity_type="purchase_receipt",
+        entity_id=str(receipt.id),
+        outcome="success",
+        client=client,
+        before_state={"status": "posted"},
+        after_state={
+            "status": receipt.status,
+            "order_status": order.status,
+            "reason": receipt.reversal_reason,
+        },
+    )
+    db.flush()
+    return _receipt_view(db, receipt)

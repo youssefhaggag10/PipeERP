@@ -463,6 +463,118 @@ def post_adjustment(
     )
 
 
+def reverse_purchase_receipt_inventory(
+    db: Session,
+    *,
+    transaction_id: UUID,
+    purchase_receipt_id: UUID,
+    purchase_order_line_id: UUID,
+    idempotency_key: str,
+    actor_user_id: UUID,
+    client: ClientContext,
+    reason: str,
+) -> InventoryTransaction:
+    original = db.scalar(
+        select(InventoryTransaction)
+        .where(InventoryTransaction.id == transaction_id)
+        .with_for_update()
+    )
+    if original is None:
+        raise InventoryNotFound("حركة استلام المشتريات غير موجودة")
+    if (
+        original.transaction_type != "receipt"
+        or original.reference_type != "purchase_receipt"
+        or original.reference_id != str(purchase_receipt_id)
+        or original.reference_line_id != str(purchase_order_line_id)
+    ):
+        raise InventoryConflict("حركة المخزون لا تطابق سند استلام المشتريات")
+    previous_reversal = db.scalar(
+        select(InventoryTransaction).where(InventoryTransaction.reversal_of_id == original.id)
+    )
+    if previous_reversal is not None:
+        if previous_reversal.idempotency_key == idempotency_key:
+            return previous_reversal
+        raise InventoryConflict("تم عكس حركة الاستلام من قبل")
+    _lock_context(db, original.product_id, original.warehouse_id)
+    layer = db.scalar(
+        select(InventoryLayer)
+        .where(
+            InventoryLayer.product_id == original.product_id,
+            InventoryLayer.warehouse_id == original.warehouse_id,
+            InventoryLayer.source_type == "purchase_receipt",
+            InventoryLayer.source_id == str(purchase_receipt_id),
+            InventoryLayer.source_line_id == str(purchase_order_line_id),
+        )
+        .with_for_update()
+    )
+    if layer is None:
+        raise InventoryConflict("تعذر العثور على طبقة FIFO الخاصة بسند الاستلام")
+    if (
+        layer.quantity_remaining != layer.quantity_received
+        or layer.weight_remaining_kg != layer.weight_received_kg
+    ):
+        raise InventoryConflict("لا يمكن عكس الاستلام بعد صرف جزء من طبقته المخزنية")
+    balance = _locked_balance(db, original.product_id, original.warehouse_id)
+    if (
+        balance.quantity_on_hand < layer.quantity_received
+        or balance.weight_on_hand_kg < layer.weight_received_kg
+    ):
+        raise InsufficientStock("الرصيد الحالي لا يسمح بعكس سند الاستلام")
+    reversal = InventoryTransaction(
+        idempotency_key=idempotency_key,
+        transaction_type="reversal_out",
+        product_id=original.product_id,
+        warehouse_id=original.warehouse_id,
+        lot_id=original.lot_id,
+        quantity_delta=-layer.quantity_received,
+        weight_delta_kg=-layer.weight_received_kg,
+        unit_cost=original.unit_cost,
+        total_cost=original.total_cost,
+        cost_basis=original.cost_basis,
+        reference_type="purchase_receipt_reversal",
+        reference_id=str(purchase_receipt_id),
+        reference_line_id=str(purchase_order_line_id),
+        reversal_of_id=original.id,
+        notes=reason.strip(),
+        posted_by_id=actor_user_id,
+    )
+    db.add(reversal)
+    db.flush()
+    db.add(
+        InventoryAllocation(
+            outbound_transaction_id=reversal.id,
+            source_layer_id=layer.id,
+            quantity=layer.quantity_received,
+            weight_kg=layer.weight_received_kg,
+            unit_cost=original.unit_cost,
+            total_cost=original.total_cost,
+        )
+    )
+    layer.quantity_remaining = Decimal("0")
+    layer.weight_remaining_kg = Decimal("0")
+    layer.version += 1
+    balance.quantity_on_hand = quantity(balance.quantity_on_hand - layer.quantity_received)
+    balance.weight_on_hand_kg = quantity(balance.weight_on_hand_kg - layer.weight_received_kg)
+    balance.version += 1
+    add_audit(
+        db,
+        actor_user_id=actor_user_id,
+        event_type="inventory.purchase_receipt.reversal",
+        entity_type="inventory_transaction",
+        entity_id=str(reversal.id),
+        outcome="success",
+        client=client,
+        after_state={
+            "original_transaction_id": str(original.id),
+            "purchase_receipt_id": str(purchase_receipt_id),
+            "quantity": str(layer.quantity_received),
+            "weight_kg": str(layer.weight_received_kg),
+        },
+    )
+    db.flush()
+    return reversal
+
+
 def reverse_transaction(
     db: Session,
     *,
