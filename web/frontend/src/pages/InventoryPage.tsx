@@ -6,7 +6,9 @@ import {
   Layers3,
   PackageSearch,
   RefreshCw,
+  Repeat2,
   Scale,
+  SlidersHorizontal,
   Warehouse,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
@@ -54,7 +56,7 @@ type Transaction = {
   posted_at: string;
 };
 
-type MovementType = "receipt" | "issue";
+type MovementType = "receipt" | "issue" | "transfer" | "adjustment";
 type CostBasis = "quantity" | "weight";
 
 const numberFormat = new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 3 });
@@ -80,7 +82,9 @@ export function InventoryPage() {
   const [movementType, setMovementType] = useState<MovementType>("receipt");
   const [productId, setProductId] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
+  const [destinationWarehouseId, setDestinationWarehouseId] = useState("");
   const [costBasis, setCostBasis] = useState<CostBasis>("quantity");
+  const [adjustmentDirection, setAdjustmentDirection] = useState<"increase" | "decrease">("increase");
   const [quantity, setQuantity] = useState("");
   const [weight, setWeight] = useState("");
   const [unitCost, setUnitCost] = useState("");
@@ -105,12 +109,16 @@ export function InventoryPage() {
       setOptions(optionRows);
       setProductId((current) => current || optionRows.products[0]?.id || "");
       setWarehouseId((current) => current || optionRows.warehouses[0]?.id || "");
+      setDestinationWarehouseId((current) => {
+        if (current && current !== (warehouseId || optionRows.warehouses[0]?.id)) return current;
+        return optionRows.warehouses.find((item) => item.id !== (warehouseId || optionRows.warehouses[0]?.id))?.id || "";
+      });
     } catch (reason) {
       setError(reason instanceof ApiError ? reason.message : "تعذر تحميل بيانات المخزون");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [warehouseId]);
 
   useEffect(() => {
     void load();
@@ -140,8 +148,30 @@ export function InventoryPage() {
     setSubmitting(true);
     try {
       const isReceipt = movementType === "receipt";
+      const isTransfer = movementType === "transfer";
+      const isAdjustment = movementType === "adjustment";
       const amount = costBasis === "quantity" ? quantity : weight;
-      const payload = isReceipt
+      const payload = isTransfer
+        ? {
+            product_id: productId,
+            source_warehouse_id: warehouseId,
+            destination_warehouse_id: destinationWarehouseId,
+            amount,
+            cost_basis: costBasis,
+            notes,
+          }
+        : isAdjustment
+          ? {
+              product_id: productId,
+              warehouse_id: warehouseId,
+              direction: adjustmentDirection,
+              quantity: quantity || "0",
+              weight_kg: weight || "0",
+              cost_basis: costBasis,
+              unit_cost: unitCost || "0",
+              reason: notes,
+            }
+        : isReceipt
         ? {
             product_id: productId,
             warehouse_id: warehouseId,
@@ -150,7 +180,7 @@ export function InventoryPage() {
             cost_basis: costBasis,
             unit_cost: unitCost || "0",
             lot_number: lotNumber,
-            reference_type: "manual_adjustment",
+            reference_type: "manual_receipt",
             notes,
           }
         : {
@@ -158,20 +188,31 @@ export function InventoryPage() {
             warehouse_id: warehouseId,
             amount,
             cost_basis: costBasis,
-            reference_type: "manual_adjustment",
+            reference_type: "manual_issue",
             notes,
           };
-      await api<Transaction>(`/inventory/${isReceipt ? "receipts" : "issues"}`, {
+      await api<Transaction>(
+        `/inventory/${isTransfer ? "transfers" : isAdjustment ? "adjustments" : isReceipt ? "receipts" : "issues"}`,
+        {
         method: "POST",
         headers: { "Idempotency-Key": freshKey() },
         body: JSON.stringify(payload),
-      });
+        },
+      );
       setQuantity("");
       setWeight("");
       setUnitCost("");
       setLotNumber("");
       setNotes("");
-      setNotice(isReceipt ? "تم ترحيل الاستلام وتكوين طبقة FIFO جديدة." : "تم ترحيل الصرف وتخصيص التكلفة من أقدم الطبقات.");
+      setNotice(
+        isTransfer
+          ? "تم التحويل ذريًا بين المخزنين مع الحفاظ على قيمة تكلفة FIFO."
+          : isAdjustment
+            ? "تم ترحيل التسوية وتسجيل سببها في سجل التدقيق."
+          : isReceipt
+            ? "تم ترحيل الاستلام وتكوين طبقة FIFO جديدة."
+            : "تم ترحيل الصرف وتخصيص التكلفة من أقدم الطبقات.",
+      );
       await load();
     } catch (reason) {
       setError(reason instanceof ApiError ? reason.message : "تعذر ترحيل حركة المخزون");
@@ -224,21 +265,26 @@ export function InventoryPage() {
         {canManage ? (
           <article className="panel master-form-card inventory-movement-card">
             <header className="panel__head"><div><h3>ترحيل حركة مخزون</h3><p>كل عملية تحفظ كسجل مستقل قابل للتدقيق</p></div></header>
-            <div className="movement-switch" role="tablist" aria-label="نوع الحركة">
+            <div className="movement-switch movement-switch--four" role="tablist" aria-label="نوع الحركة">
               <button type="button" role="tab" aria-selected={movementType === "receipt"} className={movementType === "receipt" ? "movement-switch--active" : ""} onClick={() => changeMovementType("receipt")}><ArrowDownToLine size={17} /> استلام</button>
               <button type="button" role="tab" aria-selected={movementType === "issue"} className={movementType === "issue" ? "movement-switch--active movement-switch--issue" : ""} onClick={() => changeMovementType("issue")}><ArrowUpFromLine size={17} /> صرف</button>
+              <button type="button" role="tab" aria-selected={movementType === "transfer"} className={movementType === "transfer" ? "movement-switch--active movement-switch--transfer" : ""} onClick={() => changeMovementType("transfer")}><Repeat2 size={17} /> تحويل</button>
+              <button type="button" role="tab" aria-selected={movementType === "adjustment"} className={movementType === "adjustment" ? "movement-switch--active movement-switch--adjustment" : ""} onClick={() => changeMovementType("adjustment")}><SlidersHorizontal size={17} /> تسوية</button>
             </div>
             {hasSetup ? <form className="compact-form inventory-form" onSubmit={submitMovement}>
               <label>الصنف<select value={productId} onChange={(event) => setProductId(event.target.value)} required>{options.products.map((item) => <option value={item.id} key={item.id}>{item.name_ar} · {item.code}</option>)}</select></label>
-              <label>المخزن<select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} required>{options.warehouses.map((item) => <option value={item.id} key={item.id}>{item.name_ar} · {item.code}</option>)}</select></label>
+              <label>{movementType === "transfer" ? "من مخزن" : "المخزن"}<select value={warehouseId} onChange={(event) => { const value = event.target.value; setWarehouseId(value); if (value === destinationWarehouseId) setDestinationWarehouseId(options.warehouses.find((item) => item.id !== value)?.id || ""); }} required>{options.warehouses.map((item) => <option value={item.id} key={item.id}>{item.name_ar} · {item.code}</option>)}</select></label>
+              {movementType === "transfer" ? <label>إلى مخزن<select value={destinationWarehouseId} onChange={(event) => setDestinationWarehouseId(event.target.value)} required>{options.warehouses.filter((item) => item.id !== warehouseId).map((item) => <option value={item.id} key={item.id}>{item.name_ar} · {item.code}</option>)}</select></label> : null}
+              {movementType === "adjustment" ? <label>اتجاه التسوية<select value={adjustmentDirection} onChange={(event) => setAdjustmentDirection(event.target.value as "increase" | "decrease")}><option value="increase">زيادة الرصيد</option><option value="decrease">خفض الرصيد</option></select></label> : null}
               <fieldset className="basis-picker"><legend>أساس التكلفة والصرف</legend><label><input type="radio" name="basis" value="quantity" checked={costBasis === "quantity"} onChange={() => setCostBasis("quantity")} /> بالكمية</label><label><input type="radio" name="basis" value="weight" checked={costBasis === "weight"} onChange={() => setCostBasis("weight")} /> بالوزن</label></fieldset>
               <div className="form-pair">
-                <label>الكمية<input type="number" min="0" step="0.000001" value={quantity} onChange={(event) => setQuantity(event.target.value)} required={movementType === "issue" && costBasis === "quantity"} disabled={movementType === "issue" && costBasis === "weight"} /></label>
-                <label>الوزن بالكيلو<input type="number" min="0" step="0.000001" value={weight} onChange={(event) => setWeight(event.target.value)} required={movementType === "issue" && costBasis === "weight"} disabled={movementType === "issue" && costBasis === "quantity"} /></label>
+                <label>الكمية<input type="number" min="0" step="0.000001" value={quantity} onChange={(event) => setQuantity(event.target.value)} required={(movementType !== "receipt" && movementType !== "adjustment" || movementType === "adjustment" && adjustmentDirection === "decrease") && costBasis === "quantity"} disabled={(movementType !== "receipt" && movementType !== "adjustment" || movementType === "adjustment" && adjustmentDirection === "decrease") && costBasis === "weight"} /></label>
+                <label>الوزن بالكيلو<input type="number" min="0" step="0.000001" value={weight} onChange={(event) => setWeight(event.target.value)} required={(movementType !== "receipt" && movementType !== "adjustment" || movementType === "adjustment" && adjustmentDirection === "decrease") && costBasis === "weight"} disabled={(movementType !== "receipt" && movementType !== "adjustment" || movementType === "adjustment" && adjustmentDirection === "decrease") && costBasis === "quantity"} /></label>
               </div>
-              {movementType === "receipt" ? <><label>تكلفة الوحدة<input type="number" min="0" step="0.000001" value={unitCost} onChange={(event) => setUnitCost(event.target.value)} required /></label><label>رقم التشغيلة <small>(اختياري)</small><input dir="ltr" value={lotNumber} onChange={(event) => setLotNumber(event.target.value)} maxLength={80} placeholder="LOT-2026-001" /></label></> : null}
-              <label>ملاحظات<textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={2000} rows={3} placeholder="سبب الحركة أو مرجع داخلي..." /></label>
-              <button className={`primary-button ${movementType === "issue" ? "danger-button" : ""}`} disabled={submitting}>{movementType === "receipt" ? <ArrowDownToLine size={17} /> : <ArrowUpFromLine size={17} />}{submitting ? "جارٍ الترحيل..." : movementType === "receipt" ? "ترحيل الاستلام" : "ترحيل الصرف"}</button>
+              {movementType === "receipt" || movementType === "adjustment" && adjustmentDirection === "increase" ? <label>تكلفة الوحدة<input type="number" min="0" step="0.000001" value={unitCost} onChange={(event) => setUnitCost(event.target.value)} required /></label> : null}
+              {movementType === "receipt" ? <label>رقم التشغيلة <small>(اختياري)</small><input dir="ltr" value={lotNumber} onChange={(event) => setLotNumber(event.target.value)} maxLength={80} placeholder="LOT-2026-001" /></label> : null}
+              <label>{movementType === "adjustment" ? "سبب التسوية" : "ملاحظات"}<textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={2000} minLength={movementType === "adjustment" ? 3 : undefined} required={movementType === "adjustment"} rows={3} placeholder={movementType === "adjustment" ? "مثال: فرق نتيجة الجرد الفعلي..." : "سبب الحركة أو مرجع داخلي..."} /></label>
+              <button className={`primary-button ${movementType === "issue" || movementType === "adjustment" && adjustmentDirection === "decrease" ? "danger-button" : ""}`} disabled={submitting || (movementType === "transfer" && options.warehouses.length < 2)}>{movementType === "receipt" ? <ArrowDownToLine size={17} /> : movementType === "issue" ? <ArrowUpFromLine size={17} /> : movementType === "transfer" ? <Repeat2 size={17} /> : <SlidersHorizontal size={17} />}{submitting ? "جارٍ الترحيل..." : movementType === "receipt" ? "ترحيل الاستلام" : movementType === "issue" ? "ترحيل الصرف" : movementType === "transfer" ? "تنفيذ التحويل" : "ترحيل التسوية"}</button>
             </form> : <div className="setup-note"><Warehouse size={22} /><div><strong>أكمل البيانات الأساسية أولًا</strong><p>يلزم وجود منتج مخزني ومخزن نشط قبل تسجيل الحركة.</p></div></div>}
           </article>
         ) : null}

@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 CostBasis = Literal["quantity", "weight"]
+AdjustmentDirection = Literal["increase", "decrease"]
 
 
 class InventoryView(BaseModel):
@@ -44,6 +45,40 @@ class IssueRequest(BaseModel):
     notes: str = Field(default="", max_length=2000)
 
 
+class TransferRequest(BaseModel):
+    product_id: UUID
+    source_warehouse_id: UUID
+    destination_warehouse_id: UUID
+    amount: Decimal = Field(gt=0, max_digits=20, decimal_places=6)
+    cost_basis: CostBasis
+    reference_id: str | None = Field(default=None, max_length=80)
+    notes: str = Field(default="", max_length=2000)
+
+    @model_validator(mode="after")
+    def validate_warehouses(self) -> "TransferRequest":
+        if self.source_warehouse_id == self.destination_warehouse_id:
+            raise ValueError("يجب اختيار مخزنين مختلفين للتحويل")
+        return self
+
+
+class AdjustmentRequest(BaseModel):
+    product_id: UUID
+    warehouse_id: UUID
+    direction: AdjustmentDirection
+    quantity: Decimal = Field(default=Decimal("0"), ge=0, max_digits=20, decimal_places=6)
+    weight_kg: Decimal = Field(default=Decimal("0"), ge=0, max_digits=20, decimal_places=6)
+    cost_basis: CostBasis
+    unit_cost: Decimal = Field(default=Decimal("0"), ge=0, max_digits=20, decimal_places=6)
+    reason: str = Field(min_length=3, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_basis_amount(self) -> "AdjustmentRequest":
+        basis_amount = self.quantity if self.cost_basis == "quantity" else self.weight_kg
+        if basis_amount <= 0:
+            raise ValueError("يجب إدخال مقدار موجب للتسوية")
+        return self
+
+
 class TransactionView(InventoryView):
     id: UUID
     idempotency_key: str
@@ -62,6 +97,12 @@ class TransactionView(InventoryView):
     warehouse_name_ar: str
     notes: str
     posted_at: datetime
+
+
+class TransferView(BaseModel):
+    reference_id: str
+    outbound: TransactionView
+    inbound: TransactionView
 
 
 class BalanceView(InventoryView):

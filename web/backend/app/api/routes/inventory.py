@@ -12,11 +12,14 @@ from app.api.dependencies import (
 )
 from app.modules.identity.permissions import PermissionCode
 from app.modules.inventory.schemas import (
+    AdjustmentRequest,
     BalanceView,
     InventoryOptionsView,
     IssueRequest,
     ReceiptRequest,
     TransactionView,
+    TransferRequest,
+    TransferView,
 )
 from app.modules.inventory.service import (
     InsufficientStock,
@@ -25,8 +28,10 @@ from app.modules.inventory.service import (
     inventory_options,
     list_balances,
     list_transactions,
+    post_adjustment,
     post_issue,
     post_receipt,
+    post_transfer,
     transaction_view,
 )
 
@@ -133,5 +138,73 @@ def issue(
         db.rollback()
         raise _translate_error(exc) from exc
     view = transaction_view(db, item)
+    db.commit()
+    return view
+
+
+@router.post("/transfers", response_model=TransferView, status_code=status.HTTP_201_CREATED)
+def transfer(
+    payload: TransferRequest,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DatabaseSession,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=12, max_length=120)],
+) -> TransferView:
+    enforce_permission(request, db, principal, PermissionCode.INVENTORY_MANAGE)
+    enforce_csrf(request, db, principal)
+    try:
+        reference_id, outbound, inbound = post_transfer(
+            db,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            actor_user_id=principal.user.id,
+            client=client_context(request),
+        )
+        view = TransferView(
+            reference_id=reference_id,
+            outbound=transaction_view(db, outbound),
+            inbound=transaction_view(db, inbound),
+        )
+    except (
+        InventoryNotFound,
+        InsufficientStock,
+        InventoryConflict,
+        IntegrityError,
+        ValueError,
+    ) as exc:
+        db.rollback()
+        raise _translate_error(exc) from exc
+    db.commit()
+    return view
+
+
+@router.post("/adjustments", response_model=TransactionView, status_code=status.HTTP_201_CREATED)
+def adjustment(
+    payload: AdjustmentRequest,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DatabaseSession,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=12, max_length=120)],
+) -> TransactionView:
+    enforce_permission(request, db, principal, PermissionCode.INVENTORY_MANAGE)
+    enforce_csrf(request, db, principal)
+    try:
+        item = post_adjustment(
+            db,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            actor_user_id=principal.user.id,
+            client=client_context(request),
+        )
+        view = transaction_view(db, item)
+    except (
+        InventoryNotFound,
+        InsufficientStock,
+        InventoryConflict,
+        IntegrityError,
+        ValueError,
+    ) as exc:
+        db.rollback()
+        raise _translate_error(exc) from exc
     db.commit()
     return view

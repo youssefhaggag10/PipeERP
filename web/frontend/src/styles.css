@@ -284,9 +284,13 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .numeric-cell { direction: ltr; text-align: right !important; font-variant-numeric: tabular-nums; }
 .inventory-movement-card { overflow: visible; }
 .movement-switch { margin: 18px 20px 0; padding: 4px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; border: 1px solid #dbe4e8; border-radius: 12px; background: #edf3f4; }
+.movement-switch--three { grid-template-columns: repeat(3,1fr); }
+.movement-switch--four { grid-template-columns: repeat(4,1fr); }
 .movement-switch button { min-height: 40px; border: 0; border-radius: 9px; display: flex; align-items: center; justify-content: center; gap: 7px; color: #617285; background: transparent; font-size: 11px; font-weight: 800; }
 .movement-switch button.movement-switch--active { color: #087060; background: #fff; box-shadow: 0 3px 10px rgba(13,34,52,.08); }
 .movement-switch button.movement-switch--issue { color: #a24740; }
+.movement-switch button.movement-switch--transfer { color: #3977a9; }
+.movement-switch button.movement-switch--adjustment { color: #7859aa; }
 .inventory-form textarea { width: 100%; resize: vertical; min-height: 72px; padding: 11px 12px; border: 1px solid #d8e1e6; border-radius: 10px; color: var(--ink); background: #fff; font: inherit; }
 .inventory-form textarea:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 4px rgba(15,139,120,.08); }
 .form-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

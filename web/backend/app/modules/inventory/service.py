@@ -1,6 +1,7 @@
 import unicodedata
 from datetime import UTC, datetime
 from decimal import Decimal
+from hashlib import sha256
 from uuid import UUID
 
 from sqlalchemy import select
@@ -17,12 +18,14 @@ from app.modules.inventory.models import (
     InventoryTransaction,
 )
 from app.modules.inventory.schemas import (
+    AdjustmentRequest,
     BalanceView,
     InventoryOption,
     InventoryOptionsView,
     IssueRequest,
     ReceiptRequest,
     TransactionView,
+    TransferRequest,
 )
 from app.modules.master_data.models import Product, Warehouse
 
@@ -132,12 +135,21 @@ def post_receipt(
     idempotency_key: str,
     actor_user_id: UUID,
     client: ClientContext,
+    transaction_type: str = "receipt",
 ) -> InventoryTransaction:
+    if transaction_type not in {
+        "receipt",
+        "transfer_in",
+        "adjustment_in",
+        "return_in",
+        "production_output",
+    }:
+        raise ValueError("نوع حركة الإدخال غير صالح")
     existing = _existing_transaction(db, idempotency_key)
     if existing is not None:
         return _validate_idempotent_request(
             existing,
-            transaction_type="receipt",
+            transaction_type=transaction_type,
             product_id=payload.product_id,
             warehouse_id=payload.warehouse_id,
         )
@@ -146,7 +158,7 @@ def post_receipt(
     if existing is not None:
         return _validate_idempotent_request(
             existing,
-            transaction_type="receipt",
+            transaction_type=transaction_type,
             product_id=payload.product_id,
             warehouse_id=payload.warehouse_id,
         )
@@ -163,7 +175,7 @@ def post_receipt(
     total_cost = quantity(basis_amount * payload.unit_cost)
     transaction = InventoryTransaction(
         idempotency_key=idempotency_key,
-        transaction_type="receipt",
+        transaction_type=transaction_type,
         product_id=payload.product_id,
         warehouse_id=payload.warehouse_id,
         lot_id=lot.id if lot else None,
@@ -205,7 +217,7 @@ def post_receipt(
     add_audit(
         db,
         actor_user_id=actor_user_id,
-        event_type="inventory.receipt.post",
+        event_type=f"inventory.{transaction_type}.post",
         entity_type="inventory_transaction",
         entity_id=str(transaction.id),
         outcome="success",
@@ -228,12 +240,21 @@ def post_issue(
     idempotency_key: str,
     actor_user_id: UUID,
     client: ClientContext,
+    transaction_type: str = "issue",
 ) -> InventoryTransaction:
+    if transaction_type not in {
+        "issue",
+        "transfer_out",
+        "adjustment_out",
+        "return_out",
+        "production_issue",
+    }:
+        raise ValueError("نوع حركة الإخراج غير صالح")
     existing = _existing_transaction(db, idempotency_key)
     if existing is not None:
         return _validate_idempotent_request(
             existing,
-            transaction_type="issue",
+            transaction_type=transaction_type,
             product_id=payload.product_id,
             warehouse_id=payload.warehouse_id,
         )
@@ -242,7 +263,7 @@ def post_issue(
     if existing is not None:
         return _validate_idempotent_request(
             existing,
-            transaction_type="issue",
+            transaction_type=transaction_type,
             product_id=payload.product_id,
             warehouse_id=payload.warehouse_id,
         )
@@ -285,7 +306,7 @@ def post_issue(
     average_cost = quantity(total_cost / payload.amount)
     transaction = InventoryTransaction(
         idempotency_key=idempotency_key,
-        transaction_type="issue",
+        transaction_type=transaction_type,
         product_id=payload.product_id,
         warehouse_id=payload.warehouse_id,
         lot_id=None,
@@ -325,7 +346,7 @@ def post_issue(
     add_audit(
         db,
         actor_user_id=actor_user_id,
-        event_type="inventory.issue.post",
+        event_type=f"inventory.{transaction_type}.post",
         entity_type="inventory_transaction",
         entity_id=str(transaction.id),
         outcome="success",
@@ -340,6 +361,97 @@ def post_issue(
     )
     db.flush()
     return transaction
+
+
+def post_transfer(
+    db: Session,
+    *,
+    payload: TransferRequest,
+    idempotency_key: str,
+    actor_user_id: UUID,
+    client: ClientContext,
+) -> tuple[str, InventoryTransaction, InventoryTransaction]:
+    digest = sha256(idempotency_key.encode("utf-8")).hexdigest()
+    reference_id = payload.reference_id or digest[:32]
+    outbound = post_issue(
+        db,
+        payload=IssueRequest(
+            product_id=payload.product_id,
+            warehouse_id=payload.source_warehouse_id,
+            amount=payload.amount,
+            cost_basis=payload.cost_basis,
+            reference_type="inventory_transfer",
+            reference_id=reference_id,
+            notes=payload.notes,
+        ),
+        idempotency_key=f"transfer-out-{digest}",
+        actor_user_id=actor_user_id,
+        client=client,
+        transaction_type="transfer_out",
+    )
+    inbound = post_receipt(
+        db,
+        payload=ReceiptRequest(
+            product_id=payload.product_id,
+            warehouse_id=payload.destination_warehouse_id,
+            quantity=-outbound.quantity_delta,
+            weight_kg=-outbound.weight_delta_kg,
+            cost_basis=payload.cost_basis,
+            unit_cost=outbound.unit_cost,
+            reference_type="inventory_transfer",
+            reference_id=reference_id,
+            notes=payload.notes,
+        ),
+        idempotency_key=f"transfer-in-{digest}",
+        actor_user_id=actor_user_id,
+        client=client,
+        transaction_type="transfer_in",
+    )
+    return reference_id, outbound, inbound
+
+
+def post_adjustment(
+    db: Session,
+    *,
+    payload: AdjustmentRequest,
+    idempotency_key: str,
+    actor_user_id: UUID,
+    client: ClientContext,
+) -> InventoryTransaction:
+    if payload.direction == "increase":
+        return post_receipt(
+            db,
+            payload=ReceiptRequest(
+                product_id=payload.product_id,
+                warehouse_id=payload.warehouse_id,
+                quantity=payload.quantity,
+                weight_kg=payload.weight_kg,
+                cost_basis=payload.cost_basis,
+                unit_cost=payload.unit_cost,
+                reference_type="stock_adjustment",
+                notes=payload.reason,
+            ),
+            idempotency_key=idempotency_key,
+            actor_user_id=actor_user_id,
+            client=client,
+            transaction_type="adjustment_in",
+        )
+    amount = payload.quantity if payload.cost_basis == "quantity" else payload.weight_kg
+    return post_issue(
+        db,
+        payload=IssueRequest(
+            product_id=payload.product_id,
+            warehouse_id=payload.warehouse_id,
+            amount=amount,
+            cost_basis=payload.cost_basis,
+            reference_type="stock_adjustment",
+            notes=payload.reason,
+        ),
+        idempotency_key=idempotency_key,
+        actor_user_id=actor_user_id,
+        client=client,
+        transaction_type="adjustment_out",
+    )
 
 
 def list_balances(db: Session) -> list[BalanceView]:
