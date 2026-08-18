@@ -9,6 +9,7 @@ import {
   Repeat2,
   Scale,
   SlidersHorizontal,
+  Undo2,
   Warehouse,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
@@ -53,6 +54,8 @@ type Transaction = {
   product_name_ar: string;
   warehouse_name_ar: string;
   notes: string;
+  cost_basis: CostBasis;
+  reversal_of_id: string | null;
   posted_at: string;
 };
 
@@ -71,6 +74,28 @@ function formatNumber(value: string | number) {
 
 function freshKey() {
   return `inventory-${crypto.randomUUID()}`;
+}
+
+const movementLabels: Record<string, string> = {
+  receipt: "استلام",
+  issue: "صرف",
+  transfer_in: "تحويل وارد",
+  transfer_out: "تحويل صادر",
+  adjustment_in: "تسوية زيادة",
+  adjustment_out: "تسوية خفض",
+  reversal_in: "عكس وارد",
+  reversal_out: "عكس صادر",
+};
+
+function isInbound(transaction: Transaction) {
+  return Number(transaction.quantity_delta) > 0 || Number(transaction.weight_delta_kg) > 0;
+}
+
+function canReverse(transaction: Transaction) {
+  return (
+    transaction.reversal_of_id === null &&
+    ["receipt", "issue", "adjustment_in", "adjustment_out"].includes(transaction.transaction_type)
+  );
 }
 
 export function InventoryPage() {
@@ -94,6 +119,8 @@ export function InventoryPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [reversalTarget, setReversalTarget] = useState<Transaction | null>(null);
+  const [reversalReason, setReversalReason] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -221,6 +248,29 @@ export function InventoryPage() {
     }
   }
 
+  async function submitReversal(event: FormEvent) {
+    event.preventDefault();
+    if (!reversalTarget) return;
+    setSubmitting(true);
+    setError("");
+    setNotice("");
+    try {
+      await api<Transaction>(`/inventory/transactions/${reversalTarget.id}/reversal`, {
+        method: "POST",
+        headers: { "Idempotency-Key": freshKey() },
+        body: JSON.stringify({ reason: reversalReason }),
+      });
+      setReversalTarget(null);
+      setReversalReason("");
+      setNotice("تم إنشاء حركة عكسية مرتبطة بالأصل دون تعديل السجل التاريخي.");
+      await load();
+    } catch (reason) {
+      setError(reason instanceof ApiError ? reason.message : "تعذر عكس حركة المخزون");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const hasSetup = options.products.length > 0 && options.warehouses.length > 0;
 
   return (
@@ -292,7 +342,8 @@ export function InventoryPage() {
 
       <section className="panel inventory-history">
         <header className="panel__head"><div><h3>سجل الحركات</h3><p>أحدث 100 حركة مع التكلفة والمرجع والتوقيت</p></div></header>
-        {transactions.length ? <div className="data-table-wrap"><table className="data-table inventory-table"><thead><tr><th>الحركة</th><th>الصنف</th><th>المخزن</th><th>الكمية</th><th>الوزن</th><th>التكلفة</th><th>التوقيت</th></tr></thead><tbody>{transactions.map((item) => { const receipt = item.transaction_type === "receipt"; return <tr key={item.id}><td><span className={`movement-badge ${receipt ? "movement-badge--receipt" : "movement-badge--issue"}`}>{receipt ? <ArrowDownToLine size={13} /> : <ArrowUpFromLine size={13} />}{receipt ? "استلام" : "صرف"}</span></td><td><strong>{item.product_name_ar}</strong><small dir="ltr">{item.product_code}</small></td><td>{item.warehouse_name_ar}</td><td className={`numeric-cell ${receipt ? "movement-positive" : "movement-negative"}`}>{formatNumber(item.quantity_delta)}</td><td className={`numeric-cell ${receipt ? "movement-positive" : "movement-negative"}`}>{formatNumber(item.weight_delta_kg)} كجم</td><td className="numeric-cell">{moneyFormat.format(Number(item.total_cost))}</td><td><time dateTime={item.posted_at}>{new Intl.DateTimeFormat("ar-EG", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.posted_at))}</time></td></tr>; })}</tbody></table></div> : <div className="empty-state"><span className="empty-state__icon"><Layers3 size={27} /></span><h4>سجل الحركات فارغ</h4><p>ستظهر هنا كل حركة استلام أو صرف فور ترحيلها.</p></div>}
+        {reversalTarget ? <form className="reversal-bar" onSubmit={submitReversal}><Undo2 size={20} /><div><strong>عكس حركة {movementLabels[reversalTarget.transaction_type] ?? reversalTarget.transaction_type}</strong><small>{reversalTarget.product_name_ar} · {reversalTarget.warehouse_name_ar}</small></div><input value={reversalReason} onChange={(event) => setReversalReason(event.target.value)} minLength={3} maxLength={500} placeholder="اكتب سبب العكس..." required /><button className="danger-button secondary-button" disabled={submitting}><Undo2 size={15} /> تأكيد العكس</button><button type="button" className="secondary-button" onClick={() => { setReversalTarget(null); setReversalReason(""); }}>إلغاء</button></form> : null}
+        {transactions.length ? <div className="data-table-wrap"><table className="data-table inventory-table"><thead><tr><th>الحركة</th><th>الصنف</th><th>المخزن</th><th>الكمية</th><th>الوزن</th><th>التكلفة</th><th>التوقيت</th>{canManage ? <th>إجراء</th> : null}</tr></thead><tbody>{transactions.map((item) => { const inbound = isInbound(item); return <tr key={item.id}><td><span className={`movement-badge ${inbound ? "movement-badge--receipt" : "movement-badge--issue"}`}>{inbound ? <ArrowDownToLine size={13} /> : <ArrowUpFromLine size={13} />}{movementLabels[item.transaction_type] ?? item.transaction_type}</span>{item.reversal_of_id ? <small>حركة عكسية</small> : null}</td><td><strong>{item.product_name_ar}</strong><small dir="ltr">{item.product_code}</small></td><td>{item.warehouse_name_ar}</td><td className={`numeric-cell ${inbound ? "movement-positive" : "movement-negative"}`}>{formatNumber(item.quantity_delta)}</td><td className={`numeric-cell ${inbound ? "movement-positive" : "movement-negative"}`}>{formatNumber(item.weight_delta_kg)} كجم</td><td className="numeric-cell">{moneyFormat.format(Number(item.total_cost))}</td><td><time dateTime={item.posted_at}>{new Intl.DateTimeFormat("ar-EG", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.posted_at))}</time></td>{canManage ? <td>{canReverse(item) ? <button className="mini-action" onClick={() => { setReversalTarget(item); setReversalReason(""); }}><Undo2 size={14} /> عكس</button> : <span className="muted-action">—</span>}</td> : null}</tr>; })}</tbody></table></div> : <div className="empty-state"><span className="empty-state__icon"><Layers3 size={27} /></span><h4>سجل الحركات فارغ</h4><p>ستظهر هنا كل حركة استلام أو صرف فور ترحيلها.</p></div>}
       </section>
     </AppShell>
   );

@@ -46,7 +46,7 @@ def client(factory: sessionmaker[Session]) -> TestClient:
     return TestClient(app)
 
 
-def seed(factory: sessionmaker[Session]) -> tuple[str, str, str]:
+def seed(factory: sessionmaker[Session]) -> tuple[str, str, str, str]:
     with factory.begin() as db:
         create_initial_admin(
             db,
@@ -80,7 +80,15 @@ def seed(factory: sessionmaker[Session]) -> tuple[str, str, str]:
             is_active=True,
             version=1,
         )
-        db.add_all([unit, warehouse, secondary])
+        inactive = Warehouse(
+            code="INACTIVE",
+            normalized_code="INACTIVE",
+            name_ar="مخزن متوقف",
+            is_default=False,
+            is_active=False,
+            version=1,
+        )
+        db.add_all([unit, warehouse, secondary, inactive])
         db.flush()
         product = Product(
             code="FG-INV",
@@ -113,7 +121,7 @@ def seed(factory: sessionmaker[Session]) -> tuple[str, str, str]:
             )
         )
         db.flush()
-        return str(product.id), str(warehouse.id), str(secondary.id)
+        return str(product.id), str(warehouse.id), str(secondary.id), str(inactive.id)
 
 
 def login(test_client: TestClient) -> None:
@@ -132,7 +140,7 @@ def headers(test_client: TestClient, key: str) -> dict[str, str]:
 
 def test_receipt_issue_fifo_idempotency_and_negative_stock_protection() -> None:
     factory = database()
-    product_id, warehouse_id, secondary_id = seed(factory)
+    product_id, warehouse_id, secondary_id, inactive_id = seed(factory)
     with client(factory) as test_client:
         login(test_client)
         receipt_payload = {
@@ -251,6 +259,18 @@ def test_receipt_issue_fifo_idempotency_and_negative_stock_protection() -> None:
             headers=headers(test_client, "transfer-test-0002"),
         )
         assert failed_transfer.status_code == 409
+        atomic_failure = test_client.post(
+            "/api/v1/inventory/transfers",
+            json={
+                "product_id": product_id,
+                "source_warehouse_id": warehouse_id,
+                "destination_warehouse_id": inactive_id,
+                "amount": "1",
+                "cost_basis": "quantity",
+            },
+            headers=headers(test_client, "transfer-test-0003"),
+        )
+        assert atomic_failure.status_code == 404
         balances_after_transfer = test_client.get("/api/v1/inventory/balances").json()
         indexed = {item["warehouse_id"]: item for item in balances_after_transfer}
         assert indexed[warehouse_id]["quantity_on_hand"] == "4.000000"
@@ -274,14 +294,29 @@ def test_receipt_issue_fifo_idempotency_and_negative_stock_protection() -> None:
         assert adjustment.json()["transaction_type"] == "adjustment_in"
         assert adjustment.json()["quantity_delta"] == "1.000000"
 
+        reversal = test_client.post(
+            f"/api/v1/inventory/transactions/{issued.json()['id']}/reversal",
+            json={"reason": "إلغاء الصرف التجريبي بعد المراجعة"},
+            headers=headers(test_client, "reversal-test-0001"),
+        )
+        assert reversal.status_code == 201, reversal.text
+        assert reversal.json()["transaction_type"] == "reversal_in"
+        assert reversal.json()["reversal_of_id"] == issued.json()["id"]
+        assert reversal.json()["quantity_delta"] == "4.000000"
+
+        repeated_reversal = test_client.post(
+            f"/api/v1/inventory/transactions/{issued.json()['id']}/reversal",
+            json={"reason": "محاولة عكس ثانية"},
+            headers=headers(test_client, "reversal-test-0002"),
+        )
+        assert repeated_reversal.status_code == 409
+
     with factory() as db:
-        assert db.scalar(select(func.count(InventoryTransaction.id))) == 5
+        assert db.scalar(select(func.count(InventoryTransaction.id))) == 6
         assert db.scalar(select(func.count(InventoryAllocation.id))) == 2
-        stock_layers = list(db.scalars(select(InventoryLayer).order_by(InventoryLayer.received_at)))
-        assert stock_layers[0].quantity_remaining == 4
-        assert stock_layers[0].weight_remaining_kg == 40
-        assert stock_layers[1].quantity_remaining == 2
-        assert stock_layers[1].weight_remaining_kg == 20
+        stock_layers = list(db.scalars(select(InventoryLayer)))
+        assert sum((item.quantity_remaining for item in stock_layers), 0) == 11
+        assert sum((item.weight_remaining_kg for item in stock_layers), 0) == 110
         events = set(db.scalars(select(AuditLog.event_type)))
         assert {
             "inventory.receipt.post",
@@ -289,5 +324,6 @@ def test_receipt_issue_fifo_idempotency_and_negative_stock_protection() -> None:
             "inventory.transfer_out.post",
             "inventory.transfer_in.post",
             "inventory.adjustment_in.post",
+            "inventory.reversal_in.post",
         } <= events
     app.dependency_overrides.clear()

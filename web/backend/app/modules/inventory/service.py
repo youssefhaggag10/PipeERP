@@ -2,6 +2,7 @@ import unicodedata
 from datetime import UTC, datetime
 from decimal import Decimal
 from hashlib import sha256
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -20,10 +21,12 @@ from app.modules.inventory.models import (
 from app.modules.inventory.schemas import (
     AdjustmentRequest,
     BalanceView,
+    CostBasis,
     InventoryOption,
     InventoryOptionsView,
     IssueRequest,
     ReceiptRequest,
+    ReversalRequest,
     TransactionView,
     TransferRequest,
 )
@@ -136,6 +139,7 @@ def post_receipt(
     actor_user_id: UUID,
     client: ClientContext,
     transaction_type: str = "receipt",
+    reversal_of_id: UUID | None = None,
 ) -> InventoryTransaction:
     if transaction_type not in {
         "receipt",
@@ -143,6 +147,7 @@ def post_receipt(
         "adjustment_in",
         "return_in",
         "production_output",
+        "reversal_in",
     }:
         raise ValueError("نوع حركة الإدخال غير صالح")
     existing = _existing_transaction(db, idempotency_key)
@@ -183,10 +188,11 @@ def post_receipt(
         weight_delta_kg=received_weight,
         unit_cost=payload.unit_cost,
         total_cost=total_cost,
+        cost_basis=payload.cost_basis,
         reference_type=payload.reference_type,
         reference_id=payload.reference_id,
         reference_line_id=payload.reference_line_id,
-        reversal_of_id=None,
+        reversal_of_id=reversal_of_id,
         notes=payload.notes.strip(),
         posted_by_id=actor_user_id,
     )
@@ -241,6 +247,7 @@ def post_issue(
     actor_user_id: UUID,
     client: ClientContext,
     transaction_type: str = "issue",
+    reversal_of_id: UUID | None = None,
 ) -> InventoryTransaction:
     if transaction_type not in {
         "issue",
@@ -248,6 +255,7 @@ def post_issue(
         "adjustment_out",
         "return_out",
         "production_issue",
+        "reversal_out",
     }:
         raise ValueError("نوع حركة الإخراج غير صالح")
     existing = _existing_transaction(db, idempotency_key)
@@ -314,10 +322,11 @@ def post_issue(
         weight_delta_kg=-issued_weight,
         unit_cost=average_cost,
         total_cost=total_cost,
+        cost_basis=payload.cost_basis,
         reference_type=payload.reference_type,
         reference_id=payload.reference_id,
         reference_line_id=payload.reference_line_id,
-        reversal_of_id=None,
+        reversal_of_id=reversal_of_id,
         notes=payload.notes.strip(),
         posted_by_id=actor_user_id,
     )
@@ -454,6 +463,75 @@ def post_adjustment(
     )
 
 
+def reverse_transaction(
+    db: Session,
+    *,
+    transaction_id: UUID,
+    payload: ReversalRequest,
+    idempotency_key: str,
+    actor_user_id: UUID,
+    client: ClientContext,
+) -> InventoryTransaction:
+    original = db.scalar(
+        select(InventoryTransaction)
+        .where(InventoryTransaction.id == transaction_id)
+        .with_for_update()
+    )
+    if original is None:
+        raise InventoryNotFound("حركة المخزون غير موجودة")
+    if original.reversal_of_id is not None:
+        raise InventoryConflict("لا يمكن عكس حركة عكسية")
+    if original.transaction_type not in {"receipt", "issue", "adjustment_in", "adjustment_out"}:
+        raise InventoryConflict("هذه الحركة تُعكس من مستندها التشغيلي وليس من كارت المخزون")
+    previous_reversal = db.scalar(
+        select(InventoryTransaction).where(InventoryTransaction.reversal_of_id == original.id)
+    )
+    if previous_reversal is not None:
+        if previous_reversal.idempotency_key == idempotency_key:
+            return previous_reversal
+        raise InventoryConflict("تم عكس هذه الحركة من قبل")
+
+    basis = cast(CostBasis, original.cost_basis)
+    if original.quantity_delta > 0 or original.weight_delta_kg > 0:
+        amount = original.quantity_delta if basis == "quantity" else original.weight_delta_kg
+        return post_issue(
+            db,
+            payload=IssueRequest(
+                product_id=original.product_id,
+                warehouse_id=original.warehouse_id,
+                amount=amount,
+                cost_basis=basis,
+                reference_type="movement_reversal",
+                reference_id=str(original.id),
+                notes=payload.reason,
+            ),
+            idempotency_key=idempotency_key,
+            actor_user_id=actor_user_id,
+            client=client,
+            transaction_type="reversal_out",
+            reversal_of_id=original.id,
+        )
+    return post_receipt(
+        db,
+        payload=ReceiptRequest(
+            product_id=original.product_id,
+            warehouse_id=original.warehouse_id,
+            quantity=-original.quantity_delta,
+            weight_kg=-original.weight_delta_kg,
+            cost_basis=basis,
+            unit_cost=original.unit_cost,
+            reference_type="movement_reversal",
+            reference_id=str(original.id),
+            notes=payload.reason,
+        ),
+        idempotency_key=idempotency_key,
+        actor_user_id=actor_user_id,
+        client=client,
+        transaction_type="reversal_in",
+        reversal_of_id=original.id,
+    )
+
+
 def list_balances(db: Session) -> list[BalanceView]:
     rows = db.execute(
         select(
@@ -506,8 +584,10 @@ def list_transactions(db: Session, *, limit: int = 100) -> list[TransactionView]
             weight_delta_kg=transaction.weight_delta_kg,
             unit_cost=transaction.unit_cost,
             total_cost=transaction.total_cost,
+            cost_basis=cast(CostBasis, transaction.cost_basis),
             reference_type=transaction.reference_type,
             reference_id=transaction.reference_id,
+            reversal_of_id=transaction.reversal_of_id,
             product_code=product_code,
             product_name_ar=product_name_ar,
             warehouse_name_ar=warehouse_name_ar,
@@ -534,8 +614,10 @@ def transaction_view(db: Session, transaction: InventoryTransaction) -> Transact
         weight_delta_kg=transaction.weight_delta_kg,
         unit_cost=transaction.unit_cost,
         total_cost=transaction.total_cost,
+        cost_basis=cast(CostBasis, transaction.cost_basis),
         reference_type=transaction.reference_type,
         reference_id=transaction.reference_id,
+        reversal_of_id=transaction.reversal_of_id,
         product_code=product.code,
         product_name_ar=product.name_ar,
         warehouse_name_ar=warehouse.name_ar,

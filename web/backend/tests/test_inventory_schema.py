@@ -21,6 +21,13 @@ def test_inventory_metadata_contains_ledger_fifo_and_balance_tables() -> None:
 
     transaction_uniques = inspector.get_unique_constraints("inventory_transactions")
     assert any(item["column_names"] == ["idempotency_key"] for item in transaction_uniques)
+    transaction_columns = {item["name"] for item in inspector.get_columns("inventory_transactions")}
+    assert "cost_basis" in transaction_columns
+    transaction_indexes = inspector.get_indexes("inventory_transactions")
+    assert any(
+        item["name"] == "ux_inventory_transactions_reversal" and item["unique"]
+        for item in transaction_indexes
+    )
 
     balance_pk = inspector.get_pk_constraint("inventory_balances")
     assert balance_pk["constrained_columns"] == ["product_id", "warehouse_id"]

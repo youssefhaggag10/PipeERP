@@ -310,6 +310,14 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .movement-badge--issue { color: #a24740; background: #fbeceb; }
 .movement-positive { color: #087060 !important; font-weight: 800; }
 .movement-negative { color: #a24740 !important; font-weight: 800; }
+.reversal-bar { margin: 15px; padding: 13px; display: grid; grid-template-columns: auto minmax(150px,.7fr) minmax(220px,1.4fr) auto auto; align-items: center; gap: 10px; border: 1px solid #efc9c5; border-radius: 12px; background: #fff6f5; }
+.reversal-bar > svg { color: #a24740; }
+.reversal-bar strong, .reversal-bar small { display: block; }
+.reversal-bar strong { font-size: 10px; }
+.reversal-bar small { margin-top: 3px; color: var(--muted); font-size: 8px; }
+.reversal-bar input { min-height: 40px; padding: 0 11px; border: 1px solid #dfcfcd; border-radius: 9px; background: #fff; }
+.reversal-bar .danger-button { color: #fff; border-color: #a8463f; }
+.muted-action { color: #aab3bc; }
 
 @media (max-width: 1100px) {
   .app-shell { grid-template-columns: 82px minmax(0,1fr); }
@@ -337,6 +345,8 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .metrics-grid, .dashboard-grid, .quick-actions__grid, .identity-stats, .identity-layout, .role-grid, .custom-role__form, .master-layout, .partner-cards, .settings-layout, .settings-form, .reference-form, .reference-form--four, .inventory-stats { grid-template-columns: 1fr; }
   .master-form-card { position: static; }
   .form-pair { grid-template-columns: 1fr; }
+  .reversal-bar { grid-template-columns: auto 1fr; }
+  .reversal-bar input, .reversal-bar button { grid-column: 1 / -1; }
   .role-permission-list, .custom-role__form fieldset { grid-template-columns: 1fr; }
   .settings-company, .settings-form__wide { grid-column: auto; }
   .reference-row { grid-template-columns: 68px minmax(0,1fr) auto; }

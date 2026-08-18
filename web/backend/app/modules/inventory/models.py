@@ -99,10 +99,11 @@ class InventoryTransaction(Base):
         ),
         CheckConstraint("unit_cost >= 0", name="unit_cost_nonnegative"),
         CheckConstraint("total_cost >= 0", name="total_cost_nonnegative"),
+        CheckConstraint("cost_basis IN ('quantity', 'weight')", name="cost_basis_valid"),
         CheckConstraint(
             "transaction_type IN ('receipt', 'issue', 'transfer_out', 'transfer_in', "
             "'adjustment_in', 'adjustment_out', 'return_in', 'return_out', "
-            "'production_issue', 'production_output')",
+            "'production_issue', 'production_output', 'reversal_in', 'reversal_out')",
             name="transaction_type_valid",
         ),
         Index(
@@ -112,6 +113,7 @@ class InventoryTransaction(Base):
             "posted_at",
         ),
         Index("ix_inventory_transactions_reference", "reference_type", "reference_id"),
+        Index("ux_inventory_transactions_reversal", "reversal_of_id", unique=True),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
@@ -130,6 +132,7 @@ class InventoryTransaction(Base):
     weight_delta_kg: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     unit_cost: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     total_cost: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
+    cost_basis: Mapped[str] = mapped_column(String(16), nullable=False)
     reference_type: Mapped[str] = mapped_column(String(60), nullable=False)
     reference_id: Mapped[str | None] = mapped_column(String(80))
     reference_line_id: Mapped[str | None] = mapped_column(String(80))

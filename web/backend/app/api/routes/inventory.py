@@ -1,4 +1,5 @@
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
@@ -17,6 +18,7 @@ from app.modules.inventory.schemas import (
     InventoryOptionsView,
     IssueRequest,
     ReceiptRequest,
+    ReversalRequest,
     TransactionView,
     TransferRequest,
     TransferView,
@@ -32,6 +34,7 @@ from app.modules.inventory.service import (
     post_issue,
     post_receipt,
     post_transfer,
+    reverse_transaction,
     transaction_view,
 )
 
@@ -191,6 +194,44 @@ def adjustment(
     try:
         item = post_adjustment(
             db,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            actor_user_id=principal.user.id,
+            client=client_context(request),
+        )
+        view = transaction_view(db, item)
+    except (
+        InventoryNotFound,
+        InsufficientStock,
+        InventoryConflict,
+        IntegrityError,
+        ValueError,
+    ) as exc:
+        db.rollback()
+        raise _translate_error(exc) from exc
+    db.commit()
+    return view
+
+
+@router.post(
+    "/transactions/{transaction_id}/reversal",
+    response_model=TransactionView,
+    status_code=status.HTTP_201_CREATED,
+)
+def reversal(
+    transaction_id: UUID,
+    payload: ReversalRequest,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DatabaseSession,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=12, max_length=120)],
+) -> TransactionView:
+    enforce_permission(request, db, principal, PermissionCode.INVENTORY_MANAGE)
+    enforce_csrf(request, db, principal)
+    try:
+        item = reverse_transaction(
+            db,
+            transaction_id=transaction_id,
             payload=payload,
             idempotency_key=idempotency_key,
             actor_user_id=principal.user.id,

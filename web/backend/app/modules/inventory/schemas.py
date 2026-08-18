@@ -79,6 +79,10 @@ class AdjustmentRequest(BaseModel):
         return self
 
 
+class ReversalRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+
 class TransactionView(InventoryView):
     id: UUID
     idempotency_key: str
@@ -90,8 +94,10 @@ class TransactionView(InventoryView):
     weight_delta_kg: Decimal
     unit_cost: Decimal
     total_cost: Decimal
+    cost_basis: CostBasis
     reference_type: str
     reference_id: str | None
+    reversal_of_id: UUID | None
     product_code: str
     product_name_ar: str
     warehouse_name_ar: str
