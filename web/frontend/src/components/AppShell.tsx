@@ -32,10 +32,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           {user?.permissions.includes("users.read") ? <NavLink className={({ isActive }) => `nav-item ${isActive ? "nav-item--active" : ""}`} to="/identity"><UsersRound size={19} /><span>المستخدمون والصلاحيات</span></NavLink> : null}
         </nav>
         <div className="sidebar__foot">
-          {user?.permissions.includes("settings.read") ? <button className="nav-item" disabled>
+          {user?.permissions.includes("settings.read") ? <NavLink className={({ isActive }) => `nav-item ${isActive ? "nav-item--active" : ""}`} to="/settings">
               <Settings size={19} strokeWidth={1.8} />
               <span>الإعدادات</span>
-            </button> : null}
+            </NavLink> : null}
           <button className="nav-item" onClick={() => void logout()}>
             <LogOut size={19} strokeWidth={1.8} />
             <span>تسجيل الخروج</span>

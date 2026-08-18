@@ -22,12 +22,23 @@ def test_master_data_metadata_contains_normalized_reference_tables() -> None:
     } <= tables
 
 
-def test_product_and_partner_codes_are_unique_after_normalization() -> None:
+def test_all_reference_codes_are_unique_after_normalization() -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
 
-    product_constraints = inspect(engine).get_unique_constraints("products")
-    partner_constraints = inspect(engine).get_unique_constraints("partners")
+    inspector = inspect(engine)
+    for table_name in (
+        "products",
+        "partners",
+        "units_of_measure",
+        "product_categories",
+        "warehouses",
+    ):
+        constraints = inspector.get_unique_constraints(table_name)
+        assert any(item["column_names"] == ["normalized_code"] for item in constraints)
 
-    assert any(item["column_names"] == ["normalized_code"] for item in product_constraints)
-    assert any(item["column_names"] == ["normalized_code"] for item in partner_constraints)
+    warehouse_indexes = inspector.get_indexes("warehouses")
+    assert any(
+        item["name"] == "uq_warehouses_single_default" and item["unique"]
+        for item in warehouse_indexes
+    )

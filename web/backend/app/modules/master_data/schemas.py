@@ -24,6 +24,19 @@ class UnitView(MasterDataView):
     symbol: str
     decimal_places: int
     is_active: bool
+    version: int
+
+
+class CreateUnitRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=24)
+    name_ar: str = Field(min_length=2, max_length=120)
+    symbol: str = Field(min_length=1, max_length=24)
+    decimal_places: int = Field(default=3, ge=0, le=6)
+
+
+class UpdateUnitRequest(CreateUnitRequest):
+    version: int = Field(ge=1)
+    is_active: bool = True
 
 
 class CategoryView(MasterDataView):
@@ -32,6 +45,18 @@ class CategoryView(MasterDataView):
     name_ar: str
     parent_id: UUID | None
     is_active: bool
+    version: int
+
+
+class CreateCategoryRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=40)
+    name_ar: str = Field(min_length=2, max_length=160)
+    parent_id: UUID | None = None
+
+
+class UpdateCategoryRequest(CreateCategoryRequest):
+    version: int = Field(ge=1)
+    is_active: bool = True
 
 
 class ProductView(MasterDataView):
@@ -127,6 +152,17 @@ class WarehouseView(MasterDataView):
     version: int
 
 
+class CreateWarehouseRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=40)
+    name_ar: str = Field(min_length=2, max_length=160)
+    is_default: bool = False
+
+
+class UpdateWarehouseRequest(CreateWarehouseRequest):
+    version: int = Field(ge=1)
+    is_active: bool = True
+
+
 class CompanySettingsView(MasterDataView):
     company_name_ar: str
     phone: str
@@ -137,9 +173,11 @@ class CompanySettingsView(MasterDataView):
     tax_enabled: bool
     default_tax_rate: Decimal
     default_warehouse_id: UUID | None
+    version: int
 
 
 class UpdateCompanySettingsRequest(BaseModel):
+    version: int = Field(ge=1)
     company_name_ar: str = Field(min_length=2, max_length=200)
     phone: str = Field(default="", max_length=40)
     address: str = Field(default="", max_length=2000)

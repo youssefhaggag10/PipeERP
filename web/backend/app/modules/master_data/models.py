@@ -12,6 +12,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -32,6 +33,7 @@ class UnitOfMeasure(TimestampMixin, Base):
     symbol: Mapped[str] = mapped_column(String(24), nullable=False)
     decimal_places: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 
 class ProductCategory(TimestampMixin, Base):
@@ -47,6 +49,7 @@ class ProductCategory(TimestampMixin, Base):
         ForeignKey("product_categories.id", ondelete="RESTRICT"),
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 
 class Product(TimestampMixin, Base):
@@ -114,7 +117,16 @@ class Partner(TimestampMixin, Base):
 
 class Warehouse(TimestampMixin, Base):
     __tablename__ = "warehouses"
-    __table_args__ = (UniqueConstraint("normalized_code"),)
+    __table_args__ = (
+        UniqueConstraint("normalized_code"),
+        Index(
+            "uq_warehouses_single_default",
+            "is_default",
+            unique=True,
+            postgresql_where=text("is_default"),
+            sqlite_where=text("is_default = 1"),
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     code: Mapped[str] = mapped_column(String(40), nullable=False)
@@ -146,6 +158,7 @@ class CompanySettings(TimestampMixin, Base):
         Uuid,
         ForeignKey("warehouses.id", ondelete="RESTRICT"),
     )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 
 class DocumentSequence(TimestampMixin, Base):

@@ -3,7 +3,7 @@ from collections.abc import Generator
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -13,6 +13,7 @@ os.environ.setdefault("APP_ENV", "test")
 from app.infrastructure.database.base import Base  # noqa: E402
 from app.infrastructure.database.session import get_database_session  # noqa: E402
 from app.main import app  # noqa: E402
+from app.modules.identity.models import AuditLog  # noqa: E402
 from app.modules.identity.service import ClientContext, create_initial_admin  # noqa: E402
 from app.modules.master_data.models import (  # noqa: E402
     CompanySettings,
@@ -189,4 +190,179 @@ def test_partner_can_be_customer_and_supplier_and_writes_require_manage_permissi
                 headers=_csrf(read_only),
             )
             assert denied.status_code == 403
+            denied_unit = read_only.post(
+                "/api/v1/master-data/units",
+                json={
+                    "code": "BOX",
+                    "name_ar": "صندوق",
+                    "symbol": "صندوق",
+                    "decimal_places": 0,
+                },
+                headers=_csrf(read_only),
+            )
+            assert denied_unit.status_code == 403
+            denied_warehouse = read_only.post(
+                "/api/v1/master-data/warehouses",
+                json={"code": "DENIED", "name_ar": "غير مسموح", "is_default": False},
+                headers=_csrf(read_only),
+            )
+            assert denied_warehouse.status_code == 403
+            current_settings = read_only.get("/api/v1/master-data/settings")
+            assert current_settings.status_code == 200
+            denied_settings = read_only.put(
+                "/api/v1/master-data/settings",
+                json=current_settings.json(),
+                headers=_csrf(read_only),
+            )
+            assert denied_settings.status_code == 403
+    app.dependency_overrides.clear()
+
+
+def test_reference_data_crud_rejects_duplicates_stale_updates_and_category_cycles() -> None:
+    factory = _database()
+    _seed(factory)
+    with _client(factory) as client:
+        _login(client)
+        unit = client.post(
+            "/api/v1/master-data/units",
+            json={
+                "code": "M",
+                "name_ar": "متر",
+                "symbol": "م",
+                "decimal_places": 2,
+            },
+            headers=_csrf(client),
+        )
+        assert unit.status_code == 201, unit.text
+        duplicate = client.post(
+            "/api/v1/master-data/units",
+            json={
+                "code": "m",
+                "name_ar": "متر مكرر",
+                "symbol": "م",
+                "decimal_places": 2,
+            },
+            headers=_csrf(client),
+        )
+        assert duplicate.status_code == 409
+
+        unit_id = unit.json()["id"]
+        updated_unit = client.put(
+            f"/api/v1/master-data/units/{unit_id}",
+            json={
+                "version": 1,
+                "code": "M",
+                "name_ar": "متر طولي",
+                "symbol": "م",
+                "decimal_places": 3,
+                "is_active": True,
+            },
+            headers=_csrf(client),
+        )
+        assert updated_unit.status_code == 200, updated_unit.text
+        stale_unit = client.put(
+            f"/api/v1/master-data/units/{unit_id}",
+            json={
+                "version": 1,
+                "code": "M",
+                "name_ar": "تعديل قديم",
+                "symbol": "م",
+                "decimal_places": 3,
+                "is_active": True,
+            },
+            headers=_csrf(client),
+        )
+        assert stale_unit.status_code == 409
+
+        parent = client.post(
+            "/api/v1/master-data/categories",
+            json={"code": "RAW", "name_ar": "خامات"},
+            headers=_csrf(client),
+        )
+        assert parent.status_code == 201, parent.text
+        child = client.post(
+            "/api/v1/master-data/categories",
+            json={
+                "code": "POLYMER",
+                "name_ar": "بوليمرات",
+                "parent_id": parent.json()["id"],
+            },
+            headers=_csrf(client),
+        )
+        assert child.status_code == 201, child.text
+        cycle = client.put(
+            f"/api/v1/master-data/categories/{parent.json()['id']}",
+            json={
+                "version": 1,
+                "code": "RAW",
+                "name_ar": "خامات",
+                "parent_id": child.json()["id"],
+                "is_active": True,
+            },
+            headers=_csrf(client),
+        )
+        assert cycle.status_code == 409
+
+    with factory() as db:
+        events = set(db.scalars(select(AuditLog.event_type)))
+        assert "master_data.unit.create" in events
+        assert "master_data.unit.update" in events
+        assert "master_data.category.create" in events
+    app.dependency_overrides.clear()
+
+
+def test_warehouse_default_and_company_settings_are_concurrency_safe() -> None:
+    factory = _database()
+    _seed(factory)
+    with _client(factory) as client:
+        _login(client)
+        created = client.post(
+            "/api/v1/master-data/warehouses",
+            json={"code": "SECOND", "name_ar": "المخزن الثاني", "is_default": True},
+            headers=_csrf(client),
+        )
+        assert created.status_code == 201, created.text
+        assert created.json()["is_default"] is True
+
+        warehouses = client.get("/api/v1/master-data/warehouses?include_inactive=true")
+        assert warehouses.status_code == 200
+        assert sum(item["is_default"] for item in warehouses.json()) == 1
+
+        settings = client.get("/api/v1/master-data/settings")
+        assert settings.status_code == 200
+        assert settings.json()["default_warehouse_id"] == created.json()["id"]
+        current_version = settings.json()["version"]
+
+        payload = {
+            **settings.json(),
+            "company_name_ar": "شركة بايب للاختبار",
+        }
+        payload.pop("id", None)
+        updated = client.put(
+            "/api/v1/master-data/settings",
+            json=payload,
+            headers=_csrf(client),
+        )
+        assert updated.status_code == 200, updated.text
+        assert updated.json()["version"] == current_version + 1
+
+        stale = client.put(
+            "/api/v1/master-data/settings",
+            json={**payload, "company_name_ar": "تعديل قديم"},
+            headers=_csrf(client),
+        )
+        assert stale.status_code == 409
+
+        deactivate_default = client.put(
+            f"/api/v1/master-data/warehouses/{created.json()['id']}",
+            json={
+                "version": created.json()["version"],
+                "code": "SECOND",
+                "name_ar": "المخزن الثاني",
+                "is_default": False,
+                "is_active": False,
+            },
+            headers=_csrf(client),
+        )
+        assert deactivate_default.status_code == 409
     app.dependency_overrides.clear()

@@ -16,11 +16,17 @@ from app.modules.master_data.models import (
     Warehouse,
 )
 from app.modules.master_data.schemas import (
+    CreateCategoryRequest,
     CreatePartnerRequest,
     CreateProductRequest,
+    CreateUnitRequest,
+    CreateWarehouseRequest,
+    UpdateCategoryRequest,
     UpdateCompanySettingsRequest,
     UpdatePartnerRequest,
     UpdateProductRequest,
+    UpdateUnitRequest,
+    UpdateWarehouseRequest,
 )
 
 CODE_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9._/-]{0,79}$")
@@ -47,7 +53,11 @@ def normalize_code(value: str) -> str:
 
 def _ensure_code_available(
     db: Session,
-    model: type[Product] | type[Partner],
+    model: type[UnitOfMeasure]
+    | type[ProductCategory]
+    | type[Product]
+    | type[Partner]
+    | type[Warehouse],
     normalized_code: str,
     *,
     excluding_id: UUID | None = None,
@@ -59,24 +69,186 @@ def _ensure_code_available(
         raise MasterDataConflict("الكود مستخدم بالفعل")
 
 
-def list_units(db: Session) -> list[UnitOfMeasure]:
-    return list(
-        db.scalars(
-            select(UnitOfMeasure)
-            .where(UnitOfMeasure.is_active.is_(True))
-            .order_by(UnitOfMeasure.name_ar)
-        )
-    )
+def list_units(db: Session, *, include_inactive: bool = False) -> list[UnitOfMeasure]:
+    statement = select(UnitOfMeasure).order_by(UnitOfMeasure.name_ar)
+    if not include_inactive:
+        statement = statement.where(UnitOfMeasure.is_active.is_(True))
+    return list(db.scalars(statement))
 
 
-def list_categories(db: Session) -> list[ProductCategory]:
-    return list(
-        db.scalars(
-            select(ProductCategory)
-            .where(ProductCategory.is_active.is_(True))
-            .order_by(ProductCategory.name_ar)
-        )
+def create_unit(
+    db: Session,
+    *,
+    payload: CreateUnitRequest,
+    actor: Principal,
+    client: ClientContext,
+) -> UnitOfMeasure:
+    normalized_code = normalize_code(payload.code)
+    _ensure_code_available(db, UnitOfMeasure, normalized_code)
+    unit = UnitOfMeasure(
+        code=payload.code.strip(),
+        normalized_code=normalized_code,
+        name_ar=payload.name_ar.strip(),
+        symbol=payload.symbol.strip(),
+        decimal_places=payload.decimal_places,
+        is_active=True,
+        version=1,
     )
+    db.add(unit)
+    db.flush()
+    add_audit(
+        db,
+        actor_user_id=actor.user.id,
+        event_type="master_data.unit.create",
+        entity_type="unit_of_measure",
+        entity_id=str(unit.id),
+        outcome="success",
+        client=client,
+        after_state={"code": unit.code, "name_ar": unit.name_ar},
+    )
+    return unit
+
+
+def update_unit(
+    db: Session,
+    *,
+    unit_id: UUID,
+    payload: UpdateUnitRequest,
+    actor: Principal,
+    client: ClientContext,
+) -> UnitOfMeasure:
+    unit = db.get(UnitOfMeasure, unit_id)
+    if unit is None:
+        raise MasterDataNotFound("وحدة القياس غير موجودة")
+    if unit.version != payload.version:
+        raise MasterDataConflict("عدّل مستخدم آخر وحدة القياس؛ حدّث الصفحة ثم أعد المحاولة")
+    normalized_code = normalize_code(payload.code)
+    _ensure_code_available(db, UnitOfMeasure, normalized_code, excluding_id=unit.id)
+    before = {"code": unit.code, "name_ar": unit.name_ar, "version": unit.version}
+    unit.code = payload.code.strip()
+    unit.normalized_code = normalized_code
+    unit.name_ar = payload.name_ar.strip()
+    unit.symbol = payload.symbol.strip()
+    unit.decimal_places = payload.decimal_places
+    unit.is_active = payload.is_active
+    unit.version += 1
+    db.flush()
+    add_audit(
+        db,
+        actor_user_id=actor.user.id,
+        event_type="master_data.unit.update",
+        entity_type="unit_of_measure",
+        entity_id=str(unit.id),
+        outcome="success",
+        client=client,
+        before_state=before,
+        after_state={"code": unit.code, "name_ar": unit.name_ar, "version": unit.version},
+    )
+    return unit
+
+
+def list_categories(db: Session, *, include_inactive: bool = False) -> list[ProductCategory]:
+    statement = select(ProductCategory).order_by(ProductCategory.name_ar)
+    if not include_inactive:
+        statement = statement.where(ProductCategory.is_active.is_(True))
+    return list(db.scalars(statement))
+
+
+def _validate_category_parent(
+    db: Session,
+    *,
+    category_id: UUID | None,
+    parent_id: UUID | None,
+) -> None:
+    if parent_id is None:
+        return
+    if category_id == parent_id:
+        raise MasterDataConflict("لا يمكن أن يكون التصنيف أبًا لنفسه")
+    parent = db.get(ProductCategory, parent_id)
+    if parent is None or not parent.is_active:
+        raise MasterDataNotFound("التصنيف الأب غير موجود أو غير نشط")
+    visited: set[UUID] = set()
+    current: ProductCategory | None = parent
+    while current is not None and current.id not in visited:
+        if current.id == category_id:
+            raise MasterDataConflict("اختيار التصنيف الأب سيُنشئ دورة غير صالحة")
+        visited.add(current.id)
+        current = db.get(ProductCategory, current.parent_id) if current.parent_id else None
+
+
+def create_category(
+    db: Session,
+    *,
+    payload: CreateCategoryRequest,
+    actor: Principal,
+    client: ClientContext,
+) -> ProductCategory:
+    normalized_code = normalize_code(payload.code)
+    _ensure_code_available(db, ProductCategory, normalized_code)
+    _validate_category_parent(db, category_id=None, parent_id=payload.parent_id)
+    category = ProductCategory(
+        code=payload.code.strip(),
+        normalized_code=normalized_code,
+        name_ar=payload.name_ar.strip(),
+        parent_id=payload.parent_id,
+        is_active=True,
+        version=1,
+    )
+    db.add(category)
+    db.flush()
+    add_audit(
+        db,
+        actor_user_id=actor.user.id,
+        event_type="master_data.category.create",
+        entity_type="product_category",
+        entity_id=str(category.id),
+        outcome="success",
+        client=client,
+        after_state={"code": category.code, "name_ar": category.name_ar},
+    )
+    return category
+
+
+def update_category(
+    db: Session,
+    *,
+    category_id: UUID,
+    payload: UpdateCategoryRequest,
+    actor: Principal,
+    client: ClientContext,
+) -> ProductCategory:
+    category = db.get(ProductCategory, category_id)
+    if category is None:
+        raise MasterDataNotFound("التصنيف غير موجود")
+    if category.version != payload.version:
+        raise MasterDataConflict("عدّل مستخدم آخر التصنيف؛ حدّث الصفحة ثم أعد المحاولة")
+    normalized_code = normalize_code(payload.code)
+    _ensure_code_available(db, ProductCategory, normalized_code, excluding_id=category.id)
+    _validate_category_parent(db, category_id=category.id, parent_id=payload.parent_id)
+    before = {"code": category.code, "name_ar": category.name_ar, "version": category.version}
+    category.code = payload.code.strip()
+    category.normalized_code = normalized_code
+    category.name_ar = payload.name_ar.strip()
+    category.parent_id = payload.parent_id
+    category.is_active = payload.is_active
+    category.version += 1
+    db.flush()
+    add_audit(
+        db,
+        actor_user_id=actor.user.id,
+        event_type="master_data.category.update",
+        entity_type="product_category",
+        entity_id=str(category.id),
+        outcome="success",
+        client=client,
+        before_state=before,
+        after_state={
+            "code": category.code,
+            "name_ar": category.name_ar,
+            "version": category.version,
+        },
+    )
+    return category
 
 
 def list_products(db: Session, *, include_inactive: bool = False) -> list[Product]:
@@ -278,10 +450,114 @@ def update_partner(
     return partner
 
 
-def list_warehouses(db: Session) -> list[Warehouse]:
-    return list(
-        db.scalars(select(Warehouse).order_by(Warehouse.is_default.desc(), Warehouse.name_ar))
+def list_warehouses(db: Session, *, include_inactive: bool = False) -> list[Warehouse]:
+    statement = select(Warehouse).order_by(Warehouse.is_default.desc(), Warehouse.name_ar)
+    if not include_inactive:
+        statement = statement.where(Warehouse.is_active.is_(True))
+    return list(db.scalars(statement))
+
+
+def _make_default_warehouse(db: Session, warehouse: Warehouse) -> None:
+    for current in db.scalars(
+        select(Warehouse).where(Warehouse.is_default.is_(True), Warehouse.id != warehouse.id)
+    ):
+        current.is_default = False
+        current.version += 1
+    db.flush()
+    warehouse.is_default = True
+    settings = db.get(CompanySettings, 1)
+    if settings is not None:
+        settings.default_warehouse_id = warehouse.id
+        settings.version += 1
+
+
+def create_warehouse(
+    db: Session,
+    *,
+    payload: CreateWarehouseRequest,
+    actor: Principal,
+    client: ClientContext,
+) -> Warehouse:
+    normalized_code = normalize_code(payload.code)
+    _ensure_code_available(db, Warehouse, normalized_code)
+    warehouse = Warehouse(
+        code=payload.code.strip(),
+        normalized_code=normalized_code,
+        name_ar=payload.name_ar.strip(),
+        is_default=False,
+        is_active=True,
+        version=1,
     )
+    db.add(warehouse)
+    db.flush()
+    if payload.is_default:
+        _make_default_warehouse(db, warehouse)
+    db.flush()
+    add_audit(
+        db,
+        actor_user_id=actor.user.id,
+        event_type="master_data.warehouse.create",
+        entity_type="warehouse",
+        entity_id=str(warehouse.id),
+        outcome="success",
+        client=client,
+        after_state={
+            "code": warehouse.code,
+            "name_ar": warehouse.name_ar,
+            "is_default": warehouse.is_default,
+        },
+    )
+    return warehouse
+
+
+def update_warehouse(
+    db: Session,
+    *,
+    warehouse_id: UUID,
+    payload: UpdateWarehouseRequest,
+    actor: Principal,
+    client: ClientContext,
+) -> Warehouse:
+    warehouse = db.get(Warehouse, warehouse_id)
+    if warehouse is None:
+        raise MasterDataNotFound("المخزن غير موجود")
+    if warehouse.version != payload.version:
+        raise MasterDataConflict("عدّل مستخدم آخر المخزن؛ حدّث الصفحة ثم أعد المحاولة")
+    if warehouse.is_default and (not payload.is_default or not payload.is_active):
+        raise MasterDataConflict("عيّن مخزنًا افتراضيًا آخر قبل تعطيل المخزن الافتراضي")
+    normalized_code = normalize_code(payload.code)
+    _ensure_code_available(db, Warehouse, normalized_code, excluding_id=warehouse.id)
+    before = {
+        "code": warehouse.code,
+        "name_ar": warehouse.name_ar,
+        "is_default": warehouse.is_default,
+        "version": warehouse.version,
+    }
+    warehouse.code = payload.code.strip()
+    warehouse.normalized_code = normalized_code
+    warehouse.name_ar = payload.name_ar.strip()
+    warehouse.is_active = payload.is_active
+    warehouse.version += 1
+    if payload.is_default:
+        _make_default_warehouse(db, warehouse)
+    db.flush()
+    add_audit(
+        db,
+        actor_user_id=actor.user.id,
+        event_type="master_data.warehouse.update",
+        entity_type="warehouse",
+        entity_id=str(warehouse.id),
+        outcome="success",
+        client=client,
+        before_state=before,
+        after_state={
+            "code": warehouse.code,
+            "name_ar": warehouse.name_ar,
+            "is_default": warehouse.is_default,
+            "version": warehouse.version,
+        },
+    )
+    return warehouse
 
 
 def get_company_settings(db: Session) -> CompanySettings:
@@ -299,6 +575,8 @@ def update_company_settings(
     client: ClientContext,
 ) -> CompanySettings:
     settings = get_company_settings(db)
+    if settings.version != payload.version:
+        raise MasterDataConflict("عدّل مستخدم آخر إعدادات الشركة؛ حدّث الصفحة ثم أعد المحاولة")
     if payload.default_warehouse_id is not None:
         warehouse = db.get(Warehouse, payload.default_warehouse_id)
         if warehouse is None or not warehouse.is_active:
@@ -307,8 +585,9 @@ def update_company_settings(
         "company_name_ar": settings.company_name_ar,
         "currency_code": settings.currency_code,
     }
-    for field, value in payload.model_dump().items():
+    for field, value in payload.model_dump(exclude={"version"}).items():
         setattr(settings, field, value.strip() if isinstance(value, str) else value)
+    settings.version += 1
     db.flush()
     add_audit(
         db,

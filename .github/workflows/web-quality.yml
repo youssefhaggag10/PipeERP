@@ -47,7 +47,7 @@ jobs:
       - run: ruff check app tests
       - run: mypy app
       - run: alembic upgrade head
-      - run: pytest --cov=app.domain --cov=app.modules.identity --cov-report=term-missing --cov-fail-under=80
+      - run: pytest --cov=app.domain --cov=app.modules.identity --cov=app.modules.master_data --cov=app.api.routes.master_data --cov-report=term-missing --cov-fail-under=80
       - run: pip-audit
 
   frontend:
