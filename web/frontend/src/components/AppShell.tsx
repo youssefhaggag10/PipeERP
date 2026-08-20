@@ -1,11 +1,13 @@
-import type { ReactNode } from "react";
-import { NavLink } from "react-router-dom";
+import { useEffect, useState, type ReactNode } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   ChevronLeft,
+  Menu,
   Search,
   Settings,
   UsersRound,
   LogOut,
+  X,
 } from "lucide-react";
 
 import { useAuth } from "../auth/AuthContext";
@@ -14,12 +16,33 @@ import { visibleNavigationItems } from "./navigation";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
+  const location = useLocation();
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const visibleNavigation = visibleNavigationItems(user?.permissions ?? []);
+  const today = new Intl.DateTimeFormat("ar-EG", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
+
+  useEffect(() => {
+    setMobileNavigationOpen(false);
+  }, [location.pathname]);
+
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <aside className={`sidebar ${mobileNavigationOpen ? "sidebar--open" : ""}`}>
         <div className="sidebar__head">
           <BrandMark inverse />
+          <button
+            className="sidebar__close"
+            type="button"
+            aria-label="إغلاق القائمة"
+            onClick={() => setMobileNavigationOpen(false)}
+          >
+            <X size={20} />
+          </button>
         </div>
         <nav className="sidebar__nav" aria-label="التنقل الرئيسي">
           <p className="sidebar__eyebrow">مساحة العمل</p>
@@ -50,12 +73,31 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </aside>
+      {mobileNavigationOpen ? (
+        <button
+          className="sidebar-backdrop"
+          type="button"
+          aria-label="إغلاق القائمة الجانبية"
+          onClick={() => setMobileNavigationOpen(false)}
+        />
+      ) : null}
 
       <main className="main-panel">
         <header className="topbar">
-          <div>
-            <p className="topbar__date">الثلاثاء، 18 أغسطس 2026</p>
+          <div className="topbar__welcome">
+            <button
+              className="mobile-nav-button"
+              type="button"
+              aria-label="فتح القائمة الرئيسية"
+              aria-expanded={mobileNavigationOpen}
+              onClick={() => setMobileNavigationOpen(true)}
+            >
+              <Menu size={21} />
+            </button>
+            <div>
+            <p className="topbar__date">{today}</p>
             <h1>صباح الخير</h1>
+            </div>
           </div>
           <div className="topbar__actions">
             <label className="global-search">

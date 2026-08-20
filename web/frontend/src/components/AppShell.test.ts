@@ -21,4 +21,12 @@ describe("permission-aware navigation", () => {
     expect(items.map((item) => item.label)).toEqual(["لوحة التشغيل", "المشتريات"]);
     expect(items[1]?.to).toBe("/purchases");
   });
+
+  it("keeps piece and weight sales navigation permissions independent", () => {
+    const piece = visibleNavigationItems(["sales.read"]);
+    const weight = visibleNavigationItems(["weight_sales.read"]);
+
+    expect(piece.map((item) => item.to)).toEqual(["/", "/sales"]);
+    expect(weight.map((item) => item.to)).toEqual(["/", "/weight-sales"]);
+  });
 });

@@ -102,6 +102,20 @@ def _locked_balance(db: Session, product_id: UUID, warehouse_id: UUID) -> Invent
     return balance
 
 
+def _unit_cost_for_basis(layer: InventoryLayer, requested_basis: str) -> Decimal:
+    if layer.cost_basis == requested_basis:
+        return layer.unit_cost
+    source_remaining = (
+        layer.weight_remaining_kg if layer.cost_basis == "weight" else layer.quantity_remaining
+    )
+    requested_remaining = (
+        layer.quantity_remaining if requested_basis == "quantity" else layer.weight_remaining_kg
+    )
+    if source_remaining <= 0 or requested_remaining <= 0:
+        return Decimal("0")
+    return quantity(layer.unit_cost * source_remaining / requested_remaining)
+
+
 def _get_or_create_lot(
     db: Session,
     *,
@@ -282,7 +296,6 @@ def post_issue(
             .where(
                 InventoryLayer.product_id == payload.product_id,
                 InventoryLayer.warehouse_id == payload.warehouse_id,
-                InventoryLayer.cost_basis == payload.cost_basis,
             )
             .order_by(InventoryLayer.received_at, InventoryLayer.id)
             .with_for_update()
@@ -297,7 +310,7 @@ def post_issue(
                     sequence=index,
                     quantity_remaining=layer.quantity_remaining,
                     weight_remaining_kg=layer.weight_remaining_kg,
-                    unit_cost=layer.unit_cost,
+                    unit_cost=_unit_cost_for_basis(layer, payload.cost_basis),
                 )
                 for index, layer in enumerate(layers)
             ],
@@ -365,6 +378,164 @@ def post_issue(
             "warehouse_id": str(payload.warehouse_id),
             "quantity": str(issued_quantity),
             "weight_kg": str(issued_weight),
+            "total_cost": str(total_cost),
+        },
+    )
+    db.flush()
+    return transaction
+
+
+def post_exact_paired_issue(
+    db: Session,
+    *,
+    product_id: UUID,
+    warehouse_id: UUID,
+    requested_quantity: Decimal,
+    requested_weight_kg: Decimal,
+    idempotency_key: str,
+    reference_type: str,
+    reference_id: str,
+    reference_line_id: str,
+    notes: str,
+    actor_user_id: UUID,
+    client: ClientContext,
+) -> InventoryTransaction:
+    """Issue an exact piece count and exact commercial weight from FIFO layers.
+
+    Finished pipe is counted in pieces but sold using the actual scale weight.
+    The normal one-dimensional FIFO helper deliberately derives the paired
+    dimension proportionally; weight-card delivery instead has two authoritative
+    dimensions, so both are locked, validated and depleted together here.
+    """
+    requested_quantity = quantity(requested_quantity)
+    requested_weight_kg = quantity(requested_weight_kg)
+    if requested_quantity <= 0 or requested_weight_kg <= 0:
+        raise ValueError("عدد المواسير والوزن الفعلي يجب أن يكونا أكبر من صفر")
+    existing = _existing_transaction(db, idempotency_key)
+    if existing is not None:
+        return _validate_idempotent_request(
+            existing,
+            transaction_type="issue",
+            product_id=product_id,
+            warehouse_id=warehouse_id,
+        )
+    _lock_context(db, product_id, warehouse_id)
+    balance = _locked_balance(db, product_id, warehouse_id)
+    layers = list(
+        db.scalars(
+            select(InventoryLayer)
+            .where(
+                InventoryLayer.product_id == product_id,
+                InventoryLayer.warehouse_id == warehouse_id,
+                InventoryLayer.quantity_remaining > 0,
+                InventoryLayer.weight_remaining_kg > 0,
+            )
+            .order_by(InventoryLayer.received_at, InventoryLayer.id)
+            .with_for_update()
+        )
+    )
+    available_quantity = sum((layer.quantity_remaining for layer in layers), Decimal("0"))
+    available_weight = sum((layer.weight_remaining_kg for layer in layers), Decimal("0"))
+    if available_quantity < requested_quantity:
+        raise InsufficientStock(
+            f"عدد المواسير غير كافٍ. المتاح {available_quantity} والمطلوب {requested_quantity}"
+        )
+    if available_weight < requested_weight_kg:
+        raise InsufficientStock(
+            f"الوزن المخزني غير كافٍ. المتاح {available_weight} والمطلوب {requested_weight_kg}"
+        )
+
+    average_sale_weight = requested_weight_kg / requested_quantity
+    remaining_quantity = requested_quantity
+    remaining_weight = requested_weight_kg
+    prepared: list[tuple[InventoryLayer, Decimal, Decimal, Decimal]] = []
+    total_cost = Decimal("0")
+    for layer in layers:
+        if remaining_quantity == 0:
+            break
+        max_quantity_by_weight = quantity(layer.weight_remaining_kg / average_sale_weight)
+        take_quantity = min(
+            remaining_quantity,
+            layer.quantity_remaining,
+            max_quantity_by_weight,
+        )
+        if take_quantity <= 0:
+            continue
+        take_weight = (
+            remaining_weight
+            if take_quantity == remaining_quantity
+            else quantity(take_quantity * average_sale_weight)
+        )
+        if take_weight > layer.weight_remaining_kg:
+            take_weight = layer.weight_remaining_kg
+            take_quantity = quantity(take_weight / average_sale_weight)
+        allocation_cost = quantity(
+            take_weight * layer.unit_cost
+            if layer.cost_basis == "weight"
+            else take_quantity * layer.unit_cost
+        )
+        prepared.append((layer, take_quantity, take_weight, allocation_cost))
+        total_cost += allocation_cost
+        remaining_quantity = quantity(remaining_quantity - take_quantity)
+        remaining_weight = quantity(remaining_weight - take_weight)
+    if remaining_quantity != 0 or remaining_weight != 0:
+        raise InsufficientStock(
+            "الرصيد الإجمالي موجود لكن نسب العدد والوزن داخل طبقات FIFO لا تكفي كارتة الوزن"
+        )
+
+    average_cost = quantity(total_cost / requested_weight_kg)
+    transaction = InventoryTransaction(
+        idempotency_key=idempotency_key,
+        transaction_type="issue",
+        product_id=product_id,
+        warehouse_id=warehouse_id,
+        lot_id=None,
+        quantity_delta=-requested_quantity,
+        weight_delta_kg=-requested_weight_kg,
+        unit_cost=average_cost,
+        total_cost=quantity(total_cost),
+        cost_basis="weight",
+        reference_type=reference_type,
+        reference_id=reference_id,
+        reference_line_id=reference_line_id,
+        reversal_of_id=None,
+        notes=notes.strip(),
+        posted_by_id=actor_user_id,
+    )
+    db.add(transaction)
+    db.flush()
+    for layer, take_quantity, take_weight, allocation_cost in prepared:
+        layer.quantity_remaining = quantity(layer.quantity_remaining - take_quantity)
+        layer.weight_remaining_kg = quantity(layer.weight_remaining_kg - take_weight)
+        layer.version += 1
+        allocation_unit_cost = quantity(allocation_cost / take_weight)
+        db.add(
+            InventoryAllocation(
+                outbound_transaction_id=transaction.id,
+                source_layer_id=layer.id,
+                quantity=take_quantity,
+                weight_kg=take_weight,
+                unit_cost=allocation_unit_cost,
+                total_cost=allocation_cost,
+            )
+        )
+    balance.quantity_on_hand = quantity(balance.quantity_on_hand - requested_quantity)
+    balance.weight_on_hand_kg = quantity(balance.weight_on_hand_kg - requested_weight_kg)
+    if balance.quantity_on_hand < 0 or balance.weight_on_hand_kg < 0:
+        raise InsufficientStock("لا يمكن أن ينتج عن تسليم كارتة الوزن رصيد سالب")
+    balance.version += 1
+    add_audit(
+        db,
+        actor_user_id=actor_user_id,
+        event_type="inventory.weight_sale.issue",
+        entity_type="inventory_transaction",
+        entity_id=str(transaction.id),
+        outcome="success",
+        client=client,
+        after_state={
+            "product_id": str(product_id),
+            "quantity": str(requested_quantity),
+            "weight_kg": str(requested_weight_kg),
             "total_cost": str(total_cost),
         },
     )

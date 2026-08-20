@@ -24,8 +24,8 @@ export type NavigationItem = {
 const navigation: NavigationItem[] = [
   { label: "لوحة التشغيل", icon: Gauge, to: "/" },
   { label: "المنتجات", icon: Package, to: "/products", permission: "products.read" },
-  { label: "المبيعات", icon: ShoppingCart, permission: "sales.read" },
-  { label: "البيع بالوزن", icon: Scale, permission: "weight_sales.read" },
+  { label: "المبيعات", icon: ShoppingCart, to: "/sales", permission: "sales.read" },
+  { label: "البيع بالوزن", icon: Scale, to: "/weight-sales", permission: "weight_sales.read" },
   { label: "المشتريات", icon: PackageCheck, to: "/purchases", permission: "purchases.read" },
   { label: "المخزون", icon: Boxes, to: "/inventory", permission: "inventory.read" },
   { label: "التصنيع", icon: Factory, permission: "manufacturing.read" },
