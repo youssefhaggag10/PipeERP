@@ -384,59 +384,34 @@ def upgrade() -> None:
         "ix_sales_quotation_lines_quotation", "sales_quotation_lines", ["quotation_id", "id"]
     )
 
-    sequence_table = sa.table(
-        "document_sequences",
-        sa.column("document_type", sa.String()),
-        sa.column("prefix", sa.String()),
-        sa.column("next_value", sa.Integer()),
-        sa.column("padding", sa.Integer()),
-        sa.column("version", sa.Integer()),
-    )
-    op.bulk_insert(
-        sequence_table,
-        [
-            {
-                "document_type": "sales_order",
-                "prefix": "SO",
-                "next_value": 1,
-                "padding": 6,
-                "version": 1,
-            },
-            {
-                "document_type": "sales_delivery",
-                "prefix": "SD",
-                "next_value": 1,
-                "padding": 6,
-                "version": 1,
-            },
-            {
-                "document_type": "sales_invoice",
-                "prefix": "SI",
-                "next_value": 1,
-                "padding": 6,
-                "version": 1,
-            },
-            {
-                "document_type": "weight_card",
-                "prefix": "WC",
-                "next_value": 1,
-                "padding": 6,
-                "version": 1,
-            },
-            {
-                "document_type": "sales_quotation",
-                "prefix": "QT",
-                "next_value": 1,
-                "padding": 6,
-                "version": 1,
-            },
-        ],
-    )
+    # Master data already seeds sales_order, sales_invoice and weight_card.  Use
+    # portable, idempotent inserts so this migration is also safe for databases
+    # created by an earlier release and keeps their current sequence counters.
+    for document_type, prefix in (
+        ("sales_order", "SO-"),
+        ("sales_delivery", "SD-"),
+        ("sales_invoice", "SI-"),
+        ("weight_card", "WC-"),
+        ("sales_quotation", "QT-"),
+    ):
+        op.execute(
+            sa.text(
+                "INSERT INTO document_sequences "
+                "(document_type, prefix, next_value, padding, version) "
+                "SELECT :document_type, :prefix, 1, 6, 1 "
+                "WHERE NOT EXISTS ("
+                "SELECT 1 FROM document_sequences WHERE document_type = :document_type"
+                ")"
+            ).bindparams(document_type=document_type, prefix=prefix)
+        )
 
 
 def downgrade() -> None:
+    # Do not remove the sales/order/invoice/weight sequences owned by the
+    # master-data migration when rolling only this migration back.
     op.execute(
-        "DELETE FROM document_sequences WHERE document_type IN ('sales_order','sales_delivery','sales_invoice','weight_card','sales_quotation')"
+        "DELETE FROM document_sequences "
+        "WHERE document_type IN ('sales_delivery','sales_quotation')"
     )
     for table in (
         "sales_quotation_lines",
