@@ -41,4 +41,11 @@ describe("permission-aware navigation", () => {
     expect(items.map((item) => item.label)).toEqual(["لوحة التشغيل", "التصنيع"]);
     expect(items[1]?.to).toBe("/manufacturing");
   });
+
+  it("links returns readers to the returns and refunds workspace", () => {
+    const items = visibleNavigationItems(["returns.read"]);
+
+    expect(items.map((item) => item.label)).toEqual(["لوحة التشغيل", "المرتجعات"]);
+    expect(items[1]?.to).toBe("/returns");
+  });
 });

@@ -746,6 +746,174 @@ def reverse_purchase_receipt_inventory(
     return reversal
 
 
+def reverse_sales_return_inventory(
+    db: Session,
+    *,
+    transaction_id: UUID,
+    sales_return_id: UUID,
+    sales_order_line_id: UUID,
+    idempotency_key: str,
+    actor_user_id: UUID,
+    client: ClientContext,
+    reason: str,
+) -> InventoryTransaction:
+    """Remove the untouched FIFO layer created by a sales return at its original cost."""
+    original = db.scalar(
+        select(InventoryTransaction)
+        .where(InventoryTransaction.id == transaction_id)
+        .with_for_update()
+    )
+    if original is None:
+        raise InventoryNotFound("حركة مخزون مرتجع المبيعات غير موجودة")
+    if (
+        original.transaction_type != "return_in"
+        or original.reference_type != "sales_return"
+        or original.reference_id != str(sales_return_id)
+        or original.reference_line_id != str(sales_order_line_id)
+    ):
+        raise InventoryConflict("حركة المخزون لا تطابق بند مرتجع المبيعات")
+    previous_reversal = db.scalar(
+        select(InventoryTransaction).where(InventoryTransaction.reversal_of_id == original.id)
+    )
+    if previous_reversal is not None:
+        if previous_reversal.idempotency_key == idempotency_key:
+            return previous_reversal
+        raise InventoryConflict("تم عكس حركة مرتجع المبيعات من قبل")
+    _lock_context(db, original.product_id, original.warehouse_id)
+    layer = db.scalar(
+        select(InventoryLayer)
+        .where(
+            InventoryLayer.product_id == original.product_id,
+            InventoryLayer.warehouse_id == original.warehouse_id,
+            InventoryLayer.source_type == "sales_return",
+            InventoryLayer.source_id == str(sales_return_id),
+            InventoryLayer.source_line_id == str(sales_order_line_id),
+        )
+        .with_for_update()
+    )
+    if layer is None:
+        raise InventoryConflict("تعذر العثور على طبقة FIFO الخاصة بمرتجع المبيعات")
+    if (
+        layer.quantity_remaining != layer.quantity_received
+        or layer.weight_remaining_kg != layer.weight_received_kg
+    ):
+        raise InventoryConflict("لا يمكن عكس المرتجع بعد صرف جزء من طبقته المخزنية")
+    balance = _locked_balance(db, original.product_id, original.warehouse_id)
+    if (
+        balance.quantity_on_hand < layer.quantity_received
+        or balance.weight_on_hand_kg < layer.weight_received_kg
+    ):
+        raise InsufficientStock("الرصيد الحالي لا يسمح بعكس مرتجع المبيعات")
+    reversal = InventoryTransaction(
+        idempotency_key=idempotency_key,
+        transaction_type="reversal_out",
+        product_id=original.product_id,
+        warehouse_id=original.warehouse_id,
+        lot_id=original.lot_id,
+        quantity_delta=-layer.quantity_received,
+        weight_delta_kg=-layer.weight_received_kg,
+        unit_cost=original.unit_cost,
+        total_cost=original.total_cost,
+        cost_basis=original.cost_basis,
+        reference_type="sales_return_reversal",
+        reference_id=str(sales_return_id),
+        reference_line_id=str(sales_order_line_id),
+        reversal_of_id=original.id,
+        notes=reason.strip(),
+        posted_by_id=actor_user_id,
+    )
+    db.add(reversal)
+    db.flush()
+    db.add(
+        InventoryAllocation(
+            outbound_transaction_id=reversal.id,
+            source_layer_id=layer.id,
+            quantity=layer.quantity_received,
+            weight_kg=layer.weight_received_kg,
+            unit_cost=original.unit_cost,
+            total_cost=original.total_cost,
+        )
+    )
+    layer.quantity_remaining = Decimal("0")
+    layer.weight_remaining_kg = Decimal("0")
+    layer.version += 1
+    balance.quantity_on_hand = quantity(balance.quantity_on_hand - layer.quantity_received)
+    balance.weight_on_hand_kg = quantity(balance.weight_on_hand_kg - layer.weight_received_kg)
+    balance.version += 1
+    add_audit(
+        db,
+        actor_user_id=actor_user_id,
+        event_type="inventory.sales_return.reversal",
+        entity_type="inventory_transaction",
+        entity_id=str(reversal.id),
+        outcome="success",
+        client=client,
+        after_state={
+            "original_transaction_id": str(original.id),
+            "sales_return_id": str(sales_return_id),
+            "quantity": str(layer.quantity_received),
+            "weight_kg": str(layer.weight_received_kg),
+        },
+    )
+    db.flush()
+    return reversal
+
+
+def reverse_purchase_return_inventory(
+    db: Session,
+    *,
+    transaction_id: UUID,
+    purchase_return_id: UUID,
+    purchase_order_line_id: UUID,
+    idempotency_key: str,
+    actor_user_id: UUID,
+    client: ClientContext,
+    reason: str,
+) -> InventoryTransaction:
+    """Restore a supplier-return issue using the exact quantity, weight and FIFO cost."""
+    original = db.scalar(
+        select(InventoryTransaction)
+        .where(InventoryTransaction.id == transaction_id)
+        .with_for_update()
+    )
+    if original is None:
+        raise InventoryNotFound("حركة مخزون مرتجع المشتريات غير موجودة")
+    if (
+        original.transaction_type != "return_out"
+        or original.reference_type != "purchase_return"
+        or original.reference_id != str(purchase_return_id)
+        or original.reference_line_id != str(purchase_order_line_id)
+    ):
+        raise InventoryConflict("حركة المخزون لا تطابق بند مرتجع المشتريات")
+    previous_reversal = db.scalar(
+        select(InventoryTransaction).where(InventoryTransaction.reversal_of_id == original.id)
+    )
+    if previous_reversal is not None:
+        if previous_reversal.idempotency_key == idempotency_key:
+            return previous_reversal
+        raise InventoryConflict("تم عكس حركة مرتجع المشتريات من قبل")
+    return post_receipt(
+        db,
+        payload=ReceiptRequest(
+            product_id=original.product_id,
+            warehouse_id=original.warehouse_id,
+            quantity=-original.quantity_delta,
+            weight_kg=-original.weight_delta_kg,
+            cost_basis=cast(CostBasis, original.cost_basis),
+            unit_cost=original.unit_cost,
+            reference_type="purchase_return_reversal",
+            reference_id=str(purchase_return_id),
+            reference_line_id=str(purchase_order_line_id),
+            notes=reason,
+        ),
+        idempotency_key=idempotency_key,
+        actor_user_id=actor_user_id,
+        client=client,
+        transaction_type="reversal_in",
+        reversal_of_id=original.id,
+    )
+
+
 def reverse_transaction(
     db: Session,
     *,

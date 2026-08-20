@@ -15,6 +15,7 @@ from app.modules.identity.service import ClientContext, Principal, add_audit
 from app.modules.master_data.models import Partner
 from app.modules.master_data.service import allocate_document_number, normalize_code
 from app.modules.purchasing.models import PurchaseOrder, SupplierInvoice
+from app.modules.returns.models import InvoiceReturn, ReturnRefund
 from app.modules.sales.models import CustomerInvoice, SalesOrder
 from app.modules.treasury.models import (
     CustomerAccountAdjustment,
@@ -123,11 +124,34 @@ def _account_balance(db: Session, account_id: UUID) -> Decimal:
             FinancialAdjustment.status == "posted",
         ),
     )
+    supplier_refunds = _sum(
+        db,
+        select(func.coalesce(func.sum(ReturnRefund.amount), 0)).where(
+            ReturnRefund.financial_account_id == account_id,
+            ReturnRefund.refund_type == "supplier_refund",
+            ReturnRefund.status == "posted",
+        ),
+    )
+    customer_refunds = _sum(
+        db,
+        select(func.coalesce(func.sum(ReturnRefund.amount), 0)).where(
+            ReturnRefund.financial_account_id == account_id,
+            ReturnRefund.refund_type == "customer_refund",
+            ReturnRefund.status == "posted",
+        ),
+    )
     account = db.get(FinancialAccount, account_id)
     if account is None:
         raise TreasuryNotFound("الحساب المالي غير موجود")
     return money(
-        account.opening_balance + receipts - payments + transfers_in - transfers_out + adjustments
+        account.opening_balance
+        + receipts
+        - payments
+        + transfers_in
+        - transfers_out
+        + adjustments
+        + supplier_refunds
+        - customer_refunds
     )
 
 
@@ -371,6 +395,36 @@ def _allocated_to_supplier_invoice(db: Session, invoice_id: UUID) -> Decimal:
     )
 
 
+def _invoice_returned_total(db: Session, *, invoice_kind: str, invoice_id: UUID) -> Decimal:
+    column = (
+        InvoiceReturn.customer_invoice_id
+        if invoice_kind == "sales"
+        else InvoiceReturn.supplier_invoice_id
+    )
+    return _sum(
+        db,
+        select(func.coalesce(func.sum(InvoiceReturn.total), 0)).where(
+            column == invoice_id,
+            InvoiceReturn.status == "posted",
+        ),
+    )
+
+
+def _invoice_refunded_total(db: Session, *, invoice_kind: str, invoice_id: UUID) -> Decimal:
+    column = (
+        ReturnRefund.customer_invoice_id
+        if invoice_kind == "sales"
+        else ReturnRefund.supplier_invoice_id
+    )
+    return _sum(
+        db,
+        select(func.coalesce(func.sum(ReturnRefund.amount), 0)).where(
+            column == invoice_id,
+            ReturnRefund.status == "posted",
+        ),
+    )
+
+
 def list_open_invoices(
     db: Session, *, transaction_type: str, partner_id: UUID
 ) -> list[OpenInvoiceView]:
@@ -386,7 +440,15 @@ def list_open_invoices(
         )
         for invoice in invoices:
             paid = _allocated_to_customer_invoice(db, invoice.id)
-            remaining = money(invoice.total - paid)
+            returned = _invoice_returned_total(
+                db, invoice_kind="sales", invoice_id=invoice.id
+            )
+            refunded = _invoice_refunded_total(
+                db, invoice_kind="sales", invoice_id=invoice.id
+            )
+            net_total = money(max(ZERO, invoice.total - returned))
+            effective_paid = money(max(ZERO, paid - refunded))
+            remaining = money(net_total - effective_paid)
             if remaining > ZERO:
                 result.append(
                     OpenInvoiceView(
@@ -396,8 +458,8 @@ def list_open_invoices(
                         partner_id=partner.id,
                         partner_name_ar=partner.name_ar,
                         invoice_kind="sales",
-                        invoice_total=invoice.total,
-                        paid=paid,
+                        invoice_total=net_total,
+                        paid=effective_paid,
                         remaining=remaining,
                     )
                 )
@@ -409,7 +471,15 @@ def list_open_invoices(
         )
         for invoice in invoices:
             paid = _allocated_to_supplier_invoice(db, invoice.id)
-            remaining = money(invoice.total - paid)
+            returned = _invoice_returned_total(
+                db, invoice_kind="purchase", invoice_id=invoice.id
+            )
+            refunded = _invoice_refunded_total(
+                db, invoice_kind="purchase", invoice_id=invoice.id
+            )
+            net_total = money(max(ZERO, invoice.total - returned))
+            effective_paid = money(max(ZERO, paid - refunded))
+            remaining = money(net_total - effective_paid)
             if remaining > ZERO:
                 result.append(
                     OpenInvoiceView(
@@ -419,8 +489,8 @@ def list_open_invoices(
                         partner_id=partner.id,
                         partner_name_ar=partner.name_ar,
                         invoice_kind="purchase",
-                        invoice_total=invoice.total,
-                        paid=paid,
+                        invoice_total=net_total,
+                        paid=effective_paid,
                         remaining=remaining,
                     )
                 )
@@ -467,7 +537,64 @@ def list_open_orders(
                 PaymentTransaction.status == "posted",
             ),
         )
-        remaining = money(order.total - paid)
+        order_total = order.total
+        if reference_type == "sale":
+            invoice = db.scalar(
+                select(CustomerInvoice).where(
+                    CustomerInvoice.sales_order_id == order.id,
+                    CustomerInvoice.status == "posted",
+                )
+            )
+            if invoice is not None:
+                order_total = money(
+                    max(
+                        ZERO,
+                        order.total
+                        - _invoice_returned_total(
+                            db, invoice_kind="sales", invoice_id=invoice.id
+                        ),
+                    )
+                )
+                paid = money(
+                    max(
+                        ZERO,
+                        paid
+                        - _invoice_refunded_total(
+                            db, invoice_kind="sales", invoice_id=invoice.id
+                        ),
+                    )
+                )
+        else:
+            supplier_invoice = db.scalar(
+                select(SupplierInvoice).where(
+                    SupplierInvoice.purchase_order_id == order.id,
+                    SupplierInvoice.status == "posted",
+                )
+            )
+            if supplier_invoice is not None:
+                order_total = money(
+                    max(
+                        ZERO,
+                        order.total
+                        - _invoice_returned_total(
+                            db,
+                            invoice_kind="purchase",
+                            invoice_id=supplier_invoice.id,
+                        ),
+                    )
+                )
+                paid = money(
+                    max(
+                        ZERO,
+                        paid
+                        - _invoice_refunded_total(
+                            db,
+                            invoice_kind="purchase",
+                            invoice_id=supplier_invoice.id,
+                        ),
+                    )
+                )
+        remaining = money(order_total - paid)
         if remaining > ZERO:
             result.append(
                 OpenOrderView(
@@ -478,7 +605,7 @@ def list_open_orders(
                     partner_name_ar=partner.name_ar,
                     reference_type=reference_type,  # type: ignore[arg-type]
                     status=order.status,
-                    total=order.total,
+                    total=order_total,
                     paid=paid,
                     remaining=remaining,
                 )
@@ -532,7 +659,16 @@ def _lock_payment_invoices(
             if isinstance(invoice, CustomerInvoice)
             else _allocated_to_supplier_invoice(db, invoice.id)
         )
-        if money(allocation.amount) > money(invoice.total - paid):
+        invoice_kind = "sales" if isinstance(invoice, CustomerInvoice) else "purchase"
+        returned = _invoice_returned_total(
+            db, invoice_kind=invoice_kind, invoice_id=invoice.id
+        )
+        refunded = _invoice_refunded_total(
+            db, invoice_kind=invoice_kind, invoice_id=invoice.id
+        )
+        net_total = money(max(ZERO, invoice.total - returned))
+        effective_paid = money(max(ZERO, paid - refunded))
+        if money(allocation.amount) > money(net_total - effective_paid):
             raise TreasuryConflict(f"التوزيع على الفاتورة {invoice.invoice_number} أكبر من المتبقي")
         allocated_total += money(allocation.amount)
     return invoice_map, money(allocated_total)
@@ -1335,6 +1471,26 @@ def list_partner_balances(db: Session, *, partner_type: str) -> list[PartnerBala
             )
             transaction_type = "customer_receipt"
             adjustments = _customer_adjustment_total(db, partner.id)
+            returns_total = _sum(
+                db,
+                select(func.coalesce(func.sum(InvoiceReturn.total), 0))
+                .join(
+                    CustomerInvoice,
+                    CustomerInvoice.id == InvoiceReturn.customer_invoice_id,
+                )
+                .where(
+                    CustomerInvoice.customer_id == partner.id,
+                    InvoiceReturn.status == "posted",
+                ),
+            )
+            refunds_total = _sum(
+                db,
+                select(func.coalesce(func.sum(ReturnRefund.amount), 0)).where(
+                    ReturnRefund.partner_id == partner.id,
+                    ReturnRefund.refund_type == "customer_refund",
+                    ReturnRefund.status == "posted",
+                ),
+            )
         else:
             invoices_total = _sum(
                 db,
@@ -1345,6 +1501,27 @@ def list_partner_balances(db: Session, *, partner_type: str) -> list[PartnerBala
             )
             transaction_type = "supplier_payment"
             adjustments = ZERO
+            returns_total = _sum(
+                db,
+                select(func.coalesce(func.sum(InvoiceReturn.total), 0))
+                .join(
+                    SupplierInvoice,
+                    SupplierInvoice.id == InvoiceReturn.supplier_invoice_id,
+                )
+                .where(
+                    SupplierInvoice.supplier_id == partner.id,
+                    InvoiceReturn.status == "posted",
+                ),
+            )
+            refunds_total = _sum(
+                db,
+                select(func.coalesce(func.sum(ReturnRefund.amount), 0)).where(
+                    ReturnRefund.partner_id == partner.id,
+                    ReturnRefund.refund_type == "supplier_refund",
+                    ReturnRefund.status == "posted",
+                ),
+            )
+        invoices_total = money(max(ZERO, invoices_total - returns_total))
         payments = list(
             db.scalars(
                 select(PaymentTransaction).where(
@@ -1375,11 +1552,14 @@ def list_partner_balances(db: Session, *, partner_type: str) -> list[PartnerBala
                 partner_type=partner_type,  # type: ignore[arg-type]
                 opening_balance=opening,
                 invoices_total=invoices_total,
+                returns_total=returns_total,
                 paid_total=paid_total,
+                refunds_total=refunds_total,
                 advances=advances,
                 adjustments_total=adjustments,
                 balance=money(
                     opening + invoices_total + adjustments - paid_total - advances
+                    + refunds_total
                 ),
             )
         )
@@ -1405,12 +1585,44 @@ def treasury_summary(db: Session) -> TreasurySummaryView:
             ZERO,
         )
     )
+    sales_returns = _sum(
+        db,
+        select(func.coalesce(func.sum(InvoiceReturn.total), 0)).where(
+            InvoiceReturn.return_type == "sales",
+            InvoiceReturn.status == "posted",
+        ),
+    )
+    purchase_returns = _sum(
+        db,
+        select(func.coalesce(func.sum(InvoiceReturn.total), 0)).where(
+            InvoiceReturn.return_type == "purchase",
+            InvoiceReturn.status == "posted",
+        ),
+    )
+    customer_refunds = _sum(
+        db,
+        select(func.coalesce(func.sum(ReturnRefund.amount), 0)).where(
+            ReturnRefund.refund_type == "customer_refund",
+            ReturnRefund.status == "posted",
+        ),
+    )
+    supplier_refunds = _sum(
+        db,
+        select(func.coalesce(func.sum(ReturnRefund.amount), 0)).where(
+            ReturnRefund.refund_type == "supplier_refund",
+            ReturnRefund.status == "posted",
+        ),
+    )
     return TreasurySummaryView(
         financial_balance=money(sum((item.current_balance for item in accounts), ZERO)),
         receivables=money(sum((item.balance for item in customer_balances), ZERO)),
         payables=money(sum((item.balance for item in supplier_balances), ZERO)),
         customer_receipts=customer_receipts,
         supplier_payments=supplier_payments,
+        sales_returns=sales_returns,
+        purchase_returns=purchase_returns,
+        customer_refunds=customer_refunds,
+        supplier_refunds=supplier_refunds,
         customer_advances=money(sum((item.advances for item in customer_balances), ZERO)),
         supplier_advances=money(sum((item.advances for item in supplier_balances), ZERO)),
     )
@@ -1477,6 +1689,24 @@ def partner_statement(
                     sales_invoice.notes,
                 )
             )
+        sales_returns = db.scalars(
+            select(InvoiceReturn).where(
+                InvoiceReturn.partner_id == partner.id,
+                InvoiceReturn.return_type == "sales",
+                InvoiceReturn.status == "posted",
+            )
+        )
+        for sales_return in sales_returns:
+            movements.append(
+                (
+                    _as_utc(sales_return.return_date),
+                    sales_return.return_number,
+                    "مرتجع مبيعات",
+                    ZERO,
+                    sales_return.total,
+                    sales_return.reason,
+                )
+            )
         adjustments = db.scalars(
             select(CustomerAccountAdjustment).where(
                 CustomerAccountAdjustment.customer_id == partner.id,
@@ -1499,6 +1729,7 @@ def partner_statement(
                 )
             )
         payment_type = "customer_receipt"
+        refund_type = "customer_refund"
     else:
         invoices = db.scalars(
             select(SupplierInvoice).where(
@@ -1518,7 +1749,26 @@ def partner_statement(
                     "",
                 )
             )
+        purchase_returns = db.scalars(
+            select(InvoiceReturn).where(
+                InvoiceReturn.partner_id == partner.id,
+                InvoiceReturn.return_type == "purchase",
+                InvoiceReturn.status == "posted",
+            )
+        )
+        for purchase_return in purchase_returns:
+            movements.append(
+                (
+                    _as_utc(purchase_return.return_date),
+                    purchase_return.return_number,
+                    "مرتجع مشتريات",
+                    purchase_return.total,
+                    ZERO,
+                    purchase_return.reason,
+                )
+            )
         payment_type = "supplier_payment"
+        refund_type = "supplier_refund"
     payments = db.scalars(
         select(PaymentTransaction).where(
             PaymentTransaction.partner_id == partner.id,
@@ -1535,6 +1785,24 @@ def partner_statement(
                 ZERO if partner_type == "customer" else payment.amount,
                 payment.amount if partner_type == "customer" else ZERO,
                 payment.notes,
+            )
+        )
+    refunds = db.scalars(
+        select(ReturnRefund).where(
+            ReturnRefund.partner_id == partner.id,
+            ReturnRefund.refund_type == refund_type,
+            ReturnRefund.status == "posted",
+        )
+    )
+    for refund in refunds:
+        movements.append(
+            (
+                _as_utc(refund.refund_date),
+                refund.refund_number,
+                "رد مبلغ لعميل" if partner_type == "customer" else "استرداد من مورد",
+                refund.amount if partner_type == "customer" else ZERO,
+                ZERO if partner_type == "customer" else refund.amount,
+                refund.notes,
             )
         )
     movements.sort(key=lambda row: (row[0], row[1]))

@@ -206,7 +206,9 @@ class PartnerBalanceView(TreasuryView):
     partner_type: Literal["customer", "supplier"]
     opening_balance: Decimal
     invoices_total: Decimal
+    returns_total: Decimal
     paid_total: Decimal
+    refunds_total: Decimal
     advances: Decimal
     adjustments_total: Decimal
     balance: Decimal
@@ -243,6 +245,10 @@ class TreasurySummaryView(TreasuryView):
     payables: Decimal
     customer_receipts: Decimal
     supplier_payments: Decimal
+    sales_returns: Decimal
+    purchase_returns: Decimal
+    customer_refunds: Decimal
+    supplier_refunds: Decimal
     customer_advances: Decimal
     supplier_advances: Decimal
 

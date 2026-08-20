@@ -8,6 +8,7 @@ import {
   PackageCheck,
   Scale,
   ShoppingCart,
+  Undo2,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
@@ -30,6 +31,7 @@ const navigation: NavigationItem[] = [
   { label: "المخزون", icon: Boxes, to: "/inventory", permission: "inventory.read" },
   { label: "التصنيع", icon: Factory, to: "/manufacturing", permission: "manufacturing.read" },
   { label: "الحسابات", icon: CircleDollarSign, to: "/accounts", permission: "accounts.read" },
+  { label: "المرتجعات", icon: Undo2, to: "/returns", permission: "returns.read" },
   {
     label: "العملاء والموردون",
     icon: UsersRound,

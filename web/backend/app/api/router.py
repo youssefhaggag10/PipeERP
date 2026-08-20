@@ -7,6 +7,7 @@ from app.api.routes.inventory import router as inventory_router
 from app.api.routes.manufacturing import router as manufacturing_router
 from app.api.routes.master_data import router as master_data_router
 from app.api.routes.purchasing import router as purchasing_router
+from app.api.routes.returns import router as returns_router
 from app.api.routes.sales import router as sales_router
 from app.api.routes.treasury import router as treasury_router
 
@@ -18,5 +19,6 @@ api_router.include_router(master_data_router, tags=["master data"])
 api_router.include_router(inventory_router, tags=["inventory"])
 api_router.include_router(manufacturing_router, tags=["manufacturing"])
 api_router.include_router(purchasing_router, tags=["purchasing"])
+api_router.include_router(returns_router, tags=["returns"])
 api_router.include_router(sales_router, tags=["sales"])
 api_router.include_router(treasury_router, tags=["accounts"])
