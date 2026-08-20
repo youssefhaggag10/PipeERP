@@ -491,6 +491,74 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .advance-inline legend { padding: 0 7px; color: #087060; font-size: 9px; font-weight: 900; }
 .advance-inline > .check-row { background: #fff; }
 
+.manufacturing-heading { background: linear-gradient(118deg,#10283e 0%,#21455a 58%,#6f4d18 145%); }
+.manufacturing-tabs { margin-bottom: 2px; }
+.manufacturing-layout { grid-template-columns: minmax(0,1.3fr) minmax(390px,.7fr); }
+.manufacturing-form { max-height: calc(100vh - 140px); overflow-y: auto; scrollbar-color: #a9c7c1 transparent; scrollbar-width: thin; }
+.manufacturing-form fieldset { margin: 0; padding: 13px; display: grid; gap: 10px; border: 1px solid #dbe4e8; border-radius: 11px; background: #f7fafb; }
+.manufacturing-form legend, .manufacturing-adjustments legend { padding: 0 7px; color: #526778; font-size: 9px; font-weight: 850; }
+.manufacturing-form textarea { min-height: 66px; padding: 10px 11px; resize: vertical; border: 1px solid #d5dfe5; border-radius: 9px; font: inherit; }
+.manufacturing-checks { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.manufacturing-checks .check-field { min-height: 38px; padding: 0 9px; border: 1px solid #dde6e9; border-radius: 8px; background: #fff; }
+.manufacturing-checks small { margin-right: auto; color: var(--muted); font-size: 8px; }
+.manufacturing-line { position: relative; display: grid; grid-template-columns: minmax(0,1.5fr) minmax(100px,.6fr) 32px; align-items: center; gap: 8px; }
+.manufacturing-line select, .manufacturing-line input, .manufacturing-completion input, .manufacturing-completion select { min-width: 0; min-height: 40px; padding: 0 10px; border: 1px solid #d5dfe5; border-radius: 9px; background: #fff; outline: 0; }
+.manufacturing-recipe-grid { padding: 14px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 11px; }
+.manufacturing-recipe-card { min-width: 0; padding: 15px; display: grid; grid-template-columns: 40px minmax(0,1fr); gap: 11px; border: 1px solid #dbe5e9; border-radius: 13px; background: linear-gradient(145deg,#fff,#f7fafb); text-align: right; }
+.manufacturing-recipe-card > span { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 11px; color: #9b6715; background: #fff1d5; }
+.manufacturing-recipe-card strong, .manufacturing-recipe-card small { display: block; }
+.manufacturing-recipe-card strong { font-size: 11px; }
+.manufacturing-recipe-card small { margin-top: 4px; overflow: hidden; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.manufacturing-recipe-card b { grid-column: 2; color: var(--navy-900); font-size: 10px; }
+.manufacturing-order-list { padding: 10px 15px 17px; display: grid; gap: 8px; }
+.manufacturing-order-card { min-width: 0; padding: 13px; display: grid; grid-template-columns: 40px minmax(0,1fr) auto auto; align-items: center; gap: 11px; border: 1px solid #dce5e9; border-radius: 12px; background: #fff; text-align: right; transition: .16s ease; }
+.manufacturing-order-card:hover, .manufacturing-order-card--selected { border-color: #9dcdc4; background: #f1f9f7; box-shadow: var(--shadow-soft); }
+.manufacturing-order-card__icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 11px; color: var(--accent-dark); background: var(--accent-soft); }
+.manufacturing-order-card strong, .manufacturing-order-card small { display: block; }
+.manufacturing-order-card strong { font-size: 11px; }
+.manufacturing-order-card small { margin-top: 4px; color: var(--muted); font-size: 8px; }
+.manufacturing-order-card b { color: var(--navy-900); font-size: 10px; white-space: nowrap; }
+.manufacturing-status { padding: 5px 8px; border-radius: 999px; background: #eef1f3; color: #6d7a87; font-size: 8px; font-style: normal; font-weight: 850; white-space: nowrap; }
+.manufacturing-status--in_progress { color: #9b6715; background: #fff0d4; }
+.manufacturing-status--completed { color: #087060; background: #e5f6f1; }
+.manufacturing-status--cancelled { color: #a24740; background: #fff0ee; }
+.manufacturing-detail { margin-top: 16px; }
+.manufacturing-detail td small { display: block; margin-top: 4px; color: var(--muted); font-size: 8px; }
+.manufacturing-actions { padding: 14px 18px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 9px; border-top: 1px solid #e5ecef; background: #f7fafb; }
+.danger-button { min-height: 42px; padding: 0 14px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid #edc7c3; border-radius: 10px; background: #fff5f4; color: #a24740; font-weight: 800; }
+.manufacturing-completion { padding: 18px; display: grid; gap: 15px; border-top: 1px solid #dce7e9; background: linear-gradient(145deg,#f8fbfb,#eef7f5); }
+.manufacturing-completion > header { display: flex; align-items: center; gap: 11px; }
+.manufacturing-completion > header > span { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 11px; color: var(--accent-dark); background: #dff3ee; }
+.manufacturing-completion > header strong, .manufacturing-completion > header small { display: block; }
+.manufacturing-completion > header strong { font-size: 12px; }
+.manufacturing-completion > header small { margin-top: 4px; color: var(--muted); font-size: 9px; }
+.manufacturing-completion label { display: grid; gap: 6px; color: #526778; font-size: 9px; font-weight: 800; }
+.manufacturing-completion__base { display: grid; grid-template-columns: .6fr .7fr 1.7fr; gap: 10px; }
+.manufacturing-output-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.manufacturing-output-grid article { padding: 13px; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; border: 1px solid #d8e5e2; border-radius: 11px; background: #fff; }
+.manufacturing-output-grid article > strong, .manufacturing-output-grid article > small { grid-column: 1 / -1; }
+.manufacturing-output-grid article > strong { font-size: 11px; }
+.manufacturing-output-grid article > small { color: var(--muted); font-size: 8px; }
+.manufacturing-adjustments { margin: 0; padding: 13px; display: grid; gap: 10px; border: 1px solid #dddfd1; border-radius: 11px; background: #fffdf7; }
+.manufacturing-adjustments > article { position: relative; padding: 13px; display: grid; grid-template-columns: 1fr .45fr 1.3fr; gap: 9px; border: 1px solid #ebe2cd; border-radius: 10px; background: #fff; }
+.manufacturing-adjustments > article > .mini-action { position: absolute; top: 7px; left: 7px; }
+.manufacturing-adjustment-quantities { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+.manufacturing-complete-button { justify-self: end; }
+.manufacturing-summary { padding: 17px 20px; display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; border-top: 1px solid #dce7e9; background: linear-gradient(120deg,#10283e,#173f50); color: #fff; }
+.manufacturing-summary small, .manufacturing-summary strong { display: block; }
+.manufacturing-summary small { color: #b9cbd6; font-size: 8px; }
+.manufacturing-summary strong { margin-top: 6px; font-size: 13px; }
+.manufacturing-mix-report { border-top: 1px solid #e1e9ec; background: #fff; }
+.manufacturing-mix-report > header { padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #f6f9fa; }
+.manufacturing-mix-report > header strong { font-size: 11px; }
+.manufacturing-mix-report > header small { color: var(--muted); font-size: 8px; }
+.manufacturing-mix-report > article { min-height: 64px; margin: 0 18px; display: grid; grid-template-columns: minmax(180px,.8fr) minmax(0,1.4fr) auto; align-items: center; gap: 12px; border-bottom: 1px solid #e8eef1; }
+.manufacturing-mix-report strong, .manufacturing-mix-report small, .manufacturing-mix-report b { display: block; }
+.manufacturing-mix-report article strong { font-size: 10px; }
+.manufacturing-mix-report article small { margin-top: 3px; color: var(--muted); font-size: 8px; }
+.manufacturing-mix-report article b { margin-top: 4px; color: #526778; font-size: 8px; }
+.manufacturing-mix-report article em { color: #9b6715; font-size: 10px; font-style: normal; font-weight: 850; white-space: nowrap; }
+
 @media (max-width: 1100px) {
   .app-shell { grid-template-columns: 82px minmax(0,1fr); }
   .sidebar__head { padding-inline: 20px; }
@@ -513,6 +581,8 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .treasury-layout, .treasury-partner-grid { grid-template-columns: 1fr; }
   .treasury-form-card { position: static; }
   .treasury-payment-form { max-height: none; }
+  .manufacturing-layout { grid-template-columns: 1fr; }
+  .manufacturing-form { max-height: none; }
 }
 
 @media (max-width: 760px) {
@@ -568,6 +638,15 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .treasury-account-cards, .treasury-actions-grid, .treasury-link-modes { grid-template-columns: 1fr; }
   .allocation-list label { grid-template-columns: 1fr; }
   .statement-result > header { align-items: flex-start; flex-direction: column; }
+  .manufacturing-recipe-grid, .manufacturing-output-grid, .manufacturing-summary, .manufacturing-checks { grid-template-columns: 1fr; }
+  .manufacturing-order-card { grid-template-columns: 38px minmax(0,1fr) auto; }
+  .manufacturing-order-card > b { grid-column: 2; }
+  .manufacturing-line, .manufacturing-completion__base, .manufacturing-adjustments > article, .manufacturing-adjustment-quantities { grid-template-columns: 1fr; }
+  .manufacturing-line .mini-action { position: absolute; top: 4px; left: 4px; }
+  .manufacturing-output-grid article { grid-template-columns: 1fr; }
+  .manufacturing-actions { align-items: stretch; flex-direction: column; }
+  .manufacturing-actions button, .manufacturing-complete-button { width: 100%; }
+  .manufacturing-mix-report > article { padding-block: 12px; grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

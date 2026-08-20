@@ -25,7 +25,9 @@ describe("api client", () => {
     expect(request).toHaveBeenCalledTimes(1);
     const [, options] = request.mock.calls[0] as [string, RequestInit];
     expect(options.credentials).toBe("include");
-    expect(new Headers(options.headers).get("X-CSRF-Token")).toBe("secure-token");
+    expect(new Headers(options.headers).get("X-CSRF-Token")).toBe(
+      "secure-token",
+    );
   });
 
   it("surfaces the Arabic API error without hiding its status", async () => {
@@ -42,5 +44,16 @@ describe("api client", () => {
     await expect(api("/identity/users", {}, false)).rejects.toEqual(
       new ApiError("ليست لديك صلاحية", 403),
     );
+  });
+
+  it("accepts successful responses without a JSON body", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 204 })),
+    );
+
+    await expect(
+      api("/manufacturing/orders/1", { method: "DELETE" }),
+    ).resolves.toBeUndefined();
   });
 });

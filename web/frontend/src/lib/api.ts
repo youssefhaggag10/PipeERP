@@ -44,7 +44,11 @@ export async function api<T>(
     headers,
     credentials: "include",
   });
-  if (response.status === 401 && retry && !["/auth/login", "/auth/refresh"].includes(path)) {
+  if (
+    response.status === 401 &&
+    retry &&
+    !["/auth/login", "/auth/refresh"].includes(path)
+  ) {
     try {
       await api("/auth/refresh", { method: "POST" }, false);
       return api<T>(path, options, false);
@@ -52,6 +56,8 @@ export async function api<T>(
       throw new ApiError("انتهت الجلسة؛ سجّل الدخول مرة أخرى", 401);
     }
   }
-  if (!response.ok) throw new ApiError(await errorMessage(response), response.status);
+  if (!response.ok)
+    throw new ApiError(await errorMessage(response), response.status);
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }

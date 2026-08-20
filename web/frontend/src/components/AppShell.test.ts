@@ -34,4 +34,11 @@ describe("permission-aware navigation", () => {
     const items = visibleNavigationItems(["accounts.read"]);
     expect(items.find((item) => item.label === "الحسابات")?.to).toBe("/accounts");
   });
+
+  it("links manufacturing readers to the responsive manufacturing workspace", () => {
+    const items = visibleNavigationItems(["manufacturing.read"]);
+
+    expect(items.map((item) => item.label)).toEqual(["لوحة التشغيل", "التصنيع"]);
+    expect(items[1]?.to).toBe("/manufacturing");
+  });
 });

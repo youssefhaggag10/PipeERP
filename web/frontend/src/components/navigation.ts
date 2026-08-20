@@ -28,7 +28,7 @@ const navigation: NavigationItem[] = [
   { label: "البيع بالوزن", icon: Scale, to: "/weight-sales", permission: "weight_sales.read" },
   { label: "المشتريات", icon: PackageCheck, to: "/purchases", permission: "purchases.read" },
   { label: "المخزون", icon: Boxes, to: "/inventory", permission: "inventory.read" },
-  { label: "التصنيع", icon: Factory, permission: "manufacturing.read" },
+  { label: "التصنيع", icon: Factory, to: "/manufacturing", permission: "manufacturing.read" },
   { label: "الحسابات", icon: CircleDollarSign, to: "/accounts", permission: "accounts.read" },
   {
     label: "العملاء والموردون",

@@ -7,6 +7,7 @@ from sqlalchemy import engine_from_config, pool
 from app.infrastructure.database.base import Base
 from app.modules.identity import models as identity_models  # noqa: F401
 from app.modules.inventory import models as inventory_models  # noqa: F401
+from app.modules.manufacturing import models as manufacturing_models  # noqa: F401
 from app.modules.master_data import models as master_data_models  # noqa: F401
 from app.modules.purchasing import models as purchasing_models  # noqa: F401
 from app.modules.sales import models as sales_models  # noqa: F401
