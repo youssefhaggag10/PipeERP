@@ -1,0 +1,202 @@
+name: pipeerp
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  database:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      - pipeerp_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 200
+    mem_limit: 1g
+    logging: *default-logging
+
+  migrate:
+    build:
+      context: ./backend
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL_FILE: /run/secrets/database_url
+      SECRET_KEY_FILE: /run/secrets/secret_key
+      APP_ENV: production
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?ALLOWED_ORIGINS is required}
+    secrets:
+      - database_url
+      - secret_key
+    depends_on:
+      database:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+    logging: *default-logging
+
+  backend:
+    build:
+      context: ./backend
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --workers
+      - "2"
+      - --proxy-headers
+      - --forwarded-allow-ips
+      - "*"
+      - --limit-concurrency
+      - "100"
+      - --timeout-keep-alive
+      - "5"
+      - --no-access-log
+    environment:
+      DATABASE_URL_FILE: /run/secrets/database_url
+      SECRET_KEY_FILE: /run/secrets/secret_key
+      APP_ENV: production
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?ALLOWED_ORIGINS is required}
+      ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-15}
+      REFRESH_SESSION_HOURS: ${REFRESH_SESSION_HOURS:-12}
+      LOGIN_LOCK_MINUTES: ${LOGIN_LOCK_MINUTES:-15}
+      LOGIN_MAX_ATTEMPTS: ${LOGIN_MAX_ATTEMPTS:-5}
+    secrets:
+      - database_url
+      - secret_key
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    expose: ["8000"]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 200
+    mem_limit: 768m
+    restart: unless-stopped
+    logging: *default-logging
+
+  frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    expose: ["80"]
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=32m,noexec,nosuid
+      - /var/run:size=8m,noexec,nosuid
+      - /tmp:size=16m,noexec,nosuid
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN", "SETGID", "SETUID", "NET_BIND_SERVICE"]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 100
+    mem_limit: 256m
+    restart: unless-stopped
+    logging: *default-logging
+
+  edge:
+    image: caddy:2-alpine
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN is required}
+    depends_on:
+      frontend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    cap_drop: ["ALL"]
+    cap_add: ["NET_BIND_SERVICE"]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 100
+    mem_limit: 256m
+    restart: unless-stopped
+    logging: *default-logging
+
+  backup:
+    build:
+      context: ./ops
+    profiles: ["ops"]
+    command: ["/usr/local/bin/pipeerp-backup"]
+    environment:
+      DATABASE_URL_FILE: /run/secrets/database_url
+      BACKUP_ENCRYPTION_KEY_FILE: /run/secrets/backup_encryption_key
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+    secrets:
+      - database_url
+      - backup_encryption_key
+    volumes:
+      - pipeerp_backups:/backups
+    depends_on:
+      database:
+        condition: service_healthy
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+    logging: *default-logging
+
+volumes:
+  pipeerp_postgres:
+  pipeerp_backups:
+  caddy_data:
+  caddy_config:
+
+secrets:
+  postgres_password:
+    file: ${POSTGRES_PASSWORD_FILE_PATH:?POSTGRES_PASSWORD_FILE_PATH is required}
+  database_url:
+    file: ${DATABASE_URL_FILE_PATH:?DATABASE_URL_FILE_PATH is required}
+  secret_key:
+    file: ${SECRET_KEY_FILE_PATH:?SECRET_KEY_FILE_PATH is required}
+  backup_encryption_key:
+    file: ${BACKUP_ENCRYPTION_KEY_FILE_PATH:?BACKUP_ENCRYPTION_KEY_FILE_PATH is required}
