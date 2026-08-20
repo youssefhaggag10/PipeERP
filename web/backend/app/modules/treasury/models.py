@@ -121,8 +121,16 @@ class PaymentTransaction(TimestampMixin, Base):
 class PaymentAllocation(TimestampMixin, Base):
     __tablename__ = "payment_allocations"
     __table_args__ = (
-        UniqueConstraint("payment_transaction_id", "customer_invoice_id"),
-        UniqueConstraint("payment_transaction_id", "supplier_invoice_id"),
+        UniqueConstraint(
+            "payment_transaction_id",
+            "customer_invoice_id",
+            name="uq_payment_allocations_payment_customer_invoice",
+        ),
+        UniqueConstraint(
+            "payment_transaction_id",
+            "supplier_invoice_id",
+            name="uq_payment_allocations_payment_supplier_invoice",
+        ),
         CheckConstraint("amount > 0", name="amount_positive"),
         CheckConstraint(
             "(customer_invoice_id IS NOT NULL AND supplier_invoice_id IS NULL) OR "

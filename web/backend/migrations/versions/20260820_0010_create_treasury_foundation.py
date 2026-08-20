@@ -166,8 +166,16 @@ def upgrade() -> None:
             ["supplier_invoice_id"], ["supplier_invoices.id"], ondelete="RESTRICT"
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("payment_transaction_id", "customer_invoice_id"),
-        sa.UniqueConstraint("payment_transaction_id", "supplier_invoice_id"),
+        sa.UniqueConstraint(
+            "payment_transaction_id",
+            "customer_invoice_id",
+            name=op.f("uq_payment_allocations_payment_customer_invoice"),
+        ),
+        sa.UniqueConstraint(
+            "payment_transaction_id",
+            "supplier_invoice_id",
+            name=op.f("uq_payment_allocations_payment_supplier_invoice"),
+        ),
     )
     op.create_index(
         "ix_payment_allocations_customer_invoice",
