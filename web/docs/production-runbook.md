@@ -79,3 +79,22 @@ docker compose --env-file .env.production -f compose.production.yaml --profile o
 - فشل readiness: لا تعِد تشغيل قاعدة البيانات عشوائيًا؛ افحص المساحة والاتصالات والسجلات.
 - امتلاء القرص: أوقف العمليات الكتابية، حافظ على النسخ، وعالج السجلات وفق سياسة الاحتفاظ.
 - اختلاف رصيد: امنع التعديل على المستند المتأثر، احفظ الأدلة، ولا تصلح قاعدة البيانات يدويًا.
+
+## المراقبة واختبار الحمل
+
+نفذ `ops/healthcheck.sh` كل دقيقة من مراقب خارج الـVPS، واضبط `PIPEERP_BASE_URL` على
+النطاق الإنتاجي. يمكن وضع رابط تنبيه متوافق مع JSON في ملف وتحديده عبر
+`ALERT_WEBHOOK_URL_FILE`. نجاح الفحص لا يغني عن تنبيه مساحة القرص وCPU والذاكرة من مزود
+الخادم.
+
+لاختبار خمس جلسات قراءة متزامنة، أنشئ مستخدم قبول بصلاحيات القراءة المطلوبة وضع كلمة
+مروره في ملف `0600`، ثم:
+
+```bash
+PIPEERP_BASE_URL=https://erp.example.com \
+LOAD_TEST_USERNAME=acceptance.reader \
+LOAD_TEST_PASSWORD_FILE=/secure/path/load-test-password \
+python ops/load_test.py --users 5 --iterations 20 --p95-ms 1500
+```
+
+لا تستخدم مدير النظام لهذا الاختبار، واحذف مستخدم القبول أو عطله بعد توقيع النتائج.

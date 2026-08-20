@@ -62,6 +62,8 @@ jobs:
         run: |
           sh -n ../ops/backup.sh
           sh -n ../ops/restore.sh
+          sh -n ../ops/healthcheck.sh
+          python ../ops/load_test.py --help >/dev/null
           docker compose -f ../compose.production.yaml config --quiet
           docker run --rm -e DOMAIN=erp.example.com \
             -v "$PWD/../Caddyfile:/etc/caddy/Caddyfile:ro" \
