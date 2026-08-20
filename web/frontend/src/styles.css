@@ -680,3 +680,61 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
 }
+
+/* Reports and browser-native A4 documents */
+.report-filters { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; padding: 18px; margin-bottom: 18px; }
+.report-filters label { display: grid; gap: 6px; min-width: 145px; color: var(--muted); font-size: 9px; font-weight: 800; }
+.report-filters select, .report-filters input { min-height: 42px; padding: 0 11px; border: 1px solid #d7e2e6; border-radius: 10px; background: #fff; color: var(--ink); font: inherit; }
+.report-filters .report-check { display: flex; align-items: center; align-self: center; gap: 8px; min-width: auto; color: var(--ink); }
+.report-filters .report-check input { min-height: auto; width: 17px; height: 17px; }
+.report-result { overflow: hidden; }
+.report-summary { display: flex; gap: 10px; flex-wrap: wrap; padding: 0 18px 16px; }
+.report-summary span { display: grid; gap: 2px; min-width: 120px; padding: 10px 12px; border: 1px solid #dfe9ec; border-radius: 10px; background: #f6f9fa; }
+.report-summary small { color: var(--muted); font-size: 8px; }
+.report-summary strong { color: var(--navy-900); font-size: 13px; }
+.report-empty { min-height: 250px; }
+.a4-sheet { width: min(100%, 210mm); min-height: 297mm; margin: 20px auto; padding: 16mm 14mm; border: 1px solid #d9e3e6; background: #fff; color: #172b3a; box-shadow: 0 18px 50px rgba(20,44,60,.12); }
+.a4-header { display: flex; justify-content: space-between; gap: 24px; padding-bottom: 10mm; border-bottom: 2px solid var(--teal-700); }
+.a4-header h1, .a4-header h2, .a4-header p { margin: 0; }
+.a4-header h1 { font-size: 20px; }
+.a4-header p { margin-top: 3px; color: #647681; font-size: 10px; }
+.a4-header > div:last-child { text-align: left; }
+.a4-header h2 { color: var(--teal-700); font-size: 18px; }
+.a4-header strong { display: block; margin-top: 5px; direction: ltr; font-size: 12px; }
+.a4-meta { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; padding: 7mm 0; }
+.a4-meta span { display: grid; gap: 3px; padding: 8px; border-radius: 7px; background: #f4f7f8; color: #677985; font-size: 8px; }
+.a4-meta b { color: #172b3a; font-size: 10px; }
+.a4-table { width: 100%; border-collapse: collapse; font-size: 9px; }
+.a4-table th, .a4-table td { padding: 8px; border: 1px solid #dbe4e7; text-align: right; vertical-align: top; }
+.a4-table th { background: #eaf3f2; color: #294d55; }
+.a4-table tr { break-inside: avoid; page-break-inside: avoid; }
+.a4-table td small { display: block; margin-top: 3px; color: #73848e; font-size: 7px; }
+.a4-table .a4-detail-row td { background: #f8fafb; color: #60737e; font-size: 8px; }
+.a4-weight, .a4-totals { display: flex; justify-content: flex-end; gap: 16px; flex-wrap: wrap; margin-top: 7mm; padding: 10px; border-radius: 8px; background: #f4f7f8; font-size: 9px; }
+.a4-totals span { display: grid; gap: 3px; min-width: 100px; }
+.a4-totals b { font-size: 12px; }
+.a4-totals .a4-due { color: var(--teal-700); }
+.a4-notes { margin-top: 7mm; color: #526974; font-size: 9px; }
+.a4-page-number { margin-top: 8mm; color: #778992; font-size: 8px; text-align: center; }
+
+@media (max-width: 760px) {
+  .report-filters { align-items: stretch; }
+  .report-filters label, .report-filters button, .report-filters a { width: 100%; }
+  .a4-sheet { min-height: auto; margin-inline: -8px; padding: 18px 12px; width: calc(100% + 16px); overflow-x: auto; }
+  .a4-header { flex-direction: column; }
+  .a4-header > div:last-child { text-align: right; }
+  .a4-meta { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .a4-table { min-width: 650px; }
+}
+
+@page { size: A4 portrait; margin: 10mm; }
+@media print {
+  body { background: #fff !important; }
+  .sidebar, .topbar, .page-heading, .reports-tabs, .print-filters, .alert, .sidebar-backdrop { display: none !important; }
+  .app-shell, .main-shell, .page-content { display: block !important; margin: 0 !important; padding: 0 !important; background: #fff !important; }
+  .a4-sheet { width: auto; min-height: auto; margin: 0; padding: 0; border: 0; box-shadow: none; overflow: visible; }
+  .a4-sheet + .a4-sheet { break-before: page; page-break-before: always; }
+  .a4-table thead { display: table-header-group; }
+  .a4-table tr { break-inside: avoid; page-break-inside: avoid; }
+  .a4-header { break-after: avoid; page-break-after: avoid; }
+}

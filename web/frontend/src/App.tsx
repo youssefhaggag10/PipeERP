@@ -11,6 +11,7 @@ import { PartnersPage } from "./pages/PartnersPage";
 import { ProductsPage } from "./pages/ProductsPage";
 import { PurchasesPage } from "./pages/PurchasesPage";
 import { ReturnsPage } from "./pages/ReturnsPage";
+import { ReportsPage } from "./pages/ReportsPage";
 import { SalesPage } from "./pages/SalesPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TreasuryPage } from "./pages/TreasuryPage";
@@ -31,6 +32,7 @@ export function App() {
       <Route path="/weight-sales" element={<ProtectedRoute requiredPermissions={["weight_sales.read"]}><SalesPage /></ProtectedRoute>} />
       <Route path="/accounts" element={<ProtectedRoute requiredPermissions={["accounts.read"]}><TreasuryPage /></ProtectedRoute>} />
       <Route path="/returns" element={<ProtectedRoute requiredPermissions={["returns.read"]}><ReturnsPage /></ProtectedRoute>} />
+      <Route path="/reports" element={<ProtectedRoute requiredPermissions={["reports.read"]}><ReportsPage /></ProtectedRoute>} />
       <Route path="/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
       {import.meta.env.DEV ? (
         <Route path="/design-preview" element={<DashboardPage />} />

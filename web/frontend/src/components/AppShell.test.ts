@@ -48,4 +48,11 @@ describe("permission-aware navigation", () => {
     expect(items.map((item) => item.label)).toEqual(["لوحة التشغيل", "المرتجعات"]);
     expect(items[1]?.to).toBe("/returns");
   });
+
+  it("links report readers to the reports and A4 workspace", () => {
+    const items = visibleNavigationItems(["reports.read"]);
+
+    expect(items.map((item) => item.label)).toEqual(["لوحة التشغيل", "التقارير"]);
+    expect(items[1]?.to).toBe("/reports");
+  });
 });

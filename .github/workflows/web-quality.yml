@@ -47,7 +47,7 @@ jobs:
       - run: ruff check app tests migrations
       - run: mypy app
       - run: alembic upgrade head
-      - run: pytest --cov=app.domain --cov=app.modules.identity --cov=app.modules.master_data --cov=app.modules.inventory --cov=app.modules.purchasing --cov=app.modules.sales --cov=app.modules.treasury --cov=app.modules.manufacturing --cov=app.modules.returns --cov=app.api.routes.master_data --cov=app.api.routes.inventory --cov=app.api.routes.purchasing --cov=app.api.routes.sales --cov=app.api.routes.treasury --cov=app.api.routes.manufacturing --cov=app.api.routes.returns --cov-report=term-missing --cov-fail-under=80
+      - run: pytest --cov=app.domain --cov=app.modules.identity --cov=app.modules.master_data --cov=app.modules.inventory --cov=app.modules.purchasing --cov=app.modules.sales --cov=app.modules.treasury --cov=app.modules.manufacturing --cov=app.modules.returns --cov=app.modules.reports --cov=app.api.routes.master_data --cov=app.api.routes.inventory --cov=app.api.routes.purchasing --cov=app.api.routes.sales --cov=app.api.routes.treasury --cov=app.api.routes.manufacturing --cov=app.api.routes.returns --cov=app.api.routes.reports --cov-report=term-missing --cov-fail-under=80
       - run: pip-audit
 
   frontend:

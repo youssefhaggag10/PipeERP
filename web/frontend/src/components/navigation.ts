@@ -38,7 +38,7 @@ const navigation: NavigationItem[] = [
     to: "/partners",
     permission: "partners.read",
   },
-  { label: "التقارير", icon: BarChart3, permission: "reports.read" },
+  { label: "التقارير", icon: BarChart3, to: "/reports", permission: "reports.read" },
 ];
 
 export function visibleNavigationItems(permissions: readonly Permission[]): NavigationItem[] {
