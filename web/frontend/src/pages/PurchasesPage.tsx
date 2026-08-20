@@ -22,9 +22,10 @@ import { api, ApiError } from "../lib/api";
 
 type CostBasis = "quantity" | "weight";
 type OrderStatus = "draft" | "approved" | "partially_received" | "received" | "cancelled";
+type PaymentMethod = "cash" | "bank_transfer" | "cheque" | "wallet";
 
-type Option = { id: string; code: string; name_ar: string };
-type PurchaseOptions = { suppliers: Option[]; warehouses: Option[]; products: Option[] };
+type Option = { id: string; code: string; name_ar: string; account_type: string };
+type PurchaseOptions = { suppliers: Option[]; warehouses: Option[]; products: Option[]; financial_accounts: Option[] };
 
 type OrderLine = {
   id: string;
@@ -124,11 +125,15 @@ export function PurchasesPage() {
   const { user } = useAuth();
   const canManage = user?.permissions.includes("purchases.manage") ?? false;
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
-  const [options, setOptions] = useState<PurchaseOptions>({ suppliers: [], warehouses: [], products: [] });
+  const [options, setOptions] = useState<PurchaseOptions>({ suppliers: [], warehouses: [], products: [], financial_accounts: [] });
   const [selectedId, setSelectedId] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
   const [notes, setNotes] = useState("");
+  const [advanceEnabled, setAdvanceEnabled] = useState(false);
+  const [advanceAmount, setAdvanceAmount] = useState("");
+  const [advanceMethod, setAdvanceMethod] = useState<PaymentMethod>("cash");
+  const [advanceAccountId, setAdvanceAccountId] = useState("");
   const [draftLines, setDraftLines] = useState<DraftLine[]>([newDraftLine()]);
   const [receiptDrafts, setReceiptDrafts] = useState<Record<string, ReceiptDraft>>({});
   const [receipts, setReceipts] = useState<PurchaseReceipt[]>([]);
@@ -154,6 +159,7 @@ export function PurchasesPage() {
       setSelectedId((current) => current || orderRows[0]?.id || "");
       setSupplierId((current) => current || optionRows.suppliers[0]?.id || "");
       setWarehouseId((current) => current || optionRows.warehouses[0]?.id || "");
+      setAdvanceAccountId((current) => current || optionRows.financial_accounts.find((item) => item.account_type === "cash")?.id || "");
       setDraftLines((current) => current.map((line) => ({
         ...line,
         product_id: line.product_id || optionRows.products[0]?.id || "",
@@ -165,9 +171,18 @@ export function PurchasesPage() {
     }
   }, []);
 
+  const advanceAccountType = { cash: "cash", bank_transfer: "bank", cheque: "bank", wallet: "wallet" }[advanceMethod];
+  const advanceAccounts = useMemo(() => options.financial_accounts.filter((item) => item.account_type === advanceAccountType), [advanceAccountType, options.financial_accounts]);
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!advanceAccounts.some((item) => item.id === advanceAccountId)) {
+      setAdvanceAccountId(advanceAccounts[0]?.id || "");
+    }
+  }, [advanceAccountId, advanceAccounts]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -205,6 +220,9 @@ export function PurchasesPage() {
           supplier_id: supplierId,
           warehouse_id: warehouseId,
           notes,
+          advance_amount: advanceEnabled ? advanceAmount : "0",
+          advance_payment_method: advanceMethod,
+          advance_financial_account_id: advanceEnabled ? advanceAccountId : null,
           lines: draftLines.map((line) => ({
             product_id: line.product_id,
             cost_basis: line.cost_basis,
@@ -216,6 +234,8 @@ export function PurchasesPage() {
         }),
       });
       setNotes("");
+      setAdvanceEnabled(false);
+      setAdvanceAmount("");
       setDraftLines([{ ...newDraftLine(), product_id: options.products[0]?.id || "" }]);
       setNotice(`تم إنشاء أمر الشراء ${created.order_number} كمسودة جاهزة للمراجعة.`);
       setSelectedId(created.id);
@@ -397,8 +417,9 @@ export function PurchasesPage() {
               <div className="form-pair"><label>سعر الوحدة<input type="number" min="0" step="0.01" value={line.unit_price} onChange={(event) => updateDraftLine(line.key, { unit_price: event.target.value })} required /></label><label>تكلفة إضافية<input type="number" min="0" step="0.01" value={line.additional_unit_cost} onChange={(event) => updateDraftLine(line.key, { additional_unit_cost: event.target.value })} /></label></div>
               {draftLines.length > 1 ? <button type="button" className="mini-action purchase-line-delete" aria-label="حذف البند" onClick={() => setDraftLines((current) => current.filter((item) => item.key !== line.key))}><Trash2 size={15} /></button> : null}
             </div>)}</div>
+            <fieldset className="advance-inline"><legend>الدفعة المقدمة</legend><label className="check-row"><input type="checkbox" checked={advanceEnabled} onChange={(event) => setAdvanceEnabled(event.target.checked)}/> سداد دفعة للمورد مع إنشاء الأمر</label>{advanceEnabled ? <><div className="form-pair"><label>المبلغ<input type="number" min="0.01" step="0.01" value={advanceAmount} onChange={(event) => setAdvanceAmount(event.target.value)} required/></label><label>الطريقة<select value={advanceMethod} onChange={(event) => setAdvanceMethod(event.target.value as PaymentMethod)}><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="cheque">شيك</option><option value="wallet">محفظة</option></select></label></div><label>الحساب المالي<select value={advanceAccountId} onChange={(event) => setAdvanceAccountId(event.target.value)} required>{advanceAccounts.map((item) => <option key={item.id} value={item.id}>{item.name_ar}</option>)}</select></label></> : null}</fieldset>
             <label>ملاحظات<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="شروط التوريد أو ملاحظات داخلية..." /></label>
-            <button className="primary-button" disabled={submitting}><FilePlus2 size={17} /> حفظ أمر الشراء كمسودة</button>
+            <button className="primary-button" disabled={submitting || (advanceEnabled && !advanceAccountId)}><FilePlus2 size={17} /> حفظ أمر الشراء كمسودة</button>
           </form> : <div className="setup-note"><PackageCheck size={20} /><div><strong>أكمل البيانات الأساسية أولًا</strong><p>يلزم وجود مورد وصنف ومخزن نشط قبل إنشاء أمر شراء.</p></div></div>}
         </article> : null}
       </section>

@@ -31,6 +31,11 @@ from app.modules.purchasing.models import (  # noqa: E402
     PurchaseReceiptLine,
     SupplierInvoice,
 )
+from app.modules.treasury.models import (  # noqa: E402
+    FinancialAccount,
+    PaymentAllocation,
+    PaymentTransaction,
+)
 
 
 def _database() -> sessionmaker[Session]:
@@ -90,7 +95,18 @@ def _seed(factory: sessionmaker[Session]) -> tuple[str, str, str]:
             is_active=True,
             version=1,
         )
-        db.add_all([unit, warehouse, supplier])
+        cash = FinancialAccount(
+            code="CASH-PURCHASE",
+            normalized_code="CASH-PURCHASE",
+            name_ar="خزينة المشتريات",
+            account_type="cash",
+            opening_balance=Decimal("0"),
+            is_default=True,
+            is_active=True,
+            notes="",
+            version=1,
+        )
+        db.add_all([unit, warehouse, supplier, cash])
         db.flush()
         product = Product(
             code="RM-001",
@@ -135,6 +151,7 @@ def _seed(factory: sessionmaker[Session]) -> tuple[str, str, str]:
                     ("purchase_order", "PO-"),
                     ("purchase_receipt", "PR-"),
                     ("purchase_invoice", "PI-"),
+                    ("supplier_payment", "SP-"),
                 )
             ]
         )
@@ -157,6 +174,73 @@ def _headers(test_client: TestClient, key: str | None = None) -> dict[str, str]:
     if key is not None:
         result["Idempotency-Key"] = key
     return result
+
+
+def test_purchase_order_advance_is_attached_to_supplier_invoice() -> None:
+    factory = _database()
+    product_id, warehouse_id, supplier_id = _seed(factory)
+    with factory() as db:
+        cash_id = db.scalar(
+            select(FinancialAccount.id).where(FinancialAccount.code == "CASH-PURCHASE")
+        )
+        assert cash_id is not None
+
+    with _client(factory) as test_client:
+        _login(test_client)
+        created = test_client.post(
+            "/api/v1/purchases/orders",
+            headers=_headers(test_client),
+            json={
+                "supplier_id": supplier_id,
+                "warehouse_id": warehouse_id,
+                "advance_amount": "75",
+                "advance_payment_method": "cash",
+                "advance_financial_account_id": str(cash_id),
+                "lines": [
+                    {
+                        "product_id": product_id,
+                        "cost_basis": "quantity",
+                        "ordered_quantity": "10",
+                        "ordered_weight_kg": "5",
+                        "unit_price": "20",
+                        "additional_unit_cost": "0",
+                    }
+                ],
+            },
+        )
+        assert created.status_code == 201, created.text
+        order = created.json()
+        approved = test_client.post(
+            f"/api/v1/purchases/orders/{order['id']}/approval",
+            headers=_headers(test_client),
+            json={"version": order["version"]},
+        )
+        assert approved.status_code == 200, approved.text
+        invoice = test_client.post(
+            f"/api/v1/purchases/orders/{order['id']}/supplier-invoice",
+            headers=_headers(test_client),
+            json={"supplier_invoice_number": "SUP-ADV-1"},
+        )
+        assert invoice.status_code == 201, invoice.text
+
+    with factory() as db:
+        payment = db.scalar(
+            select(PaymentTransaction).where(
+                PaymentTransaction.reference_type == "purchase",
+                PaymentTransaction.reference_id == UUID(order["id"]),
+            )
+        )
+        assert payment is not None
+        assert payment.amount == Decimal("75.00")
+        assert payment.supplier_invoice_id == UUID(invoice.json()["id"])
+        allocation = db.scalar(
+            select(PaymentAllocation).where(
+                PaymentAllocation.payment_transaction_id == payment.id
+            )
+        )
+        assert allocation is not None
+        assert allocation.amount == Decimal("75.00")
+    app.dependency_overrides.clear()
 
 
 def test_purchase_order_partial_receipts_loss_costing_and_supplier_invoice() -> None:

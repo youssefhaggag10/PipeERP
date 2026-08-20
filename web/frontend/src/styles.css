@@ -448,6 +448,49 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .quotation-card > strong { font-size: 12px; }
 .quote-draft-line { padding: 14px; display: grid; gap: 10px; border: 1px solid #dce5e9; border-radius: 12px; background: #f7fafb; }
 
+.treasury-heading { background: linear-gradient(118deg,#10283e 0%,#19445a 60%,#72521c 145%); }
+.treasury-tabs { margin-bottom: 2px; }
+.treasury-layout { grid-template-columns: minmax(0,1.3fr) minmax(420px,.7fr); }
+.treasury-form-card { overflow: visible; }
+.treasury-payment-form { max-height: calc(100vh - 150px); overflow-y: auto; scrollbar-color: #a9c7c1 transparent; scrollbar-width: thin; }
+.treasury-table td small { display: block; margin-top: 4px; color: var(--muted); font-size: 8px; }
+.treasury-link-modes { padding: 12px; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; border: 1px solid #dbe4e8; border-radius: 10px; background: #f6f9fa; }
+.treasury-link-modes legend { padding: 0 7px; color: #526778; font-size: 9px; font-weight: 850; }
+.treasury-link-modes label { min-height: 37px; padding: 0 9px; display: flex; align-items: center; gap: 7px; border: 1px solid #dde6e9; border-radius: 8px; background: #fff; }
+.treasury-link-modes input { width: auto; min-height: auto; accent-color: var(--accent); }
+.allocation-list { max-height: 230px; padding: 7px; display: grid; gap: 7px; overflow-y: auto; border: 1px solid #dbe4e8; border-radius: 10px; background: #f6f9fa; }
+.allocation-list label { padding: 9px; display: grid; grid-template-columns: 1fr 120px; align-items: center; gap: 10px; border: 1px solid #e1e8eb; border-radius: 8px; background: #fff; }
+.allocation-list strong, .allocation-list small { display: block; }
+.allocation-list small { margin-top: 3px; color: var(--muted); font-size: 8px; }
+.treasury-account-cards { padding: 14px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 11px; }
+.treasury-account-card { min-width: 0; padding: 15px; display: grid; grid-template-columns: 40px minmax(0,1fr) auto; align-items: center; gap: 11px; border: 1px solid #dbe5e9; border-radius: 13px; background: linear-gradient(145deg,#fff,#f7fafb); }
+.treasury-account-card--inactive { opacity: .58; }
+.treasury-account-card > span { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 11px; color: #9b6715; background: #fff2d8; }
+.treasury-account-card strong, .treasury-account-card small { display: block; }
+.treasury-account-card strong { font-size: 11px; }
+.treasury-account-card small { margin-top: 4px; color: var(--muted); font-size: 8px; }
+.treasury-account-card > b { color: var(--navy-900); font-size: 13px; white-space: nowrap; }
+.treasury-account-card > div:last-child { grid-column: 2 / -1; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.treasury-account-card em { padding: 4px 7px; border-radius: 999px; color: #087060; background: #e5f6f1; font-size: 8px; font-style: normal; font-weight: 850; }
+.treasury-actions-grid { margin-top: 16px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+.treasury-transfer-history { margin-top: 16px; }
+.partner-balance-toolbar { display: flex; justify-content: flex-end; }
+.treasury-partner-grid { margin-top: 16px; display: grid; grid-template-columns: minmax(0,1.45fr) minmax(380px,.55fr); gap: 16px; align-items: start; }
+.treasury-side-actions { display: grid; gap: 16px; }
+.statement-result { border-top: 1px solid #e3eaed; }
+.statement-result > header { padding: 14px 18px; display: flex; justify-content: space-between; gap: 12px; background: #f3f8f7; }
+.statement-result > header strong { font-size: 11px; }
+.statement-result > header span { color: var(--muted); font-size: 9px; }
+.compact-history { padding: 0 16px 14px; }
+.compact-history > div { min-height: 54px; display: grid; grid-template-columns: minmax(0,1fr) auto 32px; align-items: center; gap: 9px; border-top: 1px solid #e8eef1; }
+.compact-history strong, .compact-history small { display: block; }
+.compact-history strong { font-size: 10px; }
+.compact-history small { margin-top: 3px; color: var(--muted); font-size: 8px; }
+.compact-history b { font-size: 10px; }
+.advance-inline { margin: 0; padding: 13px; display: grid; gap: 11px; border: 1px solid #d8e5df; border-radius: 12px; background: linear-gradient(145deg,#f5fbf8,#fff); }
+.advance-inline legend { padding: 0 7px; color: #087060; font-size: 9px; font-weight: 900; }
+.advance-inline > .check-row { background: #fff; }
+
 @media (max-width: 1100px) {
   .app-shell { grid-template-columns: 82px minmax(0,1fr); }
   .sidebar__head { padding-inline: 20px; }
@@ -467,6 +510,9 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .sales-layout { grid-template-columns: 1fr; }
   .sales-create-card { position: static; }
   .sales-form { max-height: none; }
+  .treasury-layout, .treasury-partner-grid { grid-template-columns: 1fr; }
+  .treasury-form-card { position: static; }
+  .treasury-payment-form { max-height: none; }
 }
 
 @media (max-width: 760px) {
@@ -519,6 +565,9 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .invoice-chip > strong, .quotation-card > strong { grid-column: 2; }
   .sales-reversal { grid-template-columns: auto 1fr; }
   .sales-reversal input, .sales-reversal button { grid-column: 1 / -1; }
+  .treasury-account-cards, .treasury-actions-grid, .treasury-link-modes { grid-template-columns: 1fr; }
+  .allocation-list label { grid-template-columns: 1fr; }
+  .statement-result > header { align-items: flex-start; flex-direction: column; }
 }
 
 @media (prefers-reduced-motion: reduce) {

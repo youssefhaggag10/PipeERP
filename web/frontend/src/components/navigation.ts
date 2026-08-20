@@ -29,7 +29,7 @@ const navigation: NavigationItem[] = [
   { label: "المشتريات", icon: PackageCheck, to: "/purchases", permission: "purchases.read" },
   { label: "المخزون", icon: Boxes, to: "/inventory", permission: "inventory.read" },
   { label: "التصنيع", icon: Factory, permission: "manufacturing.read" },
-  { label: "الحسابات", icon: CircleDollarSign, permission: "accounts.read" },
+  { label: "الحسابات", icon: CircleDollarSign, to: "/accounts", permission: "accounts.read" },
   {
     label: "العملاء والموردون",
     icon: UsersRound,

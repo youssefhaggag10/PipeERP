@@ -29,4 +29,9 @@ describe("permission-aware navigation", () => {
     expect(piece.map((item) => item.to)).toEqual(["/", "/sales"]);
     expect(weight.map((item) => item.to)).toEqual(["/", "/weight-sales"]);
   });
+
+  it("links authorized accountants to the treasury workspace", () => {
+    const items = visibleNavigationItems(["accounts.read"]);
+    expect(items.find((item) => item.label === "الحسابات")?.to).toBe("/accounts");
+  });
 });

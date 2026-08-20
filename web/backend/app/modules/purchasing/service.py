@@ -39,6 +39,7 @@ from app.modules.purchasing.schemas import (
     ReversePurchaseReceiptRequest,
     SupplierInvoiceView,
 )
+from app.modules.treasury.models import FinancialAccount
 
 
 class PurchasingError(Exception):
@@ -143,6 +144,13 @@ def purchase_options(db: Session) -> PurchaseOptionsView:
             .order_by(Product.name_ar)
         )
     )
+    financial_accounts = list(
+        db.scalars(
+            select(FinancialAccount)
+            .where(FinancialAccount.is_active.is_(True))
+            .order_by(FinancialAccount.is_default.desc(), FinancialAccount.name_ar)
+        )
+    )
     return PurchaseOptionsView(
         suppliers=[
             PurchaseOption(id=item.id, code=item.code, name_ar=item.name_ar) for item in suppliers
@@ -153,6 +161,50 @@ def purchase_options(db: Session) -> PurchaseOptionsView:
         products=[
             PurchaseOption(id=item.id, code=item.code, name_ar=item.name_ar) for item in products
         ],
+        financial_accounts=[
+            PurchaseOption(
+                id=item.id,
+                code=item.code,
+                name_ar=item.name_ar,
+                account_type=item.account_type,
+            )
+            for item in financial_accounts
+        ],
+    )
+
+
+def _post_purchase_advance(
+    db: Session,
+    *,
+    order: PurchaseOrder,
+    payload: CreatePurchaseOrderRequest,
+    actor: Principal,
+    client: ClientContext,
+) -> None:
+    if payload.advance_amount <= 0:
+        return
+    if payload.advance_amount > order.total:
+        raise PurchasingConflict("الدفعة المقدمة أكبر من إجمالي أمر الشراء")
+    if payload.advance_financial_account_id is None:
+        raise PurchasingConflict("اختر حساب الخزينة أو البنك للدفعة المقدمة")
+    from app.modules.treasury.schemas import PostPaymentRequest
+    from app.modules.treasury.service import post_payment
+
+    post_payment(
+        db,
+        payload=PostPaymentRequest(
+            transaction_type="supplier_payment",
+            partner_id=order.supplier_id,
+            financial_account_id=payload.advance_financial_account_id,
+            amount=payload.advance_amount,
+            payment_method=payload.advance_payment_method,
+            reference_type="purchase",
+            reference_id=order.id,
+            notes=f"دفعة مقدمة عند إنشاء أمر الشراء {order.order_number}",
+        ),
+        idempotency_key=f"purchase-order-advance-{order.id}",
+        actor=actor,
+        client=client,
     )
 
 
@@ -218,6 +270,7 @@ def create_purchase_order(
         )
     order.total = money(total)
     db.flush()
+    _post_purchase_advance(db, order=order, payload=payload, actor=actor, client=client)
     add_audit(
         db,
         actor_user_id=actor.user.id,
@@ -498,6 +551,14 @@ def create_supplier_invoice(
     )
     db.add(invoice)
     db.flush()
+    from app.modules.treasury.service import apply_order_advances_to_invoice
+
+    apply_order_advances_to_invoice(
+        db,
+        reference_type="purchase",
+        reference_id=order.id,
+        invoice=invoice,
+    )
     add_audit(
         db,
         actor_user_id=actor.user.id,

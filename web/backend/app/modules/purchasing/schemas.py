@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.modules.inventory.schemas import CostBasis
 
 PurchaseOrderStatus = Literal["draft", "approved", "partially_received", "received", "cancelled"]
+PaymentMethod = Literal["cash", "bank_transfer", "cheque", "wallet"]
 
 
 class PurchasingView(BaseModel):
@@ -34,6 +35,9 @@ class CreatePurchaseOrderRequest(BaseModel):
     supplier_id: UUID
     warehouse_id: UUID
     notes: str = Field(default="", max_length=2000)
+    advance_amount: Decimal = Field(default=Decimal("0"), ge=0, decimal_places=2)
+    advance_payment_method: PaymentMethod = "cash"
+    advance_financial_account_id: UUID | None = None
     lines: list[CreatePurchaseOrderLineRequest] = Field(min_length=1, max_length=100)
 
     @model_validator(mode="after")
@@ -41,6 +45,8 @@ class CreatePurchaseOrderRequest(BaseModel):
         product_ids = [line.product_id for line in self.lines]
         if len(product_ids) != len(set(product_ids)):
             raise ValueError("لا يمكن تكرار المنتج داخل أمر الشراء نفسه")
+        if self.advance_amount > 0 and self.advance_financial_account_id is None:
+            raise ValueError("اختر حساب الخزينة أو البنك للدفعة المقدمة")
         return self
 
 
@@ -162,9 +168,11 @@ class PurchaseOption(PurchasingView):
     id: UUID
     code: str
     name_ar: str
+    account_type: str = ""
 
 
 class PurchaseOptionsView(BaseModel):
     suppliers: list[PurchaseOption]
     warehouses: list[PurchaseOption]
     products: list[PurchaseOption]
+    financial_accounts: list[PurchaseOption]

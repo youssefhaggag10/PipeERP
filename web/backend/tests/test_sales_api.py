@@ -30,6 +30,11 @@ from app.modules.sales.models import (  # noqa: E402
     SalesOrder,
     SalesQuotation,
 )
+from app.modules.treasury.models import (  # noqa: E402
+    FinancialAccount,
+    PaymentAllocation,
+    PaymentTransaction,
+)
 
 ADMIN_PASSWORD = f"Admin-test-7!{token_urlsafe(18)}"
 PIECE_CLERK_PASSWORD = f"Piece-test-7!{token_urlsafe(18)}"
@@ -98,7 +103,18 @@ def _seed(
             is_active=True,
             version=1,
         )
-        db.add_all([unit, warehouse, customer])
+        cash = FinancialAccount(
+            code="CASH-SALES",
+            normalized_code="CASH-SALES",
+            name_ar="خزينة المبيعات",
+            account_type="cash",
+            opening_balance=Decimal("0"),
+            is_default=True,
+            is_active=True,
+            notes="",
+            version=1,
+        )
+        db.add_all([unit, warehouse, customer, cash])
         db.flush()
         product = Product(
             code="FG-090",
@@ -154,6 +170,7 @@ def _seed(
                     ("sales_invoice", "SI-"),
                     ("weight_card", "WC-"),
                     ("sales_quotation", "QT-"),
+                    ("customer_receipt", "CR-"),
                 )
             ]
         )
@@ -180,6 +197,81 @@ def _headers(client: TestClient, key: str | None = None) -> dict[str, str]:
     if key is not None:
         headers["Idempotency-Key"] = key
     return headers
+
+
+def test_sales_order_advance_posts_atomically_and_blocks_unsafe_reversal() -> None:
+    factory = _database()
+    product_id, warehouse_id, customer_id = _seed(factory)
+    with factory() as db:
+        cash_id = db.scalar(
+            select(FinancialAccount.id).where(FinancialAccount.code == "CASH-SALES")
+        )
+        assert cash_id is not None
+
+    with _client(factory) as client:
+        _login(client)
+        created = client.post(
+            "/api/v1/sales/orders",
+            headers=_headers(client),
+            json={
+                "customer_id": customer_id,
+                "warehouse_id": warehouse_id,
+                "advance_amount": "40",
+                "advance_payment_method": "cash",
+                "advance_financial_account_id": str(cash_id),
+                "lines": [
+                    {
+                        "product_id": product_id,
+                        "quantity": "2",
+                        "unit": "ماسورة",
+                        "unit_price": "30",
+                    }
+                ],
+            },
+        )
+        assert created.status_code == 201, created.text
+        order = created.json()
+
+        cancelled = client.post(
+            f"/api/v1/sales/orders/{order['id']}/cancellation",
+            headers=_headers(client),
+            json={"version": order["version"], "reason": "إلغاء للاختبار"},
+        )
+        assert cancelled.status_code == 409
+
+        delivered = client.post(
+            f"/api/v1/sales/orders/{order['id']}/delivery",
+            headers=_headers(client, "sales-advance-delivery"),
+            json={"version": order["version"]},
+        )
+        assert delivered.status_code == 200, delivered.text
+        delivery = delivered.json()["delivery"]
+
+        unsafe_reversal = client.post(
+            f"/api/v1/sales/deliveries/{delivery['id']}/reversal",
+            headers=_headers(client, "sales-advance-reversal"),
+            json={"reason": "محاولة عكس مع وجود تحصيل"},
+        )
+        assert unsafe_reversal.status_code == 409
+
+    with factory() as db:
+        payment = db.scalar(
+            select(PaymentTransaction).where(
+                PaymentTransaction.reference_type == "sale",
+                PaymentTransaction.reference_id == UUID(order["id"]),
+            )
+        )
+        assert payment is not None
+        assert payment.amount == Decimal("40.00")
+        assert payment.customer_invoice_id is not None
+        allocation = db.scalar(
+            select(PaymentAllocation).where(
+                PaymentAllocation.payment_transaction_id == payment.id
+            )
+        )
+        assert allocation is not None
+        assert allocation.amount == Decimal("40.00")
+    app.dependency_overrides.clear()
 
 
 def test_piece_sale_delivers_fifo_and_posts_invoice_once() -> None:

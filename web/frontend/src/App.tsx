@@ -11,6 +11,7 @@ import { ProductsPage } from "./pages/ProductsPage";
 import { PurchasesPage } from "./pages/PurchasesPage";
 import { SalesPage } from "./pages/SalesPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { TreasuryPage } from "./pages/TreasuryPage";
 
 export function App() {
   return (
@@ -25,6 +26,7 @@ export function App() {
       <Route path="/purchases" element={<ProtectedRoute requiredPermissions={["purchases.read"]}><PurchasesPage /></ProtectedRoute>} />
       <Route path="/sales" element={<ProtectedRoute requiredPermissions={["sales.read"]}><SalesPage /></ProtectedRoute>} />
       <Route path="/weight-sales" element={<ProtectedRoute requiredPermissions={["weight_sales.read"]}><SalesPage /></ProtectedRoute>} />
+      <Route path="/accounts" element={<ProtectedRoute requiredPermissions={["accounts.read"]}><TreasuryPage /></ProtectedRoute>} />
       <Route path="/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
       {import.meta.env.DEV ? (
         <Route path="/design-preview" element={<DashboardPage />} />
