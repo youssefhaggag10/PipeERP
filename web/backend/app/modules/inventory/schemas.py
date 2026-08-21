@@ -106,6 +106,26 @@ class TransactionView(InventoryView):
     posted_at: datetime
 
 
+class StockCardLineView(InventoryView):
+    id: UUID
+    transaction_id: UUID
+    product_id: UUID
+    warehouse_id: UUID
+    product_code: str
+    product_name_ar: str
+    warehouse_name_ar: str
+    lot_number: str
+    quantity_in: Decimal
+    quantity_out: Decimal
+    unit_cost: Decimal
+    total_cost: Decimal
+    reference_type: str
+    reference_number: str
+    partner_name_ar: str
+    notes: str
+    posted_at: datetime
+
+
 class TransferView(BaseModel):
     reference_id: str
     outbound: TransactionView

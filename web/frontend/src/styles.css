@@ -120,6 +120,9 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .page-heading__actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; flex-wrap: wrap; }
 .stock-card-filter { display: grid; gap: 7px; max-width: 420px; padding: 16px 18px 0; color: var(--muted); font-size: 9px; font-weight: 800; }
 .stock-card-filter select { min-height: 42px; padding: 0 11px; border: 1px solid #d7e2e6; border-radius: 10px; background: #fff; color: var(--ink); font: inherit; }
+.stock-card-table { min-width: 1120px; }
+.stock-card-table th:nth-child(3), .stock-card-table td:nth-child(3) { min-width: 170px; }
+.stock-card-table th:last-child, .stock-card-table td:last-child { min-width: 150px; }
 
 .metrics-grid { margin-top: 22px; display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 15px; }
 .metric-card { position: relative; overflow: hidden; min-width: 0; padding: 20px; border: 1px solid rgba(207,218,225,.9); border-radius: 16px; background: linear-gradient(145deg, #fff 0%, #f9fbfc 100%); box-shadow: var(--shadow-soft); display: grid; grid-template-columns: 1fr auto; transition: .18s ease; }
@@ -533,18 +536,26 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .allocation-list strong, .allocation-list small { display: block; }
 .allocation-list small { margin-top: 3px; color: var(--muted); font-size: 8px; }
 .treasury-account-cards { padding: 14px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 11px; }
-.treasury-account-card { min-width: 0; padding: 15px; display: grid; grid-template-columns: 40px minmax(0,1fr) auto; align-items: center; gap: 11px; border: 1px solid #dbe5e9; border-radius: 13px; background: linear-gradient(145deg,#fff,#f7fafb); }
+.treasury-account-card { min-width: 0; padding: 15px; display: grid; grid-template-columns: 40px minmax(0,1fr); align-items: start; gap: 10px 11px; border: 1px solid #dbe5e9; border-radius: 13px; background: linear-gradient(145deg,#fff,#f7fafb); }
 .treasury-account-card--inactive { opacity: .58; }
-.treasury-account-card > span { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 11px; color: #9b6715; background: #fff2d8; }
+.treasury-account-card > span { width: 40px; height: 40px; grid-row: 1 / span 2; display: grid; place-items: center; border-radius: 11px; color: #9b6715; background: #fff2d8; }
+.treasury-account-card > div:first-of-type { min-width: 0; grid-column: 2; }
 .treasury-account-card strong, .treasury-account-card small { display: block; }
 .treasury-account-card strong { font-size: 11px; }
 .treasury-account-card small { margin-top: 4px; color: var(--muted); font-size: 8px; }
-.treasury-account-card > b { color: var(--navy-900); font-size: 13px; white-space: nowrap; }
-.treasury-account-card > div:last-child { grid-column: 2 / -1; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.treasury-account-card > b { grid-column: 2; color: var(--navy-900); font-size: 13px; white-space: nowrap; }
+.treasury-account-card > div:last-child { min-height: 31px; grid-column: 1 / -1; display: flex; align-items: center; justify-content: flex-end; gap: 8px; border-top: 1px solid #e5ecef; padding-top: 9px; }
+.treasury-account-card > div:last-child em:first-child { margin-inline-end: auto; }
 .treasury-account-card em { padding: 4px 7px; border-radius: 999px; color: #087060; background: #e5f6f1; font-size: 8px; font-style: normal; font-weight: 850; }
 .treasury-actions-grid { margin-top: 16px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
 .treasury-transfer-history { margin-top: 16px; }
 .partner-balance-toolbar { display: flex; justify-content: flex-end; }
+.partner-balance-toolbar + .panel .data-table th:first-child,
+.partner-balance-toolbar + .panel .data-table td:first-child { min-width: 230px; white-space: normal; }
+.partner-balance-toolbar + .panel .data-table td:first-child strong,
+.partner-balance-toolbar + .panel .data-table td:first-child small { display: block; }
+.partner-balance-toolbar + .panel .data-table td:first-child strong { line-height: 1.55; }
+.partner-balance-toolbar + .panel .data-table td:first-child small { width: fit-content; margin-top: 5px; color: var(--muted); font-size: 9px; }
 .treasury-partner-grid { margin-top: 16px; display: grid; grid-template-columns: minmax(0,1.45fr) minmax(380px,.55fr); gap: 16px; align-items: start; }
 .treasury-side-actions { display: grid; gap: 16px; }
 .statement-result { border-top: 1px solid #e3eaed; }

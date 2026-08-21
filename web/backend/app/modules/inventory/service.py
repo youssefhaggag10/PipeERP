@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from hashlib import sha256
 from typing import cast
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -28,10 +28,11 @@ from app.modules.inventory.schemas import (
     LotBalanceView,
     ReceiptRequest,
     ReversalRequest,
+    StockCardLineView,
     TransactionView,
     TransferRequest,
 )
-from app.modules.master_data.models import Product, Warehouse
+from app.modules.master_data.models import Partner, Product, Warehouse
 
 
 class InventoryError(Exception):
@@ -1085,9 +1086,7 @@ def list_lot_balances(db: Session) -> list[LotBalanceView]:
                 weight_issued_kg=weight_received - weight_remaining,
                 weight_remaining_kg=weight_remaining,
                 average_cost=(
-                    inventory_value / basis_remaining
-                    if basis_remaining > 0
-                    else Decimal("0")
+                    inventory_value / basis_remaining if basis_remaining > 0 else Decimal("0")
                 ),
                 inventory_value=inventory_value,
             )
@@ -1135,6 +1134,225 @@ def list_transactions(db: Session, *, limit: int = 100) -> list[TransactionView]
         )
         for transaction, product_code, product_name_ar, warehouse_name_ar, lot_number in rows
     ]
+
+
+def _reference_context(
+    db: Session,
+    transaction: InventoryTransaction,
+    cache: dict[tuple[str, str], tuple[str, str]],
+) -> tuple[str, str]:
+    reference_id = transaction.reference_id or ""
+    key = (transaction.reference_type, reference_id)
+    if key in cache:
+        return cache[key]
+    if not reference_id:
+        cache[key] = ("", "")
+        return cache[key]
+    try:
+        reference_uuid = UUID(reference_id)
+    except ValueError:
+        cache[key] = (reference_id, "")
+        return cache[key]
+
+    result: tuple[str, str] | None = None
+    if transaction.reference_type in {"purchase_receipt", "purchase_receipt_reversal"}:
+        from app.modules.purchasing.models import PurchaseOrder, PurchaseReceipt
+
+        row = db.execute(
+            select(PurchaseReceipt.receipt_number, Partner.name_ar)
+            .join(PurchaseOrder, PurchaseOrder.id == PurchaseReceipt.purchase_order_id)
+            .join(Partner, Partner.id == PurchaseOrder.supplier_id)
+            .where(PurchaseReceipt.id == reference_uuid)
+        ).one_or_none()
+        result = (row[0], row[1]) if row else None
+    elif transaction.reference_type == "sales_delivery":
+        from app.modules.sales.models import SalesDelivery, SalesOrder
+
+        row = db.execute(
+            select(SalesDelivery.delivery_number, Partner.name_ar)
+            .join(SalesOrder, SalesOrder.id == SalesDelivery.sales_order_id)
+            .join(Partner, Partner.id == SalesOrder.customer_id)
+            .where(SalesDelivery.id == reference_uuid)
+        ).one_or_none()
+        result = (row[0], row[1]) if row else None
+    elif transaction.reference_type in {
+        "sales_return",
+        "purchase_return",
+        "sales_return_reversal",
+        "purchase_return_reversal",
+    }:
+        from app.modules.returns.models import InvoiceReturn
+
+        row = db.execute(
+            select(InvoiceReturn.return_number, Partner.name_ar)
+            .join(Partner, Partner.id == InvoiceReturn.partner_id)
+            .where(InvoiceReturn.id == reference_uuid)
+        ).one_or_none()
+        result = (row[0], row[1]) if row else None
+    elif transaction.reference_type.startswith("manufacturing_"):
+        from app.modules.manufacturing.models import ManufacturingOrder
+
+        number = db.scalar(
+            select(ManufacturingOrder.order_number).where(ManufacturingOrder.id == reference_uuid)
+        )
+        result = (number, "") if number else None
+    elif transaction.reference_type == "movement_reversal":
+        original = db.get(InventoryTransaction, reference_uuid)
+        if original is not None:
+            result = _reference_context(db, original, cache)
+
+    cache[key] = result if result is not None else (reference_id, "")
+    return cache[key]
+
+
+def list_stock_card(
+    db: Session,
+    *,
+    product_id: UUID | None = None,
+    limit: int = 500,
+) -> list[StockCardLineView]:
+    statement = (
+        select(InventoryTransaction, Product, Warehouse)
+        .join(Product, Product.id == InventoryTransaction.product_id)
+        .join(Warehouse, Warehouse.id == InventoryTransaction.warehouse_id)
+        .order_by(InventoryTransaction.posted_at.desc(), InventoryTransaction.id.desc())
+    )
+    if product_id is not None:
+        statement = statement.where(InventoryTransaction.product_id == product_id)
+    rows = db.execute(statement.limit(limit)).all()
+    transaction_ids = [transaction.id for transaction, _, _ in rows]
+    transfer_references = {
+        transaction.reference_id
+        for transaction, _, _ in rows
+        if transaction.transaction_type == "transfer_in" and transaction.reference_id
+    }
+    transfer_out_by_reference = {
+        transaction.reference_id: transaction.id
+        for transaction in db.scalars(
+            select(InventoryTransaction).where(
+                InventoryTransaction.transaction_type == "transfer_out",
+                InventoryTransaction.reference_id.in_(transfer_references),
+            )
+        )
+        if transaction.reference_id
+    }
+    allocation_transaction_ids = [
+        *transaction_ids,
+        *(
+            transaction_id
+            for transaction_id in transfer_out_by_reference.values()
+            if transaction_id not in transaction_ids
+        ),
+    ]
+    allocation_rows = (
+        db.execute(
+            select(InventoryAllocation, InventoryLayer, InventoryLot.lot_number)
+            .join(InventoryLayer, InventoryLayer.id == InventoryAllocation.source_layer_id)
+            .outerjoin(InventoryLot, InventoryLot.id == InventoryLayer.lot_id)
+            .where(InventoryAllocation.outbound_transaction_id.in_(allocation_transaction_ids))
+            .order_by(InventoryLayer.received_at, InventoryLayer.id)
+        ).all()
+        if allocation_transaction_ids
+        else []
+    )
+    allocations_by_transaction: dict[
+        UUID, list[tuple[InventoryAllocation, InventoryLayer, str | None]]
+    ] = {}
+    for allocation, layer, lot_number in allocation_rows:
+        allocations_by_transaction.setdefault(allocation.outbound_transaction_id, []).append(
+            (allocation, layer, lot_number)
+        )
+
+    reference_cache: dict[tuple[str, str], tuple[str, str]] = {}
+    result: list[StockCardLineView] = []
+    for transaction, product, warehouse in rows:
+        reference_number, partner_name = _reference_context(db, transaction, reference_cache)
+        allocations = allocations_by_transaction.get(transaction.id, [])
+        if transaction.transaction_type == "transfer_in" and transaction.reference_id:
+            source_transaction_id = transfer_out_by_reference.get(transaction.reference_id)
+            source_allocations = (
+                allocations_by_transaction.get(source_transaction_id, [])
+                if source_transaction_id
+                else []
+            )
+            if source_allocations:
+                for allocation, _layer, lot_number in source_allocations:
+                    result.append(
+                        StockCardLineView(
+                            id=uuid5(
+                                NAMESPACE_URL,
+                                f"pipeerp-stock-card:{transaction.id}:{allocation.id}",
+                            ),
+                            transaction_id=transaction.id,
+                            product_id=transaction.product_id,
+                            warehouse_id=transaction.warehouse_id,
+                            product_code=product.code,
+                            product_name_ar=product.name_ar,
+                            warehouse_name_ar=warehouse.name_ar,
+                            lot_number=lot_number or "",
+                            quantity_in=allocation.quantity,
+                            quantity_out=Decimal("0"),
+                            unit_cost=allocation.unit_cost,
+                            total_cost=allocation.total_cost,
+                            reference_type=transaction.reference_type,
+                            reference_number=reference_number,
+                            partner_name_ar=partner_name,
+                            notes=transaction.notes,
+                            posted_at=transaction.posted_at,
+                        )
+                    )
+                continue
+        if allocations:
+            for allocation, _layer, lot_number in allocations:
+                result.append(
+                    StockCardLineView(
+                        id=allocation.id,
+                        transaction_id=transaction.id,
+                        product_id=transaction.product_id,
+                        warehouse_id=transaction.warehouse_id,
+                        product_code=product.code,
+                        product_name_ar=product.name_ar,
+                        warehouse_name_ar=warehouse.name_ar,
+                        lot_number=lot_number or "",
+                        quantity_in=Decimal("0"),
+                        quantity_out=allocation.quantity,
+                        unit_cost=allocation.unit_cost,
+                        total_cost=allocation.total_cost,
+                        reference_type=transaction.reference_type,
+                        reference_number=reference_number,
+                        partner_name_ar=partner_name,
+                        notes=transaction.notes,
+                        posted_at=transaction.posted_at,
+                    )
+                )
+            continue
+        inbound = transaction.quantity_delta > 0 or transaction.weight_delta_kg > 0
+        lot_number = ""
+        if transaction.lot_id is not None:
+            lot = db.get(InventoryLot, transaction.lot_id)
+            lot_number = lot.lot_number if lot else ""
+        result.append(
+            StockCardLineView(
+                id=transaction.id,
+                transaction_id=transaction.id,
+                product_id=transaction.product_id,
+                warehouse_id=transaction.warehouse_id,
+                product_code=product.code,
+                product_name_ar=product.name_ar,
+                warehouse_name_ar=warehouse.name_ar,
+                lot_number=lot_number,
+                quantity_in=transaction.quantity_delta if inbound else Decimal("0"),
+                quantity_out=-transaction.quantity_delta if not inbound else Decimal("0"),
+                unit_cost=transaction.unit_cost,
+                total_cost=transaction.total_cost,
+                reference_type=transaction.reference_type,
+                reference_number=reference_number,
+                partner_name_ar=partner_name,
+                notes=transaction.notes,
+                posted_at=transaction.posted_at,
+            )
+        )
+    return result
 
 
 def transaction_view(db: Session, transaction: InventoryTransaction) -> TransactionView:

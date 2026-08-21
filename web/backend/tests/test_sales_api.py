@@ -265,9 +265,7 @@ def test_sales_order_advance_posts_atomically_and_blocks_unsafe_reversal() -> No
         assert payment.amount == Decimal("40.00")
         assert payment.customer_invoice_id is not None
         allocation = db.scalar(
-            select(PaymentAllocation).where(
-                PaymentAllocation.payment_transaction_id == payment.id
-            )
+            select(PaymentAllocation).where(PaymentAllocation.payment_transaction_id == payment.id)
         )
         assert allocation is not None
         assert allocation.amount == Decimal("40.00")
@@ -312,6 +310,15 @@ def test_piece_sale_delivers_fifo_and_posts_invoice_once() -> None:
         assert result["delivery"]["lines"][0]["quantity"] == "2.000000"
         assert result["delivery"]["lines"][0]["weight_kg"] == "20.000000"
         assert result["delivery"]["lines"][0]["cost_amount"] == "200.000000"
+
+        stock_card = client.get(f"/api/v1/inventory/stock-card?product_id={product_id}&limit=500")
+        assert stock_card.status_code == 200, stock_card.text
+        sale_rows = [row for row in stock_card.json() if row["reference_type"] == "sales_delivery"]
+        assert sale_rows
+        assert all(
+            row["reference_number"] == result["delivery"]["delivery_number"] for row in sale_rows
+        )
+        assert all(row["partner_name_ar"] == "عميل المبيعات" for row in sale_rows)
 
         replay = client.post(
             f"/api/v1/sales/orders/{order['id']}/delivery",

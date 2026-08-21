@@ -246,6 +246,17 @@ def test_receipt_issue_fifo_idempotency_and_negative_stock_protection() -> None:
         assert transfer.json()["inbound"]["quantity_delta"] == "2.000000"
         assert transfer.json()["outbound"]["total_cost"] == "10.000000"
         assert transfer.json()["inbound"]["total_cost"] == "10.000000"
+        transfer_card = test_client.get(
+            f"/api/v1/inventory/stock-card?product_id={product_id}&limit=500"
+        )
+        transfer_in_rows = [
+            row
+            for row in transfer_card.json()
+            if row["transaction_id"] == transfer.json()["inbound"]["id"]
+        ]
+        assert [
+            (row["lot_number"], row["quantity_in"], row["unit_cost"]) for row in transfer_in_rows
+        ] == [("LOT-001", "2.000000", "5.000000")]
 
         failed_transfer = test_client.post(
             "/api/v1/inventory/transfers",
@@ -326,4 +337,61 @@ def test_receipt_issue_fifo_idempotency_and_negative_stock_protection() -> None:
             "inventory.adjustment_in.post",
             "inventory.reversal_in.post",
         } <= events
+    app.dependency_overrides.clear()
+
+
+def test_stock_card_expands_fifo_issue_into_the_source_lots() -> None:
+    factory = database()
+    product_id, warehouse_id, _, _ = seed(factory)
+    with client(factory) as test_client:
+        login(test_client)
+        for index, (lot_number, quantity, unit_cost) in enumerate(
+            (("LOT-OLD", "5", "3"), ("LOT-NEW", "10", "7")), start=1
+        ):
+            response = test_client.post(
+                "/api/v1/inventory/receipts",
+                json={
+                    "product_id": product_id,
+                    "warehouse_id": warehouse_id,
+                    "quantity": quantity,
+                    "weight_kg": "0",
+                    "cost_basis": "quantity",
+                    "unit_cost": unit_cost,
+                    "lot_number": lot_number,
+                    "reference_type": "opening_balance",
+                    "reference_id": f"OB-{index}",
+                },
+                headers=headers(test_client, f"stock-card-receipt-{index}"),
+            )
+            assert response.status_code == 201, response.text
+
+        issue = test_client.post(
+            "/api/v1/inventory/issues",
+            json={
+                "product_id": product_id,
+                "warehouse_id": warehouse_id,
+                "amount": "8",
+                "cost_basis": "quantity",
+                "reference_type": "manual_issue",
+                "reference_id": "ISSUE-1",
+            },
+            headers=headers(test_client, "stock-card-issue-0001"),
+        )
+        assert issue.status_code == 201, issue.text
+
+        response = test_client.get(
+            f"/api/v1/inventory/stock-card?product_id={product_id}&limit=500"
+        )
+        assert response.status_code == 200, response.text
+        rows = response.json()
+        outbound = [row for row in rows if row["transaction_id"] == issue.json()["id"]]
+        assert [(row["lot_number"], row["quantity_out"], row["unit_cost"]) for row in outbound] == [
+            ("LOT-OLD", "5.000000", "3.000000"),
+            ("LOT-NEW", "3.000000", "7.000000"),
+        ]
+        assert all(row["product_code"] == "FG-INV" for row in outbound)
+        assert all(row["product_name_ar"] == "منتج مخزون" for row in outbound)
+        assert all(row["warehouse_name_ar"] == "المصنع" for row in outbound)
+        assert all(row["reference_number"] == "ISSUE-1" for row in outbound)
+        assert all(row["partner_name_ar"] == "" for row in outbound)
     app.dependency_overrides.clear()

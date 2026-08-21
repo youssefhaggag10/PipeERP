@@ -20,6 +20,7 @@ from app.modules.inventory.schemas import (
     LotBalanceView,
     ReceiptRequest,
     ReversalRequest,
+    StockCardLineView,
     TransactionView,
     TransferRequest,
     TransferView,
@@ -31,6 +32,7 @@ from app.modules.inventory.service import (
     inventory_options,
     list_balances,
     list_lot_balances,
+    list_stock_card,
     list_transactions,
     post_adjustment,
     post_issue,
@@ -91,6 +93,18 @@ def transactions(
 ) -> list[TransactionView]:
     enforce_permission(request, db, principal, PermissionCode.INVENTORY_READ)
     return list_transactions(db, limit=limit)
+
+
+@router.get("/stock-card", response_model=list[StockCardLineView])
+def stock_card(
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DatabaseSession,
+    product_id: UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+) -> list[StockCardLineView]:
+    enforce_permission(request, db, principal, PermissionCode.INVENTORY_READ)
+    return list_stock_card(db, product_id=product_id, limit=limit)
 
 
 @router.post("/receipts", response_model=TransactionView, status_code=status.HTTP_201_CREATED)
