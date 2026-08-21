@@ -13,12 +13,15 @@ import {
   Trash2,
   Truck,
   Undo2,
+  X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useLocation } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import { AppShell } from "../components/AppShell";
 import { api, ApiError } from "../lib/api";
+import { clientId } from "../lib/clientId";
 
 type CostBasis = "quantity" | "weight";
 type OrderStatus = "draft" | "approved" | "partially_received" | "received" | "cancelled";
@@ -57,6 +60,16 @@ type PurchaseOrder = {
   total: string;
   version: number;
   lines: OrderLine[];
+  supplier_invoice: SupplierInvoice | null;
+};
+
+type SupplierInvoice = {
+  id: string;
+  invoice_number: string;
+  supplier_invoice_number: string;
+  status: "draft" | "posted" | "reversed";
+  total: string;
+  version: number;
 };
 
 type DraftLine = {
@@ -107,7 +120,7 @@ const statusMeta: Record<OrderStatus, { label: string; className: string }> = {
 
 function newDraftLine(): DraftLine {
   return {
-    key: crypto.randomUUID(),
+    key: clientId(),
     product_id: "",
     cost_basis: "quantity",
     ordered_quantity: "",
@@ -118,12 +131,14 @@ function newDraftLine(): DraftLine {
 }
 
 function freshKey() {
-  return `purchase-${crypto.randomUUID()}`;
+  return clientId("purchase");
 }
 
 export function PurchasesPage() {
   const { user } = useAuth();
+  const location = useLocation();
   const canManage = user?.permissions.includes("purchases.manage") ?? false;
+  const requestedFocus = new URLSearchParams(location.search).get("focus");
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [options, setOptions] = useState<PurchaseOptions>({ suppliers: [], warehouses: [], products: [], financial_accounts: [] });
   const [selectedId, setSelectedId] = useState("");
@@ -140,11 +155,14 @@ export function PurchasesPage() {
   const [receiptNotes, setReceiptNotes] = useState("");
   const [reversalTargetId, setReversalTargetId] = useState("");
   const [reversalReason, setReversalReason] = useState("");
-  const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState("");
+  const [invoiceReversalReason, setInvoiceReversalReason] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [showCreate, setShowCreate] = useState(requestedFocus === "new");
+  const createRef = useRef<HTMLElement>(null);
+  const detailRef = useRef<HTMLElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -179,6 +197,15 @@ export function PurchasesPage() {
   }, [load]);
 
   useEffect(() => {
+    if (requestedFocus === "new") {
+      setShowCreate(true);
+      window.requestAnimationFrame(() => createRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    } else if (requestedFocus === "receipt") {
+      window.requestAnimationFrame(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
+  }, [requestedFocus]);
+
+  useEffect(() => {
     if (!advanceAccounts.some((item) => item.id === advanceAccountId)) {
       setAdvanceAccountId(advanceAccounts[0]?.id || "");
     }
@@ -206,6 +233,12 @@ export function PurchasesPage() {
 
   function updateDraftLine(key: string, patch: Partial<DraftLine>) {
     setDraftLines((current) => current.map((line) => line.key === key ? { ...line, ...patch } : line));
+  }
+
+  function selectOrder(orderId: string) {
+    setSelectedId(orderId);
+    setShowCreate(false);
+    window.requestAnimationFrame(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
 
   async function submitOrder(event: FormEvent) {
@@ -237,6 +270,7 @@ export function PurchasesPage() {
       setAdvanceEnabled(false);
       setAdvanceAmount("");
       setDraftLines([{ ...newDraftLine(), product_id: options.products[0]?.id || "" }]);
+      setShowCreate(false);
       setNotice(`تم إنشاء أمر الشراء ${created.order_number} كمسودة جاهزة للمراجعة.`);
       setSelectedId(created.id);
       await load();
@@ -324,10 +358,10 @@ export function PurchasesPage() {
     try {
       await api(`/purchases/orders/${selected.id}/supplier-invoice`, {
         method: "POST",
-        body: JSON.stringify({ supplier_invoice_number: supplierInvoiceNumber }),
+        body: JSON.stringify({}),
       });
-      setSupplierInvoiceNumber("");
       setNotice(`تم تسجيل فاتورة المورد المرتبطة بالأمر ${selected.order_number}.`);
+      await load();
     } catch (reason) {
       setError(reason instanceof ApiError ? reason.message : "تعذر تسجيل فاتورة المورد");
     } finally {
@@ -362,6 +396,26 @@ export function PurchasesPage() {
     }
   }
 
+  async function reverseSupplierInvoice(event: FormEvent) {
+    event.preventDefault();
+    if (!selected?.supplier_invoice) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await api(`/purchases/supplier-invoices/${selected.supplier_invoice.id}/reversal`, {
+        method: "POST",
+        body: JSON.stringify({ reason: invoiceReversalReason }),
+      });
+      setInvoiceReversalReason("");
+      setNotice("تم عكس فاتورة المورد، وأصبحت أي دفعات مرتبطة بها رصيدًا غير موزع للمورد.");
+      await load();
+    } catch (reason) {
+      setError(reason instanceof ApiError ? reason.message : "تعذر عكس فاتورة المورد");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const setupReady = options.suppliers.length > 0 && options.warehouses.length > 0 && options.products.length > 0;
 
   return (
@@ -372,9 +426,10 @@ export function PurchasesPage() {
           <h2>دورة الشراء والاستلام</h2>
           <p>أوامر متعددة البنود، استلامات جزئية، واحتساب دقيق للفاقد داخل تكلفة FIFO.</p>
         </div>
-        <button className="secondary-button" onClick={() => void load()} disabled={loading}>
-          <RefreshCw size={17} /> تحديث البيانات
-        </button>
+        <div className="page-heading__actions">
+          {canManage ? <button className="secondary-button" onClick={() => { setShowCreate(true); window.requestAnimationFrame(() => createRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })); }}><Plus size={17} /> أمر شراء جديد</button> : null}
+          <button className="secondary-button" onClick={() => void load()} disabled={loading}><RefreshCw size={17} /> تحديث البيانات</button>
+        </div>
       </section>
 
       {error ? <div className="alert alert--error" role="alert">{error}</div> : null}
@@ -392,7 +447,7 @@ export function PurchasesPage() {
           <header className="panel__head"><div><h3>أوامر الشراء</h3><p>اختر أمرًا لعرض تفاصيله وتنفيذ الخطوة التالية</p></div><span className="status-badge status-badge--active">{orders.length} أمر</span></header>
           {orders.length ? <div className="purchase-order-list">{orders.map((item) => {
             const meta = statusMeta[item.status];
-            return <button type="button" key={item.id} className={`purchase-order-card ${selectedId === item.id ? "purchase-order-card--selected" : ""}`} onClick={() => setSelectedId(item.id)}>
+            return <button type="button" key={item.id} className={`purchase-order-card ${selectedId === item.id ? "purchase-order-card--selected" : ""}`} onClick={() => selectOrder(item.id)}>
               <span className="purchase-order-card__icon"><PackageCheck size={19} /></span>
               <span><strong dir="ltr">{item.order_number}</strong><small>{item.supplier_name_ar} · {item.lines.length} بند</small></span>
               <span className={`purchase-status ${meta.className}`}>{meta.label}</span>
@@ -401,8 +456,8 @@ export function PurchasesPage() {
           })}</div> : <div className="empty-state"><span className="empty-state__icon"><PackageCheck size={27} /></span><h4>لا توجد أوامر شراء</h4><p>أنشئ أول أمر متعدد البنود لبدء دورة التوريد.</p></div>}
         </article>
 
-        {canManage ? <article className="panel master-form-card purchase-create-card">
-          <header className="panel__head"><div><h3>أمر شراء جديد</h3><p>احفظه كمسودة ثم راجعه قبل الاعتماد</p></div><FilePlus2 size={20} /></header>
+        {canManage && showCreate ? <article ref={createRef} className="panel master-form-card purchase-create-card">
+          <header className="panel__head"><div><h3>أمر شراء جديد</h3><p>احفظه كمسودة ثم راجعه قبل الاعتماد</p></div><button type="button" className="mini-action" aria-label="إغلاق نموذج الإنشاء" onClick={() => setShowCreate(false)}><X size={17} /></button></header>
           {setupReady ? <form className="compact-form purchase-form" onSubmit={submitOrder}>
             <div className="form-pair">
               <label>المورد<select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} required>{options.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name_ar} · {item.code}</option>)}</select></label>
@@ -424,13 +479,13 @@ export function PurchasesPage() {
         </article> : null}
       </section>
 
-      {selected ? <section className="panel purchase-detail">
+      {selected ? <section ref={detailRef} className="panel purchase-detail">
         <header className="panel__head"><div><h3>تفاصيل {selected.order_number}</h3><p>{selected.supplier_name_ar} · مخزن {selected.warehouse_name_ar} · {new Date(selected.order_date).toLocaleDateString("ar-EG")}</p></div><span className={`purchase-status ${statusMeta[selected.status].className}`}>{statusMeta[selected.status].label}</span></header>
-        <div className="data-table-wrap"><table className="data-table purchase-lines-table"><thead><tr><th>الصنف</th><th>الأساس</th><th>المطلوب</th><th>المستلم الإجمالي</th><th>نسبة التنفيذ</th><th>السعر + الإضافي</th><th>الإجمالي</th></tr></thead><tbody>{selected.lines.map((line) => {
+        <div className="data-table-wrap"><table className="data-table purchase-lines-table"><thead><tr><th>الصنف</th><th>الأساس</th><th>المطلوب</th><th>المستلم الإجمالي</th><th>نسبة التنفيذ</th><th>سعر المورد</th><th>تكلفة داخلية</th><th>مستحق المورد</th></tr></thead><tbody>{selected.lines.map((line) => {
           const ordered = Number(line.cost_basis === "quantity" ? line.ordered_quantity : line.ordered_weight_kg);
           const received = Number(line.cost_basis === "quantity" ? line.received_quantity : line.received_weight_kg);
           const progress = ordered ? Math.min(100, (received / ordered) * 100) : 0;
-          return <tr key={line.id}><td><strong>{line.product_name_ar}</strong><small dir="ltr">{line.product_code}</small></td><td>{line.cost_basis === "quantity" ? "كمية" : "وزن"}</td><td className="numeric-cell">{number.format(ordered)}</td><td className="numeric-cell">{number.format(received)}</td><td><div className="purchase-progress"><span style={{ width: `${progress}%` }} /><small>{number.format(progress)}%</small></div></td><td className="numeric-cell">{currency.format(Number(line.unit_price) + Number(line.additional_unit_cost))}</td><td className="numeric-cell"><strong>{currency.format(Number(line.line_total))}</strong></td></tr>;
+          return <tr key={line.id}><td><strong>{line.product_name_ar}</strong><small dir="ltr">{line.product_code}</small></td><td>{line.cost_basis === "quantity" ? "كمية" : "وزن"}</td><td className="numeric-cell">{number.format(ordered)}</td><td className="numeric-cell">{number.format(received)}</td><td><div className="purchase-progress"><span style={{ width: `${progress}%` }} /><small>{number.format(progress)}%</small></div></td><td className="numeric-cell">{currency.format(Number(line.unit_price))}</td><td className="numeric-cell">{currency.format(Number(line.additional_unit_cost))}</td><td className="numeric-cell"><strong>{currency.format(Number(line.line_total))}</strong></td></tr>;
         })}</tbody></table></div>
 
         {canManage ? <div className="purchase-actions-zone">
@@ -443,8 +498,9 @@ export function PurchasesPage() {
             })}</div>
             <div className="purchase-receipt-foot"><label>ملاحظات الاستلام<input value={receiptNotes} onChange={(event) => setReceiptNotes(event.target.value)} /></label><button className="primary-button" disabled={submitting}><ClipboardCheck size={17} /> ترحيل الاستلام</button></div>
           </form> : null}
-          {["approved", "partially_received", "received"].includes(selected.status) ? <form className="purchase-invoice-form" onSubmit={createInvoice}><span><ReceiptText size={20} /></span><div><strong>فاتورة المورد</strong><small>اربط رقم فاتورة المورد بقيمة الأمر المعتمدة</small></div><input value={supplierInvoiceNumber} onChange={(event) => setSupplierInvoiceNumber(event.target.value)} placeholder="رقم فاتورة المورد" required /><button className="secondary-button" disabled={submitting}><ReceiptText size={16} /> تسجيل الفاتورة</button></form> : null}
+          {selected.status === "received" && !selected.supplier_invoice ? <form className="purchase-invoice-form" onSubmit={createInvoice}><span><ReceiptText size={20} /></span><div><strong>فاتورة المورد</strong><small>تُنشأ بعد اكتمال الاستلام بقيمة المورد فقط؛ التكلفة الداخلية تبقى على المخزون.</small></div><button className="secondary-button" disabled={submitting}><ReceiptText size={16} /> إنشاء فاتورة المورد</button></form> : null}
         </div> : null}
+        {selected.supplier_invoice ? <><div className="invoice-chip"><ReceiptText size={18} /><span><strong>{selected.supplier_invoice.invoice_number}</strong><small>{selected.supplier_invoice.status === "posted" ? "فاتورة مورد مرحّلة" : "فاتورة مورد معكوسة"}</small></span><strong>{currency.format(Number(selected.supplier_invoice.total))} ج.م</strong></div>{canManage && selected.supplier_invoice.status === "posted" ? <form className="sales-reversal" onSubmit={reverseSupplierInvoice}><Undo2 size={18} /><input value={invoiceReversalReason} onChange={(event) => setInvoiceReversalReason(event.target.value)} minLength={3} placeholder="سبب عكس فاتورة المورد" required /><button className="secondary-button danger-button" disabled={submitting}>عكس فاتورة المورد</button></form> : null}</> : null}
         {receipts.length ? <div className="purchase-receipt-history">
           <header><div><strong>سندات الاستلام</strong><small>سجل غير قابل للتعديل لكل دفعة تم ترحيلها</small></div><span>{receipts.length} سند</span></header>
           {receipts.map((receipt) => <div className={`purchase-receipt-history__row ${receipt.status === "reversed" ? "purchase-receipt-history__row--reversed" : ""}`} key={receipt.id}>
@@ -457,7 +513,7 @@ export function PurchasesPage() {
           </div>)}
           {reversalTargetId ? <form className="purchase-reversal-bar" onSubmit={reverseReceipt}><Undo2 size={18} /><span><strong>عكس سند الاستلام</strong><small>لن يتم العكس إذا صُرف أي جزء من طبقة FIFO أو وُجدت فاتورة مورد مرحّلة.</small></span><input value={reversalReason} onChange={(event) => setReversalReason(event.target.value)} minLength={3} placeholder="سبب العكس بالتفصيل" required /><button className="danger-button secondary-button" disabled={submitting}><Undo2 size={15} /> تأكيد العكس</button><button type="button" className="secondary-button" onClick={() => setReversalTargetId("")}>إلغاء</button></form> : null}
         </div> : null}
-        <footer className="purchase-detail-total"><span><Scale size={18} /> التكلفة تشمل السعر والمصاريف الإضافية</span><strong>{currency.format(Number(selected.total))} ج.م</strong></footer>
+        <footer className="purchase-detail-total"><span><Scale size={18} /> مستحق المورد بسعر الشراء؛ المصاريف الداخلية تُحمّل على تكلفة المخزون عند الاستلام</span><strong>{currency.format(Number(selected.total))} ج.م</strong></footer>
       </section> : null}
     </AppShell>
   );

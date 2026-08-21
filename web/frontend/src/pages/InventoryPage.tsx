@@ -13,10 +13,12 @@ import {
   Warehouse,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useLocation } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import { AppShell } from "../components/AppShell";
 import { api, ApiError } from "../lib/api";
+import { clientId } from "../lib/clientId";
 
 type InventoryOption = {
   id: string;
@@ -50,6 +52,8 @@ type Transaction = {
   unit_cost: string;
   total_cost: string;
   reference_type: string;
+  reference_id: string | null;
+  lot_number: string;
   product_code: string;
   product_name_ar: string;
   warehouse_name_ar: string;
@@ -59,8 +63,28 @@ type Transaction = {
   posted_at: string;
 };
 
+type LotBalance = {
+  lot_id: string;
+  product_id: string;
+  warehouse_id: string;
+  product_code: string;
+  product_name_ar: string;
+  warehouse_name_ar: string;
+  lot_number: string;
+  received_at: string;
+  quantity_received: string;
+  quantity_issued: string;
+  quantity_remaining: string;
+  weight_received_kg: string;
+  weight_issued_kg: string;
+  weight_remaining_kg: string;
+  average_cost: string;
+  inventory_value: string;
+};
+
 type MovementType = "receipt" | "issue" | "transfer" | "adjustment";
 type CostBasis = "quantity" | "weight";
+type InventoryView = "balances" | "lots" | "stock-card";
 
 const numberFormat = new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 3 });
 const moneyFormat = new Intl.NumberFormat("ar-EG", {
@@ -73,7 +97,7 @@ function formatNumber(value: string | number) {
 }
 
 function freshKey() {
-  return `inventory-${crypto.randomUUID()}`;
+  return clientId("inventory");
 }
 
 const movementLabels: Record<string, string> = {
@@ -100,8 +124,11 @@ function canReverse(transaction: Transaction) {
 
 export function InventoryPage() {
   const { user } = useAuth();
+  const location = useLocation();
   const canManage = user?.permissions.includes("inventory.manage") ?? false;
+  const requestedView = new URLSearchParams(location.search).get("view");
   const [balances, setBalances] = useState<Balance[]>([]);
+  const [lotBalances, setLotBalances] = useState<LotBalance[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [options, setOptions] = useState<InventoryOptions>({ products: [], warehouses: [] });
   const [movementType, setMovementType] = useState<MovementType>("receipt");
@@ -121,20 +148,25 @@ export function InventoryPage() {
   const [notice, setNotice] = useState("");
   const [reversalTarget, setReversalTarget] = useState<Transaction | null>(null);
   const [reversalReason, setReversalReason] = useState("");
+  const [inventoryView, setInventoryView] = useState<InventoryView>(requestedView === "stock-card" ? "stock-card" : "balances");
+  const [stockCardProductId, setStockCardProductId] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [balanceRows, transactionRows, optionRows] = await Promise.all([
+      const [balanceRows, lotRows, transactionRows, optionRows] = await Promise.all([
         api<Balance[]>("/inventory/balances"),
-        api<Transaction[]>("/inventory/transactions?limit=100"),
+        api<LotBalance[]>("/inventory/lot-balances"),
+        api<Transaction[]>("/inventory/transactions?limit=500"),
         api<InventoryOptions>("/inventory/options"),
       ]);
       setBalances(balanceRows);
+      setLotBalances(lotRows);
       setTransactions(transactionRows);
       setOptions(optionRows);
       setProductId((current) => current || optionRows.products[0]?.id || "");
+      setStockCardProductId((current) => current || optionRows.products[0]?.id || "");
       setWarehouseId((current) => current || optionRows.warehouses[0]?.id || "");
       setDestinationWarehouseId((current) => {
         if (current && current !== (warehouseId || optionRows.warehouses[0]?.id)) return current;
@@ -151,6 +183,10 @@ export function InventoryPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (requestedView === "stock-card") setInventoryView("stock-card");
+  }, [requestedView]);
+
   const totals = useMemo(
     () => ({
       products: new Set(balances.filter((item) => Number(item.quantity_on_hand) || Number(item.weight_on_hand_kg)).map((item) => item.product_id)).size,
@@ -158,6 +194,10 @@ export function InventoryPage() {
       weight: balances.reduce((sum, item) => sum + Number(item.weight_on_hand_kg), 0),
     }),
     [balances],
+  );
+  const stockCardRows = useMemo(
+    () => transactions.filter((item) => !stockCardProductId || item.product_id === stockCardProductId),
+    [stockCardProductId, transactions],
   );
 
   function changeMovementType(value: MovementType) {
@@ -296,10 +336,16 @@ export function InventoryPage() {
         <article><span className="inventory-stat__icon inventory-stat__icon--violet"><Layers3 size={21} /></span><span><small>آخر الحركات</small><strong>{transactions.length}</strong></span></article>
       </section>
 
+      <div className="sales-tabs inventory-view-tabs" role="tablist" aria-label="تقارير المخزون">
+        <button className={inventoryView === "balances" ? "active" : ""} onClick={() => setInventoryView("balances")}><Boxes size={17} /> الأرصدة الحالية</button>
+        <button className={inventoryView === "lots" ? "active" : ""} onClick={() => setInventoryView("lots")}><Layers3 size={17} /> أرصدة التشغيلات</button>
+        <button className={inventoryView === "stock-card" ? "active" : ""} onClick={() => setInventoryView("stock-card")}><PackageSearch size={17} /> كارت الصنف</button>
+      </div>
+
       <section className={`master-layout inventory-layout ${canManage ? "" : "master-layout--single"}`}>
         <article className="panel">
-          <header className="panel__head"><div><h3>الأرصدة الحالية</h3><p>الرصيد المجمع حسب الصنف والمخزن</p></div><span className="status-badge status-badge--active">محدّث</span></header>
-          {balances.length ? (
+          <header className="panel__head"><div><h3>{inventoryView === "balances" ? "الأرصدة الحالية" : inventoryView === "lots" ? "أرصدة التشغيلات" : "كارت الصنف"}</h3><p>{inventoryView === "balances" ? "الرصيد المجمع حسب الصنف والمخزن" : inventoryView === "lots" ? "المتبقي والقيمة لكل تشغيلة وفق FIFO" : "كل حركات الصنف داخل وخارج بالمخزن والتشغيلة والمرجع"}</p></div><span className="status-badge status-badge--active">محدّث</span></header>
+          {inventoryView === "balances" && balances.length ? (
             <div className="data-table-wrap">
               <table className="data-table inventory-table">
                 <thead><tr><th>الصنف</th><th>المخزن</th><th>الكمية</th><th>الوزن</th><th>حالة الرصيد</th></tr></thead>
@@ -309,7 +355,7 @@ export function InventoryPage() {
                 })}</tbody>
               </table>
             </div>
-          ) : <div className="empty-state"><span className="empty-state__icon"><Boxes size={27} /></span><h4>لا توجد أرصدة حتى الآن</h4><p>رحّل أول حركة استلام لتكوين الرصيد وطبقة تكلفة FIFO.</p></div>}
+          ) : inventoryView === "lots" && lotBalances.length ? <div className="data-table-wrap"><table className="data-table inventory-table"><thead><tr><th>الصنف</th><th>المخزن</th><th>التشغيلة</th><th>تاريخ الاستلام</th><th>المستلم</th><th>المصروف</th><th>المتبقي</th><th>متوسط التكلفة</th><th>القيمة</th></tr></thead><tbody>{lotBalances.map((item) => <tr key={item.lot_id}><td><strong>{item.product_name_ar}</strong><small dir="ltr">{item.product_code}</small></td><td>{item.warehouse_name_ar}</td><td dir="ltr">{item.lot_number}</td><td>{new Date(item.received_at).toLocaleDateString("ar-EG")}</td><td className="numeric-cell">{formatNumber(item.quantity_received)} / {formatNumber(item.weight_received_kg)} كجم</td><td className="numeric-cell">{formatNumber(item.quantity_issued)} / {formatNumber(item.weight_issued_kg)} كجم</td><td className="numeric-cell"><strong>{formatNumber(item.quantity_remaining)} / {formatNumber(item.weight_remaining_kg)} كجم</strong></td><td className="numeric-cell">{moneyFormat.format(Number(item.average_cost))}</td><td className="numeric-cell"><strong>{moneyFormat.format(Number(item.inventory_value))}</strong></td></tr>)}</tbody></table></div> : inventoryView === "stock-card" ? <><label className="stock-card-filter">الصنف<select value={stockCardProductId} onChange={(event) => setStockCardProductId(event.target.value)}>{options.products.map((item) => <option key={item.id} value={item.id}>{item.name_ar} · {item.code}</option>)}</select></label>{stockCardRows.length ? <div className="data-table-wrap"><table className="data-table inventory-table"><thead><tr><th>التاريخ</th><th>المخزن</th><th>التشغيلة</th><th>داخل</th><th>خارج</th><th>الوزن</th><th>تكلفة الوحدة</th><th>القيمة</th><th>المرجع</th></tr></thead><tbody>{stockCardRows.map((item) => { const inbound = isInbound(item); return <tr key={item.id}><td>{new Intl.DateTimeFormat("ar-EG", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.posted_at))}</td><td>{item.warehouse_name_ar}</td><td dir="ltr">{item.lot_number || "—"}</td><td className="numeric-cell movement-positive">{inbound ? formatNumber(Math.max(0, Number(item.quantity_delta))) : "—"}</td><td className="numeric-cell movement-negative">{!inbound ? formatNumber(Math.abs(Number(item.quantity_delta))) : "—"}</td><td className="numeric-cell">{formatNumber(item.weight_delta_kg)} كجم</td><td className="numeric-cell">{moneyFormat.format(Number(item.unit_cost))}</td><td className="numeric-cell">{moneyFormat.format(Number(item.total_cost))}</td><td><strong>{movementLabels[item.transaction_type] ?? item.reference_type}</strong><small dir="ltr">{item.reference_id || "—"}</small></td></tr>; })}</tbody></table></div> : <div className="empty-state"><PackageSearch size={27} /><h4>لا توجد حركات لهذا الصنف</h4></div>}</> : <div className="empty-state"><span className="empty-state__icon"><Boxes size={27} /></span><h4>{inventoryView === "lots" ? "لا توجد تشغيلات حتى الآن" : "لا توجد أرصدة حتى الآن"}</h4><p>رحّل أول حركة استلام لتكوين الرصيد وطبقة تكلفة FIFO.</p></div>}
         </article>
 
         {canManage ? (
@@ -341,7 +387,7 @@ export function InventoryPage() {
       </section>
 
       <section className="panel inventory-history">
-        <header className="panel__head"><div><h3>سجل الحركات</h3><p>أحدث 100 حركة مع التكلفة والمرجع والتوقيت</p></div></header>
+        <header className="panel__head"><div><h3>سجل الحركات</h3><p>أحدث 500 حركة مع التكلفة والمرجع والتوقيت</p></div></header>
         {reversalTarget ? <form className="reversal-bar" onSubmit={submitReversal}><Undo2 size={20} /><div><strong>عكس حركة {movementLabels[reversalTarget.transaction_type] ?? reversalTarget.transaction_type}</strong><small>{reversalTarget.product_name_ar} · {reversalTarget.warehouse_name_ar}</small></div><input value={reversalReason} onChange={(event) => setReversalReason(event.target.value)} minLength={3} maxLength={500} placeholder="اكتب سبب العكس..." required /><button className="danger-button secondary-button" disabled={submitting}><Undo2 size={15} /> تأكيد العكس</button><button type="button" className="secondary-button" onClick={() => { setReversalTarget(null); setReversalReason(""); }}>إلغاء</button></form> : null}
         {transactions.length ? <div className="data-table-wrap"><table className="data-table inventory-table"><thead><tr><th>الحركة</th><th>الصنف</th><th>المخزن</th><th>الكمية</th><th>الوزن</th><th>التكلفة</th><th>التوقيت</th>{canManage ? <th>إجراء</th> : null}</tr></thead><tbody>{transactions.map((item) => { const inbound = isInbound(item); return <tr key={item.id}><td><span className={`movement-badge ${inbound ? "movement-badge--receipt" : "movement-badge--issue"}`}>{inbound ? <ArrowDownToLine size={13} /> : <ArrowUpFromLine size={13} />}{movementLabels[item.transaction_type] ?? item.transaction_type}</span>{item.reversal_of_id ? <small>حركة عكسية</small> : null}</td><td><strong>{item.product_name_ar}</strong><small dir="ltr">{item.product_code}</small></td><td>{item.warehouse_name_ar}</td><td className={`numeric-cell ${inbound ? "movement-positive" : "movement-negative"}`}>{formatNumber(item.quantity_delta)}</td><td className={`numeric-cell ${inbound ? "movement-positive" : "movement-negative"}`}>{formatNumber(item.weight_delta_kg)} كجم</td><td className="numeric-cell">{moneyFormat.format(Number(item.total_cost))}</td><td><time dateTime={item.posted_at}>{new Intl.DateTimeFormat("ar-EG", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.posted_at))}</time></td>{canManage ? <td>{canReverse(item) ? <button className="mini-action" onClick={() => { setReversalTarget(item); setReversalReason(""); }}><Undo2 size={14} /> عكس</button> : <span className="muted-action">—</span>}</td> : null}</tr>; })}</tbody></table></div> : <div className="empty-state"><span className="empty-state__icon"><Layers3 size={27} /></span><h4>سجل الحركات فارغ</h4><p>ستظهر هنا كل حركة استلام أو صرف فور ترحيلها.</p></div>}
       </section>

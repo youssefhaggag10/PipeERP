@@ -216,6 +216,22 @@ def test_purchase_order_advance_is_attached_to_supplier_invoice() -> None:
             json={"version": order["version"]},
         )
         assert approved.status_code == 200, approved.text
+        line_id = approved.json()["lines"][0]["id"]
+        received = test_client.post(
+            f"/api/v1/purchases/orders/{order['id']}/receipts",
+            headers=_headers(test_client, "purchase-advance-receipt"),
+            json={
+                "lines": [
+                    {
+                        "purchase_order_line_id": line_id,
+                        "gross_quantity": "10",
+                        "gross_weight_kg": "5",
+                    }
+                ]
+            },
+        )
+        assert received.status_code == 201, received.text
+        assert received.json()["lines"][0]["lot_number"].startswith("PR-000001-")
         invoice = test_client.post(
             f"/api/v1/purchases/orders/{order['id']}/supplier-invoice",
             headers=_headers(test_client),
@@ -240,6 +256,29 @@ def test_purchase_order_advance_is_attached_to_supplier_invoice() -> None:
         )
         assert allocation is not None
         assert allocation.amount == Decimal("75.00")
+
+    with _client(factory) as test_client:
+        _login(test_client)
+        reversed_invoice = test_client.post(
+            f"/api/v1/purchases/supplier-invoices/{invoice.json()['id']}/reversal",
+            headers=_headers(test_client),
+            json={"reason": "تصحيح فاتورة المورد"},
+        )
+        assert reversed_invoice.status_code == 200, reversed_invoice.text
+        assert reversed_invoice.json()["status"] == "reversed"
+        reversed_receipt = test_client.post(
+            f"/api/v1/purchases/receipts/{received.json()['id']}/reversal",
+            headers=_headers(test_client, "purchase-advance-reversal"),
+            json={"reason": "إلغاء الاستلام بعد عكس الفاتورة"},
+        )
+        assert reversed_receipt.status_code == 200, reversed_receipt.text
+
+    with factory() as db:
+        payment = db.scalar(select(PaymentTransaction))
+        assert payment is not None and payment.supplier_invoice_id is None
+        assert db.scalar(select(func.count(PaymentAllocation.id))) == 0
+        supplier_invoice = db.get(SupplierInvoice, UUID(invoice.json()["id"]))
+        assert supplier_invoice is not None and supplier_invoice.status == "reversed"
     app.dependency_overrides.clear()
 
 
@@ -271,7 +310,7 @@ def test_purchase_order_partial_receipts_loss_costing_and_supplier_invoice() -> 
         order = created.json()
         assert order["order_number"] == "PO-000001"
         assert order["status"] == "draft"
-        assert order["total"] == "34000.00"
+        assert order["total"] == "30000.00"
 
         approved = test_client.post(
             f"/api/v1/purchases/orders/{order['id']}/approval",
@@ -368,7 +407,7 @@ def test_purchase_order_partial_receipts_loss_costing_and_supplier_invoice() -> 
         )
         assert invoice.status_code == 201, invoice.text
         assert invoice.json()["invoice_number"] == "PI-000001"
-        assert invoice.json()["total"] == "34000.00"
+        assert invoice.json()["total"] == "30000.00"
 
     with factory() as db:
         order_row = db.scalar(select(PurchaseOrder))

@@ -1,5 +1,6 @@
 import re
 import unicodedata
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import select
@@ -292,8 +293,10 @@ def create_product(
         category_id=payload.category_id,
         min_stock=payload.min_stock,
         track_lots=payload.track_lots,
-        standard_weight_kg=payload.standard_weight_kg,
-        weight_tolerance_percent=payload.weight_tolerance_percent,
+        standard_weight_kg=(
+            payload.standard_weight_kg if payload.product_type == "finished_good" else Decimal("0")
+        ),
+        weight_tolerance_percent=Decimal("0"),
         is_active=True,
         version=1,
     )
@@ -350,6 +353,9 @@ def update_product(
         value = getattr(payload, field)
         if value is not None:
             setattr(product, field, value)
+    if product.product_type != "finished_good":
+        product.standard_weight_kg = Decimal("0")
+    product.weight_tolerance_percent = Decimal("0")
     product.version += 1
     db.flush()
     add_audit(

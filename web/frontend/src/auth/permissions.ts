@@ -4,6 +4,8 @@ export const permissionLabels = {
   "roles.read": "عرض الأدوار",
   "roles.manage": "إدارة الأدوار",
   "audit.read": "عرض سجل التدقيق",
+  "crm.read": "عرض متابعة العملاء",
+  "crm.manage": "إدارة متابعة العملاء",
   "products.read": "عرض المنتجات",
   "products.manage": "إدارة المنتجات",
   "partners.read": "عرض العملاء والموردين",

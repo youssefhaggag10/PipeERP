@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   ChevronLeft,
   Menu,
@@ -17,8 +17,17 @@ import { visibleNavigationItems } from "./navigation";
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [searchNotice, setSearchNotice] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
   const visibleNavigation = visibleNavigationItems(user?.permissions ?? []);
+  const searchTargets = [
+    ...visibleNavigation.filter((item) => item.to).map((item) => ({ label: item.label, to: item.to! })),
+    ...(user?.permissions.includes("users.read") ? [{ label: "المستخدمون والصلاحيات", to: "/identity" }] : []),
+    ...(user?.permissions.includes("settings.read") ? [{ label: "الإعدادات", to: "/settings" }] : []),
+  ];
   const today = new Intl.DateTimeFormat("ar-EG", {
     weekday: "long",
     day: "numeric",
@@ -29,6 +38,39 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     setMobileNavigationOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    function focusSearch(event: KeyboardEvent) {
+      if (event.key !== "F2") return;
+      event.preventDefault();
+      searchRef.current?.focus();
+    }
+    window.addEventListener("keydown", focusSearch);
+    return () => window.removeEventListener("keydown", focusSearch);
+  }, []);
+
+  function submitSearch(event: FormEvent) {
+    event.preventDefault();
+    openSearchTarget();
+  }
+
+  function openSearchTarget() {
+    const term = searchText.trim().toLocaleLowerCase("ar");
+    const target = searchTargets.find((item) => item.label.toLocaleLowerCase("ar").includes(term));
+    if (!term || !target) {
+      setSearchNotice(term ? "لا توجد وحدة مطابقة ضمن صلاحياتك" : "اكتب اسم الوحدة أولًا");
+      return;
+    }
+    setSearchNotice("");
+    setSearchText("");
+    navigate(target.to);
+  }
+
+  function handleSearchKey(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    openSearchTarget();
+  }
 
   return (
     <div className="app-shell">
@@ -100,13 +142,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
           <div className="topbar__actions">
-            <label className="global-search">
+            <form className="global-search" onSubmit={submitSearch}>
               <Search size={18} />
-              <input aria-label="البحث" placeholder="ابحث عن مستند أو منتج..." />
+              <input ref={searchRef} aria-label="البحث في الوحدات" value={searchText} onChange={(event) => { setSearchText(event.target.value); setSearchNotice(""); }} onKeyDown={handleSearchKey} placeholder="ابحث عن وحدة..." list="navigation-search-options" />
+              <datalist id="navigation-search-options">{searchTargets.map((item) => <option key={item.to} value={item.label} />)}</datalist>
               <kbd>F2</kbd>
-            </label>
-            <button className="icon-button" aria-label="الإشعارات">
-              <span className="notification-dot" />
+              {searchNotice ? <span className="global-search__notice" role="status">{searchNotice}</span> : null}
+            </form>
+            <button className="icon-button" aria-label="مركز أنشطة العملاء" title={user?.permissions.includes("crm.read") ? "فتح مركز أنشطة العملاء" : "لا توجد صلاحية لمركز الأنشطة"} disabled={!user?.permissions.includes("crm.read")} onClick={() => navigate("/crm?tab=activities")}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
               </svg>

@@ -21,6 +21,7 @@ from app.modules.purchasing.schemas import (
     PurchaseOrderView,
     PurchaseReceiptView,
     ReversePurchaseReceiptRequest,
+    ReverseSupplierInvoiceRequest,
     SupplierInvoiceView,
 )
 from app.modules.purchasing.service import (
@@ -35,6 +36,7 @@ from app.modules.purchasing.service import (
     post_purchase_receipt,
     purchase_options,
     reverse_purchase_receipt,
+    reverse_supplier_invoice,
 )
 
 router = APIRouter(prefix="/purchases")
@@ -221,6 +223,34 @@ def supplier_invoice(
         view = create_supplier_invoice(
             db,
             order_id=order_id,
+            payload=payload,
+            actor=principal,
+            client=client_context(request),
+        )
+        db.commit()
+        return view
+    except (PurchasingNotFound, PurchasingConflict, IntegrityError, ValueError) as exc:
+        db.rollback()
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/supplier-invoices/{invoice_id}/reversal",
+    response_model=SupplierInvoiceView,
+)
+def supplier_invoice_reversal(
+    invoice_id: UUID,
+    payload: ReverseSupplierInvoiceRequest,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DatabaseSession,
+) -> SupplierInvoiceView:
+    enforce_permission(request, db, principal, PermissionCode.PURCHASES_MANAGE)
+    enforce_csrf(request, db, principal)
+    try:
+        view = reverse_supplier_invoice(
+            db,
+            invoice_id=invoice_id,
             payload=payload,
             actor=principal,
             client=client_context(request),

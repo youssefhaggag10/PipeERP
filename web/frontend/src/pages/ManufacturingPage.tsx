@@ -27,6 +27,7 @@ import {
 import { useAuth } from "../auth/AuthContext";
 import { AppShell } from "../components/AppShell";
 import { api, ApiError } from "../lib/api";
+import { clientId } from "../lib/clientId";
 
 type Tab = "orders" | "recipes";
 type Option = {
@@ -403,7 +404,7 @@ export function ManufacturingPage() {
             headers: editingOrderId
               ? undefined
               : {
-                  "Idempotency-Key": `manufacturing-create-${crypto.randomUUID()}`,
+                  "Idempotency-Key": clientId("manufacturing-create"),
                 },
             body: JSON.stringify({
               ...orderForm,
@@ -463,7 +464,7 @@ export function ManufacturingPage() {
         api(`/manufacturing/orders/${item.id}/start`, {
           method: "POST",
           headers: {
-            "Idempotency-Key": `manufacturing-start-${crypto.randomUUID()}`,
+            "Idempotency-Key": clientId("manufacturing-start"),
           },
           body: JSON.stringify({ version: item.version }),
         }),
@@ -520,7 +521,7 @@ export function ManufacturingPage() {
         api(`/manufacturing/orders/${item.id}/cancel`, {
           method: "POST",
           headers: {
-            "Idempotency-Key": `manufacturing-cancel-${crypto.randomUUID()}`,
+            "Idempotency-Key": clientId("manufacturing-cancel"),
           },
           body: JSON.stringify({ version: item.version, reason }),
         }),
@@ -535,7 +536,7 @@ export function ManufacturingPage() {
         api(`/manufacturing/orders/${selected.id}/complete`, {
           method: "POST",
           headers: {
-            "Idempotency-Key": `manufacturing-complete-${crypto.randomUUID()}`,
+            "Idempotency-Key": clientId("manufacturing-complete"),
           },
           body: JSON.stringify({
             version: selected.version,

@@ -90,6 +90,7 @@ class TransactionView(InventoryView):
     product_id: UUID
     warehouse_id: UUID
     lot_id: UUID | None
+    lot_number: str
     quantity_delta: Decimal
     weight_delta_kg: Decimal
     unit_cost: Decimal
@@ -120,6 +121,25 @@ class BalanceView(InventoryView):
     product_code: str
     product_name_ar: str
     warehouse_name_ar: str
+
+
+class LotBalanceView(InventoryView):
+    lot_id: UUID
+    product_id: UUID
+    warehouse_id: UUID
+    product_code: str
+    product_name_ar: str
+    warehouse_name_ar: str
+    lot_number: str
+    received_at: datetime
+    quantity_received: Decimal
+    quantity_issued: Decimal
+    quantity_remaining: Decimal
+    weight_received_kg: Decimal
+    weight_issued_kg: Decimal
+    weight_remaining_kg: Decimal
+    average_cost: Decimal
+    inventory_value: Decimal
 
 
 class InventoryOption(InventoryView):

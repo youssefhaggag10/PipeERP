@@ -25,6 +25,7 @@ from app.modules.inventory.schemas import (
     InventoryOption,
     InventoryOptionsView,
     IssueRequest,
+    LotBalanceView,
     ReceiptRequest,
     ReversalRequest,
     TransactionView,
@@ -1010,6 +1011,90 @@ def list_balances(db: Session) -> list[BalanceView]:
     ]
 
 
+def list_lot_balances(db: Session) -> list[LotBalanceView]:
+    rows = db.execute(
+        select(InventoryLayer, InventoryLot, Product, Warehouse)
+        .join(InventoryLot, InventoryLot.id == InventoryLayer.lot_id)
+        .join(Product, Product.id == InventoryLayer.product_id)
+        .join(Warehouse, Warehouse.id == InventoryLayer.warehouse_id)
+        .order_by(InventoryLayer.received_at, InventoryLayer.id)
+    ).all()
+    grouped: dict[UUID, dict[str, object]] = {}
+    for layer, lot, product, warehouse in rows:
+        item = grouped.setdefault(
+            lot.id,
+            {
+                "lot": lot,
+                "product": product,
+                "warehouse": warehouse,
+                "received_at": layer.received_at,
+                "quantity_received": Decimal("0"),
+                "quantity_remaining": Decimal("0"),
+                "weight_received": Decimal("0"),
+                "weight_remaining": Decimal("0"),
+                "basis_remaining": Decimal("0"),
+                "inventory_value": Decimal("0"),
+            },
+        )
+        item["received_at"] = min(cast(datetime, item["received_at"]), layer.received_at)
+        item["quantity_received"] = (
+            cast(Decimal, item["quantity_received"]) + layer.quantity_received
+        )
+        item["quantity_remaining"] = (
+            cast(Decimal, item["quantity_remaining"]) + layer.quantity_remaining
+        )
+        item["weight_received"] = cast(Decimal, item["weight_received"]) + layer.weight_received_kg
+        item["weight_remaining"] = (
+            cast(Decimal, item["weight_remaining"]) + layer.weight_remaining_kg
+        )
+        basis_remaining = (
+            layer.quantity_remaining
+            if layer.cost_basis == "quantity"
+            else layer.weight_remaining_kg
+        )
+        item["basis_remaining"] = cast(Decimal, item["basis_remaining"]) + basis_remaining
+        item["inventory_value"] = cast(Decimal, item["inventory_value"]) + (
+            basis_remaining * layer.unit_cost
+        )
+
+    result: list[LotBalanceView] = []
+    for item in grouped.values():
+        lot = cast(InventoryLot, item["lot"])
+        product = cast(Product, item["product"])
+        warehouse = cast(Warehouse, item["warehouse"])
+        quantity_received = cast(Decimal, item["quantity_received"])
+        quantity_remaining = cast(Decimal, item["quantity_remaining"])
+        weight_received = cast(Decimal, item["weight_received"])
+        weight_remaining = cast(Decimal, item["weight_remaining"])
+        basis_remaining = cast(Decimal, item["basis_remaining"])
+        inventory_value = cast(Decimal, item["inventory_value"])
+        result.append(
+            LotBalanceView(
+                lot_id=lot.id,
+                product_id=lot.product_id,
+                warehouse_id=lot.warehouse_id,
+                product_code=product.code,
+                product_name_ar=product.name_ar,
+                warehouse_name_ar=warehouse.name_ar,
+                lot_number=lot.lot_number,
+                received_at=cast(datetime, item["received_at"]),
+                quantity_received=quantity_received,
+                quantity_issued=quantity_received - quantity_remaining,
+                quantity_remaining=quantity_remaining,
+                weight_received_kg=weight_received,
+                weight_issued_kg=weight_received - weight_remaining,
+                weight_remaining_kg=weight_remaining,
+                average_cost=(
+                    inventory_value / basis_remaining
+                    if basis_remaining > 0
+                    else Decimal("0")
+                ),
+                inventory_value=inventory_value,
+            )
+        )
+    return result
+
+
 def list_transactions(db: Session, *, limit: int = 100) -> list[TransactionView]:
     rows = db.execute(
         select(
@@ -1017,9 +1102,11 @@ def list_transactions(db: Session, *, limit: int = 100) -> list[TransactionView]
             Product.code,
             Product.name_ar,
             Warehouse.name_ar.label("warehouse_name_ar"),
+            InventoryLot.lot_number,
         )
         .join(Product, Product.id == InventoryTransaction.product_id)
         .join(Warehouse, Warehouse.id == InventoryTransaction.warehouse_id)
+        .outerjoin(InventoryLot, InventoryLot.id == InventoryTransaction.lot_id)
         .order_by(InventoryTransaction.posted_at.desc(), InventoryTransaction.id.desc())
         .limit(limit)
     )
@@ -1031,6 +1118,7 @@ def list_transactions(db: Session, *, limit: int = 100) -> list[TransactionView]
             product_id=transaction.product_id,
             warehouse_id=transaction.warehouse_id,
             lot_id=transaction.lot_id,
+            lot_number=lot_number or "",
             quantity_delta=transaction.quantity_delta,
             weight_delta_kg=transaction.weight_delta_kg,
             unit_cost=transaction.unit_cost,
@@ -1045,13 +1133,14 @@ def list_transactions(db: Session, *, limit: int = 100) -> list[TransactionView]
             notes=transaction.notes,
             posted_at=transaction.posted_at,
         )
-        for transaction, product_code, product_name_ar, warehouse_name_ar in rows
+        for transaction, product_code, product_name_ar, warehouse_name_ar, lot_number in rows
     ]
 
 
 def transaction_view(db: Session, transaction: InventoryTransaction) -> TransactionView:
     product = db.get(Product, transaction.product_id)
     warehouse = db.get(Warehouse, transaction.warehouse_id)
+    lot = db.get(InventoryLot, transaction.lot_id) if transaction.lot_id else None
     if product is None or warehouse is None:
         raise InventoryNotFound("تعذر تحميل بيانات المنتج أو المخزن المرتبطة بالحركة")
     return TransactionView(
@@ -1061,6 +1150,7 @@ def transaction_view(db: Session, transaction: InventoryTransaction) -> Transact
         product_id=transaction.product_id,
         warehouse_id=transaction.warehouse_id,
         lot_id=transaction.lot_id,
+        lot_number=lot.lot_number if lot else "",
         quantity_delta=transaction.quantity_delta,
         weight_delta_kg=transaction.weight_delta_kg,
         unit_cost=transaction.unit_cost,

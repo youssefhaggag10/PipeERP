@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { useAuth } from "../auth/AuthContext";
 import { AppShell } from "../components/AppShell";
 import { api, ApiError } from "../lib/api";
+import { clientId } from "../lib/clientId";
 
 type ReturnType = "sales" | "purchase";
 type RefundType = "customer_refund" | "supplier_refund";
@@ -81,21 +82,21 @@ export function ReturnsPage() {
       const value = amounts[line.source_line_id] || "0";
       return Number(value) > 0 ? [{ source_line_id: line.source_line_id, quantity: line.cost_basis === "quantity" ? value : "0", weight_kg: line.cost_basis === "weight" ? value : "0" }] : [];
     });
-    await perform(() => api("/returns/documents", { method: "POST", headers: { "Idempotency-Key": `return-${crypto.randomUUID()}` }, body: JSON.stringify({ return_type: returnType, invoice_id: invoiceId, reason, lines: selectedLines }) }), "تم اعتماد المرتجع وتحديث المخزون والحسابات.");
+    await perform(() => api("/returns/documents", { method: "POST", headers: { "Idempotency-Key": clientId("return") }, body: JSON.stringify({ return_type: returnType, invoice_id: invoiceId, reason, lines: selectedLines }) }), "تم اعتماد المرتجع وتحديث المخزون والحسابات.");
     setReason(""); setAmounts({});
   }
 
   async function createRefund(event: FormEvent) {
     event.preventDefault();
     const refundType: RefundType = returnType === "sales" ? "customer_refund" : "supplier_refund";
-    await perform(() => api("/returns/refunds", { method: "POST", headers: { "Idempotency-Key": `refund-${crypto.randomUUID()}` }, body: JSON.stringify({ refund_type: refundType, invoice_id: refundInvoiceId, financial_account_id: financialAccountId, amount: refundAmount, payment_method: paymentMethod, notes }) }), returnType === "sales" ? "تم رد المبلغ للعميل." : "تم استرداد المبلغ من المورد.");
+    await perform(() => api("/returns/refunds", { method: "POST", headers: { "Idempotency-Key": clientId("refund") }, body: JSON.stringify({ refund_type: refundType, invoice_id: refundInvoiceId, financial_account_id: financialAccountId, amount: refundAmount, payment_method: paymentMethod, notes }) }), returnType === "sales" ? "تم رد المبلغ للعميل." : "تم استرداد المبلغ من المورد.");
     setRefundAmount(""); setNotes("");
   }
 
   async function reverse(kind: "documents" | "refunds", item: ReturnDocument | Refund) {
     const reversalReason = window.prompt("اكتب سبب العكس")?.trim();
     if (!reversalReason) return;
-    await perform(() => api(`/returns/${kind}/${item.id}/reverse`, { method: "POST", headers: { "Idempotency-Key": `return-reversal-${crypto.randomUUID()}` }, body: JSON.stringify({ version: item.version, reason: reversalReason }) }), "تم العكس مع الاحتفاظ بالسجل التاريخي.");
+    await perform(() => api(`/returns/${kind}/${item.id}/reverse`, { method: "POST", headers: { "Idempotency-Key": clientId("return-reversal") }, body: JSON.stringify({ version: item.version, reason: reversalReason }) }), "تم العكس مع الاحتفاظ بالسجل التاريخي.");
   }
 
   const typeDocuments = documents.filter((item) => item.return_type === returnType);

@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
+import { CrmPage } from "./pages/CrmPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { IdentityPage } from "./pages/IdentityPage";
 import { InventoryPage } from "./pages/InventoryPage";
@@ -22,6 +23,7 @@ export function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/identity" element={<ProtectedRoute requiredPermissions={["users.read", "roles.read"]}><IdentityPage /></ProtectedRoute>} />
+      <Route path="/crm" element={<ProtectedRoute requiredPermissions={["crm.read"]}><CrmPage /></ProtectedRoute>} />
       <Route path="/products" element={<ProtectedRoute requiredPermissions={["products.read"]}><ProductsPage /></ProtectedRoute>} />
       <Route path="/partners" element={<ProtectedRoute requiredPermissions={["partners.read"]}><PartnersPage /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute requiredPermissions={["settings.read"]}><SettingsPage /></ProtectedRoute>} />

@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { useAuth } from "../auth/AuthContext";
 import { AppShell } from "../components/AppShell";
 import { api, ApiError } from "../lib/api";
+import { clientId } from "../lib/clientId";
 
 type Tab = "payments" | "accounts" | "partners";
 type TransactionType = "customer_receipt" | "supplier_payment";
@@ -189,7 +190,7 @@ export function TreasuryPage() {
     event.preventDefault();
     const allocations = linkMode === "invoices" ? Object.entries(allocationAmounts).filter(([, value]) => Number(value) > 0).map(([invoice_id, value]) => ({ invoice_id, amount: value })) : [];
     const selectedOrder = openOrders.find((item) => item.id === orderId);
-    await perform(() => api("/accounts/payments", { method: "POST", headers: { "Idempotency-Key": `payment-${crypto.randomUUID()}` }, body: JSON.stringify({ transaction_type: transactionType, partner_id: partnerId, financial_account_id: financialAccountId, amount, payment_method: paymentMethod, reference_type: linkMode === "order" ? selectedOrder?.reference_type : null, reference_id: linkMode === "order" ? orderId : null, allocations, notes: paymentNotes }) }), `تم تسجيل ${typeLabels[transactionType]} بنجاح.`);
+    await perform(() => api("/accounts/payments", { method: "POST", headers: { "Idempotency-Key": clientId("payment") }, body: JSON.stringify({ transaction_type: transactionType, partner_id: partnerId, financial_account_id: financialAccountId, amount, payment_method: paymentMethod, reference_type: linkMode === "order" ? selectedOrder?.reference_type : null, reference_id: linkMode === "order" ? orderId : null, allocations, notes: paymentNotes }) }), `تم تسجيل ${typeLabels[transactionType]} بنجاح.`);
     setAmount(""); setPaymentNotes(""); setAllocationAmounts({});
   }
 
@@ -199,14 +200,14 @@ export function TreasuryPage() {
     setEditingAccount(null); setAccountForm({ code: "", name_ar: "", account_type: "cash", opening_balance: "0", is_default: false, is_active: true, notes: "" });
   }
   function editAccount(item: FinancialAccount) { setEditingAccount(item); setAccountForm({ code: item.code, name_ar: item.name_ar, account_type: item.account_type, opening_balance: item.opening_balance, is_default: item.is_default, is_active: item.is_active, notes: item.notes }); }
-  async function postTransfer(event: FormEvent) { event.preventDefault(); await perform(() => api("/accounts/transfers", { method: "POST", headers: { "Idempotency-Key": `transfer-${crypto.randomUUID()}` }, body: JSON.stringify(transferForm) }), "تم التحويل بين الحسابات داخل معاملة واحدة."); setTransferForm((current) => ({ ...current, amount: "", notes: "" })); }
-  async function postAdjustment(event: FormEvent) { event.preventDefault(); await perform(() => api("/accounts/financial-adjustments", { method: "POST", headers: { "Idempotency-Key": `adjustment-${crypto.randomUUID()}` }, body: JSON.stringify(adjustmentForm) }), "تمت تسوية الرصيد مع حفظ الأثر."); setAdjustmentForm((current) => ({ ...current, target_balance: "", notes: "" })); }
+  async function postTransfer(event: FormEvent) { event.preventDefault(); await perform(() => api("/accounts/transfers", { method: "POST", headers: { "Idempotency-Key": clientId("transfer") }, body: JSON.stringify(transferForm) }), "تم التحويل بين الحسابات داخل معاملة واحدة."); setTransferForm((current) => ({ ...current, amount: "", notes: "" })); }
+  async function postAdjustment(event: FormEvent) { event.preventDefault(); await perform(() => api("/accounts/financial-adjustments", { method: "POST", headers: { "Idempotency-Key": clientId("adjustment") }, body: JSON.stringify(adjustmentForm) }), "تمت تسوية الرصيد مع حفظ الأثر."); setAdjustmentForm((current) => ({ ...current, target_balance: "", notes: "" })); }
   async function postOpening(event: FormEvent) { event.preventDefault(); await perform(() => api("/accounts/opening-balances", { method: "POST", body: JSON.stringify(openingForm) }), "تم تسجيل الرصيد الافتتاحي دون التأثير على الخزينة."); setOpeningForm((current) => ({ ...current, amount: "", notes: "" })); }
   async function postCustomerAdjustment(event: FormEvent) { event.preventDefault(); await perform(() => api("/accounts/customer-adjustments", { method: "POST", body: JSON.stringify(customerAdjustmentForm) }), "تم تسجيل تسوية حساب العميل."); setCustomerAdjustmentForm((current) => ({ ...current, amount: "", notes: "" })); }
   async function reverse(path: string, id: string, label: string, needsKey = true) {
     const reason = window.prompt(`اكتب سبب عكس ${label}`)?.trim();
     if (!reason) return;
-    await perform(() => api(`${path}/${id}/reversal`, { method: "POST", headers: needsKey ? { "Idempotency-Key": `reversal-${crypto.randomUUID()}` } : undefined, body: JSON.stringify({ reason }) }), `تم عكس ${label} مع الاحتفاظ بالسجل.`);
+    await perform(() => api(`${path}/${id}/reversal`, { method: "POST", headers: needsKey ? { "Idempotency-Key": clientId("reversal") } : undefined, body: JSON.stringify({ reason }) }), `تم عكس ${label} مع الاحتفاظ بالسجل.`);
   }
   async function loadStatement(event: FormEvent) {
     event.preventDefault(); setError("");

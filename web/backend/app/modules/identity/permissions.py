@@ -7,6 +7,8 @@ class PermissionCode(StrEnum):
     ROLES_READ = "roles.read"
     ROLES_MANAGE = "roles.manage"
     AUDIT_READ = "audit.read"
+    CRM_READ = "crm.read"
+    CRM_MANAGE = "crm.manage"
     PRODUCTS_READ = "products.read"
     PRODUCTS_MANAGE = "products.manage"
     PARTNERS_READ = "partners.read"
@@ -38,6 +40,8 @@ PERMISSION_NAMES_AR: dict[PermissionCode, str] = {
     PermissionCode.ROLES_READ: "عرض الأدوار",
     PermissionCode.ROLES_MANAGE: "إدارة الأدوار",
     PermissionCode.AUDIT_READ: "عرض سجل التدقيق",
+    PermissionCode.CRM_READ: "عرض متابعة العملاء",
+    PermissionCode.CRM_MANAGE: "إدارة متابعة العملاء",
     PermissionCode.PRODUCTS_READ: "عرض المنتجات",
     PermissionCode.PRODUCTS_MANAGE: "إدارة المنتجات",
     PermissionCode.PARTNERS_READ: "عرض العملاء والموردين",
@@ -66,6 +70,7 @@ PERMISSION_NAMES_AR: dict[PermissionCode, str] = {
 
 OPERATIONS_READ_PERMISSIONS = {
     PermissionCode.PRODUCTS_READ,
+    PermissionCode.CRM_READ,
     PermissionCode.PARTNERS_READ,
     PermissionCode.WAREHOUSES_READ,
     PermissionCode.INVENTORY_READ,

@@ -88,7 +88,11 @@ class ReversePurchaseReceiptRequest(BaseModel):
 
 
 class CreateSupplierInvoiceRequest(BaseModel):
-    supplier_invoice_number: str = Field(min_length=1, max_length=80)
+    supplier_invoice_number: str = Field(default="", max_length=80)
+
+
+class ReverseSupplierInvoiceRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
 
 
 class PurchaseOrderLineView(PurchasingView):
@@ -107,6 +111,18 @@ class PurchaseOrderLineView(PurchasingView):
     version: int
 
 
+class SupplierInvoiceView(PurchasingView):
+    id: UUID
+    invoice_number: str
+    supplier_invoice_number: str
+    purchase_order_id: UUID
+    supplier_id: UUID
+    status: Literal["draft", "posted", "reversed"]
+    total: Decimal
+    posted_at: datetime | None
+    version: int
+
+
 class PurchaseOrderView(PurchasingView):
     id: UUID
     order_number: str
@@ -121,6 +137,7 @@ class PurchaseOrderView(PurchasingView):
     total: Decimal
     version: int
     lines: list[PurchaseOrderLineView]
+    supplier_invoice: SupplierInvoiceView | None = None
 
 
 class PurchaseReceiptLineView(PurchasingView):
@@ -150,18 +167,6 @@ class PurchaseReceiptView(PurchasingView):
     reversed_at: datetime | None
     reversal_reason: str
     lines: list[PurchaseReceiptLineView]
-
-
-class SupplierInvoiceView(PurchasingView):
-    id: UUID
-    invoice_number: str
-    supplier_invoice_number: str
-    purchase_order_id: UUID
-    supplier_id: UUID
-    status: Literal["draft", "posted", "reversed"]
-    total: Decimal
-    posted_at: datetime | None
-    version: int
 
 
 class PurchaseOption(PurchasingView):

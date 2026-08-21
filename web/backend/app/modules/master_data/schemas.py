@@ -84,7 +84,7 @@ class CreateProductRequest(BaseModel):
     track_lots: bool = True
     standard_weight_kg: Decimal = Field(default=Decimal("0"), ge=0, max_digits=18, decimal_places=3)
     weight_tolerance_percent: Decimal = Field(
-        default=Decimal("5"), ge=0, le=100, max_digits=7, decimal_places=3
+        default=Decimal("0"), ge=0, le=100, max_digits=7, decimal_places=3
     )
 
 

@@ -37,9 +37,11 @@ from app.modules.purchasing.schemas import (
     PurchaseReceiptLineView,
     PurchaseReceiptView,
     ReversePurchaseReceiptRequest,
+    ReverseSupplierInvoiceRequest,
     SupplierInvoiceView,
 )
-from app.modules.treasury.models import FinancialAccount
+from app.modules.returns.models import InvoiceReturn
+from app.modules.treasury.models import FinancialAccount, PaymentAllocation, PaymentTransaction
 
 
 class PurchasingError(Exception):
@@ -76,6 +78,9 @@ def _order_view(db: Session, order: PurchaseOrder) -> PurchaseOrderView:
             select(Product).where(Product.id.in_({line.product_id for line in lines}))
         )
     }
+    supplier_invoice = db.scalar(
+        select(SupplierInvoice).where(SupplierInvoice.purchase_order_id == order.id)
+    )
     return PurchaseOrderView(
         id=order.id,
         order_number=order.order_number,
@@ -89,6 +94,11 @@ def _order_view(db: Session, order: PurchaseOrder) -> PurchaseOrderView:
         notes=order.notes,
         total=order.total,
         version=order.version,
+        supplier_invoice=(
+            SupplierInvoiceView.model_validate(supplier_invoice)
+            if supplier_invoice is not None
+            else None
+        ),
         lines=[
             PurchaseOrderLineView(
                 id=line.id,
@@ -249,9 +259,9 @@ def create_purchase_order(
         ordered_quantity = quantity(payload_line.ordered_quantity)
         ordered_weight = quantity(payload_line.ordered_weight_kg)
         basis_amount = ordered_quantity if payload_line.cost_basis == "quantity" else ordered_weight
-        line_total = money(
-            basis_amount * (payload_line.unit_price + payload_line.additional_unit_cost)
-        )
+        # Supplier payable excludes internal processing/handling cost. That
+        # extra cost is capitalized into FIFO only when goods are received.
+        line_total = money(basis_amount * payload_line.unit_price)
         total += line_total
         db.add(
             PurchaseOrderLine(
@@ -421,6 +431,9 @@ def post_purchase_receipt(
 
     for received in payload.lines:
         line = order_lines[received.purchase_order_line_id]
+        product = db.get(Product, line.product_id)
+        if product is None:
+            raise PurchasingNotFound("الصنف المرتبط ببند الشراء غير موجود")
         gross_quantity = quantity(received.gross_quantity)
         gross_weight = quantity(received.gross_weight_kg)
         loss_quantity = quantity(received.loss_quantity)
@@ -454,6 +467,7 @@ def post_purchase_receipt(
             line.cost_basis == "weight" and net_weight <= 0
         ):
             raise PurchasingConflict("صافي الاستلام يجب أن يكون أكبر من صفر")
+        lot_number = received.lot_number.strip() or f"{receipt.receipt_number}-{product.code}"
         child_key = sha256(f"purchase:{idempotency_key}:{line.id}".encode()).hexdigest()
         transaction = post_receipt(
             db,
@@ -464,7 +478,7 @@ def post_purchase_receipt(
                 weight_kg=net_weight,
                 cost_basis=line.cost_basis,  # type: ignore[arg-type]
                 unit_cost=costing.inventory_unit_cost,
-                lot_number=received.lot_number,
+                lot_number=lot_number,
                 reference_type="purchase_receipt",
                 reference_id=str(receipt.id),
                 reference_line_id=str(line.id),
@@ -479,7 +493,7 @@ def post_purchase_receipt(
                 purchase_receipt_id=receipt.id,
                 purchase_order_line_id=line.id,
                 inventory_transaction_id=transaction.id,
-                lot_number=received.lot_number.strip(),
+                lot_number=lot_number,
                 gross_quantity=gross_quantity,
                 gross_weight_kg=gross_weight,
                 loss_quantity=loss_quantity,
@@ -532,16 +546,17 @@ def create_supplier_invoice(
     order = db.scalar(select(PurchaseOrder).where(PurchaseOrder.id == order_id).with_for_update())
     if order is None:
         raise PurchasingNotFound("أمر الشراء غير موجود")
-    if order.status not in {"approved", "partially_received", "received"}:
-        raise PurchasingConflict("يجب اعتماد أمر الشراء قبل تسجيل فاتورة المورد")
+    if order.status != "received":
+        raise PurchasingConflict("يجب استلام أمر الشراء بالكامل قبل تسجيل فاتورة المورد")
     existing = db.scalar(
         select(SupplierInvoice).where(SupplierInvoice.purchase_order_id == order.id)
     )
     if existing is not None:
         raise PurchasingConflict("تم تسجيل فاتورة مورد لأمر الشراء بالفعل")
+    invoice_number = allocate_document_number(db, "purchase_invoice")
     invoice = SupplierInvoice(
-        invoice_number=allocate_document_number(db, "purchase_invoice"),
-        supplier_invoice_number=payload.supplier_invoice_number.strip(),
+        invoice_number=invoice_number,
+        supplier_invoice_number=payload.supplier_invoice_number.strip() or invoice_number,
         purchase_order_id=order.id,
         supplier_id=order.supplier_id,
         status="posted",
@@ -573,6 +588,71 @@ def create_supplier_invoice(
             "total": str(invoice.total),
         },
     )
+    return SupplierInvoiceView.model_validate(invoice)
+
+
+def reverse_supplier_invoice(
+    db: Session,
+    *,
+    invoice_id: UUID,
+    payload: ReverseSupplierInvoiceRequest,
+    actor: Principal,
+    client: ClientContext,
+) -> SupplierInvoiceView:
+    invoice = db.scalar(
+        select(SupplierInvoice).where(SupplierInvoice.id == invoice_id).with_for_update()
+    )
+    if invoice is None:
+        raise PurchasingNotFound("فاتورة المورد غير موجودة")
+    if invoice.status == "reversed":
+        raise PurchasingConflict("تم عكس فاتورة المورد من قبل")
+    posted_return = db.scalar(
+        select(InvoiceReturn.id).where(
+            InvoiceReturn.supplier_invoice_id == invoice.id,
+            InvoiceReturn.status == "posted",
+        )
+    )
+    if posted_return is not None:
+        raise PurchasingConflict("يجب عكس مرتجع المشتريات المرتبط بالفاتورة أولًا")
+
+    allocations = list(
+        db.scalars(
+            select(PaymentAllocation).where(PaymentAllocation.supplier_invoice_id == invoice.id)
+        )
+    )
+    payment_ids = {allocation.payment_transaction_id for allocation in allocations}
+    payments = list(
+        db.scalars(
+            select(PaymentTransaction)
+            .where(PaymentTransaction.id.in_(payment_ids))
+            .with_for_update()
+        )
+    ) if payment_ids else []
+    for allocation in allocations:
+        db.delete(allocation)
+    for payment in payments:
+        if payment.supplier_invoice_id == invoice.id:
+            payment.supplier_invoice_id = None
+
+    invoice.status = "reversed"
+    invoice.version += 1
+    add_audit(
+        db,
+        actor_user_id=actor.user.id,
+        event_type="purchasing.invoice.reverse",
+        entity_type="supplier_invoice",
+        entity_id=str(invoice.id),
+        outcome="success",
+        client=client,
+        before_state={"status": "posted", "version": invoice.version - 1},
+        after_state={
+            "status": "reversed",
+            "version": invoice.version,
+            "reason": payload.reason.strip(),
+            "released_payment_allocations": len(allocations),
+        },
+    )
+    db.flush()
     return SupplierInvoiceView.model_validate(invoice)
 
 

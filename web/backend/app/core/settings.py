@@ -63,6 +63,16 @@ class Settings(BaseSettings):
     def secure_cookies(self) -> bool:
         return self.app_env == "production"
 
+    @property
+    def cors_origin_regex(self) -> str | None:
+        if self.app_env == "production":
+            return None
+        return (
+            r"^https?://(?:localhost|127\.0\.0\.1|10(?:\.\d{1,3}){3}|"
+            r"192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2})"
+            r"(?::\d+)?$"
+        )
+
 
 @lru_cache
 def get_settings() -> Settings:

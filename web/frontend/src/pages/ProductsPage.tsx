@@ -58,7 +58,6 @@ export function ProductsPage() {
   const [categoryId, setCategoryId] = useState("");
   const [minStock, setMinStock] = useState("0");
   const [standardWeight, setStandardWeight] = useState("0");
-  const [weightTolerance, setWeightTolerance] = useState("5");
   const [trackLots, setTrackLots] = useState(true);
   const [isActive, setIsActive] = useState(true);
   const [editing, setEditing] = useState<Product | null>(null);
@@ -105,8 +104,8 @@ export function ProductsPage() {
           clear_category: !categoryId,
           min_stock: minStock,
           track_lots: trackLots,
-          standard_weight_kg: standardWeight,
-          weight_tolerance_percent: weightTolerance,
+          standard_weight_kg: productType === "finished_good" ? standardWeight : "0",
+          weight_tolerance_percent: "0",
           ...(editing ? { is_active: isActive } : {}),
         }),
       });
@@ -127,7 +126,6 @@ export function ProductsPage() {
     setCategoryId("");
     setMinStock("0");
     setStandardWeight("0");
-    setWeightTolerance("5");
     setTrackLots(true);
     setIsActive(true);
   }
@@ -141,7 +139,6 @@ export function ProductsPage() {
     setCategoryId(item.category_id ?? "");
     setMinStock(item.min_stock);
     setStandardWeight(item.standard_weight_kg);
-    setWeightTolerance(item.weight_tolerance_percent);
     setTrackLots(item.track_lots);
     setIsActive(item.is_active);
   }
@@ -167,10 +164,10 @@ export function ProductsPage() {
           <header className="panel__head">
             <div><h3>دليل المنتجات</h3><p>{products.length} صنفًا نشطًا</p></div>
           </header>
-          {products.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>الكود</th><th>المنتج</th><th>النوع</th><th>الوحدة</th><th>الحد الأدنى</th><th>الوزن القياسي</th><th>الحالة</th>{canManage ? <th>إجراء</th> : null}</tr></thead><tbody>{products.map((product) => <tr key={product.id}><td dir="ltr">{product.code}</td><td><strong>{product.name_ar}</strong></td><td><span className="status-badge status-badge--system">{typeLabels[product.product_type]}</span></td><td>{units.find((unit) => unit.id === product.unit_id)?.symbol ?? "—"}</td><td>{product.min_stock}</td><td>{product.standard_weight_kg} كجم</td><td><span className={`status-badge ${product.is_active ? "status-badge--active" : ""}`}>{product.is_active ? "نشط" : "متوقف"}</span></td>{canManage ? <td><button className="mini-action" onClick={() => editProduct(product)} aria-label="تعديل المنتج"><Pencil size={15} /></button></td> : null}</tr>)}</tbody></table></div> : <div className="empty-state"><span className="empty-state__icon"><Boxes size={27} /></span><h4>لا توجد منتجات بعد</h4><p>أضف أول خامة أو منتج تام لبدء تشغيل المخزون.</p></div>}
+          {products.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>الكود</th><th>المنتج</th><th>النوع</th><th>الوحدة</th><th>الحد الأدنى</th><th>الوزن القياسي</th><th>الحالة</th>{canManage ? <th>إجراء</th> : null}</tr></thead><tbody>{products.map((product) => <tr key={product.id}><td dir="ltr">{product.code}</td><td><strong>{product.name_ar}</strong></td><td><span className="status-badge status-badge--system">{typeLabels[product.product_type]}</span></td><td>{units.find((unit) => unit.id === product.unit_id)?.symbol ?? "—"}</td><td>{product.min_stock}</td><td>{product.product_type === "finished_good" ? `${product.standard_weight_kg} كجم` : "—"}</td><td><span className={`status-badge ${product.is_active ? "status-badge--active" : ""}`}>{product.is_active ? "نشط" : "متوقف"}</span></td>{canManage ? <td><button className="mini-action" onClick={() => editProduct(product)} aria-label="تعديل المنتج"><Pencil size={15} /></button></td> : null}</tr>)}</tbody></table></div> : <div className="empty-state"><span className="empty-state__icon"><Boxes size={27} /></span><h4>لا توجد منتجات بعد</h4><p>أضف أول خامة أو منتج تام لبدء تشغيل المخزون.</p></div>}
         </article>
 
-        {canManage ? <article className="panel master-form-card"><header className="panel__head"><div><h3>{editing ? "تعديل المنتج" : "منتج جديد"}</h3><p>الأكواد غير قابلة للتكرار حتى مع اختلاف حالة الأحرف</p></div></header><form className="compact-form" onSubmit={saveProduct}><label>كود المنتج<input dir="ltr" value={code} onChange={(event) => setCode(event.target.value)} placeholder="RM-001" required /></label><label>اسم المنتج<input value={name} onChange={(event) => setName(event.target.value)} required minLength={2} /></label><label>نوع المنتج<select value={productType} onChange={(event) => { const value = event.target.value as Product["product_type"]; setProductType(value); if (value === "service") setTrackLots(false); }}>{Object.entries(typeLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label>وحدة القياس<select value={unitId} onChange={(event) => setUnitId(event.target.value)} required>{units.map((unit) => <option value={unit.id} key={unit.id}>{unit.name_ar} ({unit.symbol})</option>)}</select></label><label>التصنيف<select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}><option value="">بدون تصنيف</option>{categories.filter((item) => item.is_active || item.id === categoryId).map((item) => <option value={item.id} key={item.id}>{item.name_ar}</option>)}</select></label><label>الحد الأدنى للمخزون<input type="number" min="0" step="0.001" value={minStock} onChange={(event) => setMinStock(event.target.value)} required /></label><label>الوزن القياسي بالكيلو<input type="number" min="0" step="0.001" value={standardWeight} onChange={(event) => setStandardWeight(event.target.value)} required /></label><label>سماحية الوزن %<input type="number" min="0" max="100" step="0.001" value={weightTolerance} onChange={(event) => setWeightTolerance(event.target.value)} required /></label><label className="check-field"><input type="checkbox" checked={trackLots} onChange={(event) => setTrackLots(event.target.checked)} /> تتبع التشغيلات</label>{editing ? <label className="check-field"><input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} /> المنتج نشط</label> : null}<div className="form-actions"><button className="primary-button"><PackagePlus size={17} /> {editing ? "حفظ التعديل" : "حفظ المنتج"}</button>{editing ? <button type="button" className="secondary-button" onClick={resetForm}><X size={16} /> إلغاء</button> : null}</div></form></article> : null}
+        {canManage ? <article className="panel master-form-card"><header className="panel__head"><div><h3>{editing ? "تعديل المنتج" : "منتج جديد"}</h3><p>الأكواد غير قابلة للتكرار حتى مع اختلاف حالة الأحرف</p></div></header><form className="compact-form" onSubmit={saveProduct}><label>كود المنتج<input dir="ltr" value={code} onChange={(event) => setCode(event.target.value)} placeholder="RM-001" required /></label><label>اسم المنتج<input value={name} onChange={(event) => setName(event.target.value)} required minLength={2} /></label><label>نوع المنتج<select value={productType} onChange={(event) => { const value = event.target.value as Product["product_type"]; setProductType(value); if (value !== "finished_good") setStandardWeight("0"); if (value === "service") setTrackLots(false); }}>{Object.entries(typeLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label>وحدة القياس<select value={unitId} onChange={(event) => setUnitId(event.target.value)} required>{units.map((unit) => <option value={unit.id} key={unit.id}>{unit.name_ar} ({unit.symbol})</option>)}</select></label><label>التصنيف<select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}><option value="">بدون تصنيف</option>{categories.filter((item) => item.is_active || item.id === categoryId).map((item) => <option value={item.id} key={item.id}>{item.name_ar}</option>)}</select></label><label>الحد الأدنى للمخزون<input type="number" min="0" step="0.001" value={minStock} onChange={(event) => setMinStock(event.target.value)} required /></label>{productType === "finished_good" ? <label>الوزن القياسي بالكيلو<input type="number" min="0" step="0.001" value={standardWeight} onChange={(event) => setStandardWeight(event.target.value)} required /></label> : null}<label className="check-field"><input type="checkbox" checked={trackLots} onChange={(event) => setTrackLots(event.target.checked)} /> تتبع التشغيلات</label>{editing ? <label className="check-field"><input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} /> المنتج نشط</label> : null}<div className="form-actions"><button className="primary-button"><PackagePlus size={17} /> {editing ? "حفظ التعديل" : "حفظ المنتج"}</button>{editing ? <button type="button" className="secondary-button" onClick={resetForm}><X size={16} /> إلغاء</button> : null}</div></form></article> : null}
       </section>
     </AppShell>
   );

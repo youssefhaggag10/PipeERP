@@ -10,6 +10,7 @@ import {
   ShoppingCart,
   Undo2,
   UsersRound,
+  ContactRound,
   type LucideIcon,
 } from "lucide-react";
 
@@ -24,6 +25,7 @@ export type NavigationItem = {
 
 const navigation: NavigationItem[] = [
   { label: "لوحة التشغيل", icon: Gauge, to: "/" },
+  { label: "متابعة العملاء", icon: ContactRound, to: "/crm", permission: "crm.read" },
   { label: "المنتجات", icon: Package, to: "/products", permission: "products.read" },
   { label: "المبيعات", icon: ShoppingCart, to: "/sales", permission: "sales.read" },
   { label: "البيع بالوزن", icon: Scale, to: "/weight-sales", permission: "weight_sales.read" },

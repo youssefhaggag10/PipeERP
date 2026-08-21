@@ -17,6 +17,7 @@ from app.modules.inventory.schemas import (
     BalanceView,
     InventoryOptionsView,
     IssueRequest,
+    LotBalanceView,
     ReceiptRequest,
     ReversalRequest,
     TransactionView,
@@ -29,6 +30,7 @@ from app.modules.inventory.service import (
     InventoryNotFound,
     inventory_options,
     list_balances,
+    list_lot_balances,
     list_transactions,
     post_adjustment,
     post_issue,
@@ -58,6 +60,16 @@ def balances(
 ) -> list[BalanceView]:
     enforce_permission(request, db, principal, PermissionCode.INVENTORY_READ)
     return list_balances(db)
+
+
+@router.get("/lot-balances", response_model=list[LotBalanceView])
+def lot_balances(
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DatabaseSession,
+) -> list[LotBalanceView]:
+    enforce_permission(request, db, principal, PermissionCode.INVENTORY_READ)
+    return list_lot_balances(db)
 
 
 @router.get("/options", response_model=InventoryOptionsView)

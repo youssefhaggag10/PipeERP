@@ -110,6 +110,8 @@ def test_product_creation_duplicate_code_and_optimistic_concurrency() -> None:
             "unit_id": unit_id,
             "min_stock": "10.000",
             "track_lots": True,
+            "standard_weight_kg": "12.500",
+            "weight_tolerance_percent": "5",
         }
         created = client.post(
             "/api/v1/master-data/products",
@@ -118,6 +120,8 @@ def test_product_creation_duplicate_code_and_optimistic_concurrency() -> None:
         )
         assert created.status_code == 201, created.text
         assert created.json()["version"] == 1
+        assert created.json()["standard_weight_kg"] == "0"
+        assert created.json()["weight_tolerance_percent"] == "0"
 
         duplicate = client.post(
             "/api/v1/master-data/products",
@@ -134,6 +138,28 @@ def test_product_creation_duplicate_code_and_optimistic_concurrency() -> None:
         )
         assert updated.status_code == 200, updated.text
         assert updated.json()["version"] == 2
+
+        finished = client.patch(
+            f"/api/v1/master-data/products/{product_id}",
+            json={
+                "version": 2,
+                "product_type": "finished_good",
+                "standard_weight_kg": "2.750",
+                "weight_tolerance_percent": "9",
+            },
+            headers=_csrf(client),
+        )
+        assert finished.status_code == 200, finished.text
+        assert finished.json()["standard_weight_kg"] == "2.750"
+        assert finished.json()["weight_tolerance_percent"] == "0"
+
+        raw_again = client.patch(
+            f"/api/v1/master-data/products/{product_id}",
+            json={"version": 3, "product_type": "raw_material"},
+            headers=_csrf(client),
+        )
+        assert raw_again.status_code == 200, raw_again.text
+        assert raw_again.json()["standard_weight_kg"] == "0"
 
         stale = client.patch(
             f"/api/v1/master-data/products/{product_id}",
