@@ -143,6 +143,10 @@ export function SalesPage() {
   useEffect(() => {
     if (!createRequested) return;
     setShowCreate(true);
+    if (window.matchMedia("(max-width: 760px)").matches) {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      return;
+    }
     window.requestAnimationFrame(() => createRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }, [createRequested]);
   useEffect(() => {
