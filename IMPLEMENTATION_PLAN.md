@@ -9,6 +9,7 @@ Audit sources: `/home/youssef/Music/AUDIT_DESKTOP_VS_WEB_PARITY.md` and `/home/y
 
 - Desktop is the business source of truth. Web-only business actions are removed or made unreachable from both UI and public API.
 - Existing reversal workflows are retained. This includes sales, purchasing, payments, returns/refunds, inventory and treasury reversals where already implemented, subject to their existing integrity guards.
+- The enhanced Web dashboard is an owner-approved UI exception: keep daily KPIs, operating activity, attention alerts and permission-aware quick actions.
 - Technical protections required by a concurrent Web system (CSRF, idempotency, optimistic locking, audit log, session revocation and normalized UOM storage) remain because they do not add a business decision.
 - Existing records created by old Web-only workflows are preserved for audit/history. Removing a workflow must not delete or rewrite historical accounting or inventory records.
 - No framework/module rewrite. Changes stay inside the current FastAPI/React architecture.
@@ -42,7 +43,7 @@ Each row records Desktop behavior, the current Web state after commit `2c5389a`,
 | RPT-4 | Reports | Exactly six report types | Same six | Keep | reports tests | Low | Parameterized six-report test |
 | RPT-5 | Settings | Appearance, watermark, multi-phone | Implemented in current Web | Verify and retain | `SettingsPage.tsx`, styles, company settings tests | Low | Persist/reload settings; print phone order |
 | RPT-6 | Backup | In-app local DB restore | Safe server-side restore tooling | Keep operational difference; Web cannot replace a live multi-user DB from a browser request safely | system settings/docs/ops tests | High | Create valid backup; restore into isolated DB only |
-| RPT-7 | Dashboard | Inventory KPIs only | Enhanced Web dashboard remains | Remove Web-only business dashboard panels; reproduce Desktop inventory KPI set. Reversal exception does not cover dashboard expansion | dashboard API/UI/tests | Medium | Compare seven KPI labels and calculations to Desktop |
+| RPT-7 | Dashboard | Inventory KPIs only | Enhanced Web dashboard | **Owner-approved exception**: retain daily KPIs, operating activity, attention alerts and permission-aware quick actions | dashboard API/UI/tests | Low | Verify all four sections render and API remains permission-aware |
 
 ### Inventory and manufacturing
 

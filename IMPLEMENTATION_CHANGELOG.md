@@ -9,7 +9,7 @@ Web branch: `web-rebuild`
 - **Fixed**: Web behavior changed to match Desktop.
 - **Verified**: No code change was required; regression evidence confirms parity.
 - **Retained**: Technical Web implementation kept because it does not add a business decision.
-- **Approved exception**: Reversal workflow intentionally kept.
+- **Approved exception**: Owner-approved behavior intentionally kept, including reversal workflows and the enhanced Web dashboard.
 - **Approval required**: Not changed because it affects inventory valuation.
 
 ## Identity, partners, products, reports, and dashboard
@@ -37,7 +37,7 @@ Web branch: `web-rebuild`
 | RPT-4 | No difference | **Verified** exactly six report types | reports tests | Parameterized report suite |
 | RPT-5 | No difference | **Verified** appearance, watermark and ordered phones | settings implementation/tests | Persistence/print-setting tests |
 | RPT-6 | Browser cannot safely replace a live DB like the single-user Desktop app | **Retained operational difference**: restore remains an isolated operator action | restore tooling/docs | Restore is restricted to isolated target; no live-browser restore |
-| RPT-7 | Web had extra sales/activity/quick-action dashboard workflow | **Fixed**: dashboard now returns and renders only the seven Desktop inventory KPIs | dashboard route/page | API calculations, frontend tests/build |
+| RPT-7 | Web dashboard extends the Desktop inventory-only summary | **Approved exception restored by owner request**: daily KPIs, operating activity, attention alerts and permission-aware quick actions are retained | dashboard route/page | API permission contract, frontend section regression test and build |
 
 ## Inventory and manufacturing
 

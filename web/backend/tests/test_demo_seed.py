@@ -156,6 +156,14 @@ def test_demo_seed_builds_full_dataset_and_is_repeatable() -> None:
         second_summary = api.get("/dashboard/summary")
 
         assert first_summary == second_summary
+        assert set(first_summary) == {
+            "sales_today",
+            "open_manufacturing_orders",
+            "low_stock_products",
+            "weight_sold_today_kg",
+            "activity",
+        }
+        assert first_summary["activity"]
         assert len(api.get("/inventory/lot-balances")) >= 4
         crm_leads = api.get("/crm/leads")
         assert len(crm_leads) == 3
