@@ -17,13 +17,17 @@ import { useAuth } from "../auth/AuthContext";
 import { BrandMark } from "./BrandMark";
 import { visibleNavigationItems } from "./navigation";
 
-type WatermarkSettings = { enabled: boolean; image: string; opacity: number; size: number };
-function readWatermark(): WatermarkSettings {
+type HeaderLogoSettings = { image: string };
+function readHeaderLogo(): HeaderLogoSettings {
   try {
-    const value = JSON.parse(localStorage.getItem("pipeerp.watermark") ?? "null") as Partial<WatermarkSettings> | null;
-    return { enabled: value?.enabled ?? false, image: value?.image ?? "", opacity: Number(value?.opacity) || 8, size: Number(value?.size) || 35 };
+    const value = JSON.parse(
+      localStorage.getItem("pipeerp.header-logo")
+        ?? localStorage.getItem("pipeerp.watermark")
+        ?? "null",
+    ) as Partial<HeaderLogoSettings> | null;
+    return { image: value?.image ?? "" };
   } catch {
-    return { enabled: false, image: "", opacity: 8, size: 35 };
+    return { image: "" };
   }
 }
 
@@ -32,7 +36,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
-  const [watermark, setWatermark] = useState(readWatermark);
+  const [headerLogo, setHeaderLogo] = useState(readHeaderLogo);
   const [salesMenuOpen, setSalesMenuOpen] = useState(
     location.pathname === "/weight-sales",
   );
@@ -43,11 +47,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [location.pathname]);
 
   useEffect(() => {
-    const update = () => setWatermark(readWatermark());
-    window.addEventListener("pipeerp-watermark-change", update);
+    const update = () => setHeaderLogo(readHeaderLogo());
+    window.addEventListener("pipeerp-header-logo-change", update);
     window.addEventListener("storage", update);
     return () => {
-      window.removeEventListener("pipeerp-watermark-change", update);
+      window.removeEventListener("pipeerp-header-logo-change", update);
       window.removeEventListener("storage", update);
     };
   }, []);
@@ -185,7 +189,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       ) : null}
 
       <main className="main-panel">
-        {watermark.enabled ? <div className="app-watermark" style={{ opacity: watermark.opacity / 100, width: `${watermark.size}%` }} aria-hidden="true">{watermark.image ? <img src={watermark.image} alt=""/> : <strong>3A PIPE<small>U.P.V.C مواسير</small></strong>}</div> : null}
         <header className="topbar">
           <div className="topbar__welcome">
             <button
@@ -198,6 +201,13 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Menu size={21} />
             </button>
             <h1>3A PIPE — {user?.display_name ?? "مستخدم"}</h1>
+            <span className="topbar__company-logo">
+              {headerLogo.image ? (
+                <img src={headerLogo.image} alt="شعار 3A PIPE" />
+              ) : (
+                <BrandMark compact />
+              )}
+            </span>
           </div>
           <div className="topbar__actions">
             <button

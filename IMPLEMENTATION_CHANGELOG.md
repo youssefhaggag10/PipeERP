@@ -35,7 +35,7 @@ Web branch: `web-rebuild`
 | RPT-2 | Browser renderer differs from fixed Desktop renderer | **Retained** browser print technology with matched fields/layout targets | reports UI/styles/docs | A4/80mm layout verification; physical-printer acceptance remains external |
 | RPT-3 | Statement export is colocated differently | **Verified/retained** as output only; no posting workflow added | reports/treasury implementation | Six-report tests |
 | RPT-4 | No difference | **Verified** exactly six report types | reports tests | Parameterized report suite |
-| RPT-5 | No difference | **Verified** appearance, watermark and ordered phones | settings implementation/tests | Persistence/print-setting tests |
+| RPT-5 | Uploaded logo appeared as a watermark in the middle of every page | **Approved exception requested by owner**: reuse the saved image as a fixed header logo beside the user name; remove the page watermark | `AppShell.tsx`, `SettingsPage.tsx`, styles | Legacy-image migration, visual scroll check, frontend suite/build |
 | RPT-6 | Browser cannot safely replace a live DB like the single-user Desktop app | **Retained operational difference**: restore remains an isolated operator action | restore tooling/docs | Restore is restricted to isolated target; no live-browser restore |
 | RPT-7 | Web dashboard extends the Desktop inventory-only summary | **Approved exception restored by owner request**: daily KPIs, operating activity, attention alerts and permission-aware quick actions are retained | dashboard route/page | API permission contract, frontend section regression test and build |
 

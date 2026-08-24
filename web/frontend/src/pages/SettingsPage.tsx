@@ -23,7 +23,7 @@ type AppearanceSettings = {
   fontSize: number;
   scale: number;
 };
-type WatermarkSettings = { enabled: boolean; image: string; opacity: number; size: number };
+type HeaderLogoSettings = { image: string };
 type Role = {
   id: string;
   code: string;
@@ -32,19 +32,18 @@ type Role = {
 };
 
 const appearanceKey = "pipeerp.appearance";
-const watermarkKey = "pipeerp.watermark";
+const headerLogoKey = "pipeerp.header-logo";
 
-function readWatermark(): WatermarkSettings {
+function readHeaderLogo(): HeaderLogoSettings {
   try {
-    const saved = JSON.parse(localStorage.getItem(watermarkKey) ?? "null") as Partial<WatermarkSettings> | null;
-    return {
-      enabled: saved?.enabled ?? false,
-      image: saved?.image ?? "",
-      opacity: Math.min(40, Math.max(1, Number(saved?.opacity) || 8)),
-      size: Math.min(80, Math.max(10, Number(saved?.size) || 35)),
-    };
+    const saved = JSON.parse(
+      localStorage.getItem(headerLogoKey)
+        ?? localStorage.getItem("pipeerp.watermark")
+        ?? "null",
+    ) as Partial<HeaderLogoSettings> | null;
+    return { image: saved?.image ?? "" };
   } catch {
-    return { enabled: false, image: "", opacity: 8, size: 35 };
+    return { image: "" };
   }
 }
 
@@ -77,7 +76,7 @@ export function SettingsPage() {
   const [tab, setTab] = useState<Tab>("print");
   const [settings, setSettings] = useState<CompanySettings | null>(null);
   const [appearance, setAppearance] = useState(readAppearance);
-  const [watermark, setWatermark] = useState(readWatermark);
+  const [headerLogo, setHeaderLogo] = useState(readHeaderLogo);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -131,21 +130,21 @@ export function SettingsPage() {
     setNotice("تم حفظ وتطبيق إعدادات المظهر على هذا الجهاز.");
   }
 
-  function saveWatermark(event: FormEvent) {
+  function saveHeaderLogo(event: FormEvent) {
     event.preventDefault();
-    localStorage.setItem(watermarkKey, JSON.stringify(watermark));
-    window.dispatchEvent(new Event("pipeerp-watermark-change"));
-    setNotice("تم حفظ وتطبيق العلامة المائية.");
+    localStorage.setItem(headerLogoKey, JSON.stringify(headerLogo));
+    window.dispatchEvent(new Event("pipeerp-header-logo-change"));
+    setNotice("تم حفظ وتطبيق شعار الهيدر.");
   }
 
-  function chooseWatermark(file: File | undefined) {
+  function chooseHeaderLogo(file: File | undefined) {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      setError("ملف العلامة المائية يجب أن يكون صورة.");
+      setError("ملف الشعار يجب أن يكون صورة.");
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => setWatermark((current) => ({ ...current, image: String(reader.result ?? "") }));
+    reader.onload = () => setHeaderLogo({ image: String(reader.result ?? "") });
     reader.readAsDataURL(file);
   }
 
@@ -235,7 +234,7 @@ export function SettingsPage() {
     {notice ? <div className="alert alert--success"><Check size={17}/> {notice}</div> : null}
     <div className="sales-tabs settings-tabs" role="tablist">
       <button className={tab === "print" ? "active" : ""} onClick={() => setTab("print")}><Printer size={17}/> الطباعة</button>
-      <button className={tab === "watermark" ? "active" : ""} onClick={() => setTab("watermark")}><Image size={17}/> العلامة المائية</button>
+      <button className={tab === "watermark" ? "active" : ""} onClick={() => setTab("watermark")}><Image size={17}/> شعار الهيدر</button>
       <button className={tab === "appearance" ? "active" : ""} onClick={() => setTab("appearance")}><MonitorCog size={17}/> المظهر</button>
       {isSystemAdmin && canManage ? <button className={tab === "backup" ? "active" : ""} onClick={() => setTab("backup")}><DatabaseBackup size={17}/> النسخ الاحتياطي</button> : null}
       {canReadUsers ? <button className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}><ShieldCheck size={17}/> المستخدمون والصلاحيات</button> : null}
@@ -247,12 +246,10 @@ export function SettingsPage() {
       <label>أرقام الشركة والمبيعات<textarea dir="ltr" rows={5} value={settings.phone} disabled={!canManage} placeholder="رقم في كل سطر؛ الرقم الأول هو الرئيسي" onChange={(event) => setSettings({ ...settings, phone: event.target.value })}/></label>
       {canManage ? <button className="primary-button"><Save size={17}/> حفظ إعدادات الفاتورة</button> : null}
     </form></section> : null}
-    {tab === "watermark" ? <section className="panel settings-panel"><header className="panel__head"><div><h3>إعدادات العلامة المائية</h3><p>تظهر في منتصف الشاشات بطبقة شفافة ولا تمنع استخدام الأزرار.</p></div><Image size={20}/></header><form className="compact-form settings-print-form" onSubmit={saveWatermark}>
-      <label className="check-row"><input type="checkbox" checked={watermark.enabled} onChange={(event) => setWatermark({ ...watermark, enabled: event.target.checked })}/> إظهار العلامة المائية في كل الشاشات</label>
-      <label className="watermark-file"><span><Upload size={17}/> اختيار صورة اللوجو</span><input type="file" accept="image/png,image/jpeg,image/webp,image/bmp" onChange={(event) => chooseWatermark(event.target.files?.[0])}/></label>
-      {watermark.image ? <div className="watermark-preview"><img src={watermark.image} alt="معاينة العلامة المائية"/><button type="button" className="mini-action" onClick={() => setWatermark({ ...watermark, image: "" })}><Trash2 size={14}/> استخدام شعار النظام الافتراضي</button></div> : <p className="settings-note">سيُستخدم شعار PipeERP الافتراضي.</p>}
-      <div className="form-pair"><label>الشفافية %<input type="number" min="1" max="40" value={watermark.opacity} onChange={(event) => setWatermark({ ...watermark, opacity: Number(event.target.value) })}/></label><label>الحجم % من الشاشة<input type="number" min="10" max="80" value={watermark.size} onChange={(event) => setWatermark({ ...watermark, size: Number(event.target.value) })}/></label></div>
-      <button className="primary-button"><Save size={17}/> حفظ وتطبيق العلامة المائية</button>
+    {tab === "watermark" ? <section className="panel settings-panel"><header className="panel__head"><div><h3>شعار الهيدر الثابت</h3><p>يظهر دائمًا بجوار اسم المستخدم في الشريط العلوي بدل العلامة المائية داخل الصفحات.</p></div><Image size={20}/></header><form className="compact-form settings-print-form" onSubmit={saveHeaderLogo}>
+      <label className="watermark-file"><span><Upload size={17}/> اختيار صورة اللوجو</span><input type="file" accept="image/png,image/jpeg,image/webp,image/bmp" onChange={(event) => chooseHeaderLogo(event.target.files?.[0])}/></label>
+      {headerLogo.image ? <div className="watermark-preview"><img src={headerLogo.image} alt="معاينة شعار الهيدر"/><button type="button" className="mini-action" onClick={() => setHeaderLogo({ image: "" })}><Trash2 size={14}/> استخدام شعار النظام الافتراضي</button></div> : <p className="settings-note">سيُستخدم شعار PipeERP الافتراضي بجوار اسم المستخدم.</p>}
+      <button className="primary-button"><Save size={17}/> حفظ وتطبيق شعار الهيدر</button>
     </form></section> : null}
     {tab === "appearance" ? <section className="panel settings-panel"><header className="panel__head"><div><h3>الثيم وحجم واجهة البرنامج</h3><p>لا تؤثر هذه الإعدادات على تنسيق الفواتير المطبوعة.</p></div><MonitorCog size={20}/></header><form className="compact-form settings-print-form" onSubmit={saveAppearance}>
       <label>الثيم<select value={appearance.theme} onChange={(event) => setAppearance({ ...appearance, theme: event.target.value as AppearanceSettings["theme"] })}><option value="system">حسب إعداد الجهاز</option><option value="light">فاتح</option><option value="dark">داكن</option></select></label>
