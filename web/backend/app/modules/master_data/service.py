@@ -372,6 +372,31 @@ def update_product(
     return product
 
 
+def delete_product(
+    db: Session,
+    *,
+    product_id: UUID,
+    actor: Principal,
+    client: ClientContext,
+) -> None:
+    product = db.get(Product, product_id)
+    if product is None:
+        raise MasterDataNotFound("المنتج غير موجود")
+    before: dict[str, object] = {"code": product.code, "name_ar": product.name_ar}
+    db.delete(product)
+    db.flush()
+    add_audit(
+        db,
+        actor_user_id=actor.user.id,
+        event_type="master_data.product.delete",
+        entity_type="product",
+        entity_id=str(product_id),
+        outcome="success",
+        client=client,
+        before_state=before,
+    )
+
+
 def list_partners(db: Session, *, include_inactive: bool = False) -> list[Partner]:
     statement = select(Partner).order_by(Partner.created_at.desc())
     if not include_inactive:

@@ -20,6 +20,7 @@ from app.modules.purchasing.schemas import (
     PurchaseOptionsView,
     PurchaseOrderView,
     PurchaseReceiptView,
+    ReceivePurchaseOrderRequest,
     ReversePurchaseReceiptRequest,
     ReverseSupplierInvoiceRequest,
     SupplierInvoiceView,
@@ -35,6 +36,7 @@ from app.modules.purchasing.service import (
     list_purchase_receipts,
     post_purchase_receipt,
     purchase_options,
+    receive_purchase_order,
     reverse_purchase_receipt,
     reverse_supplier_invoice,
 )
@@ -137,6 +139,33 @@ def approve_order(
             db,
             order_id=order_id,
             version=payload.version,
+            actor=principal,
+            client=client_context(request),
+        )
+        db.commit()
+        return view
+    except (PurchasingNotFound, PurchasingConflict, IntegrityError, ValueError) as exc:
+        db.rollback()
+        raise _translate_error(exc) from exc
+
+
+@router.post("/orders/{order_id}/receive", response_model=PurchaseOrderView)
+def receive_full_order(
+    order_id: UUID,
+    payload: ReceivePurchaseOrderRequest,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DatabaseSession,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=12, max_length=120)],
+) -> PurchaseOrderView:
+    enforce_permission(request, db, principal, PermissionCode.PURCHASES_MANAGE)
+    enforce_csrf(request, db, principal)
+    try:
+        view = receive_purchase_order(
+            db,
+            order_id=order_id,
+            payload=payload,
+            idempotency_key=idempotency_key,
             actor=principal,
             client=client_context(request),
         )

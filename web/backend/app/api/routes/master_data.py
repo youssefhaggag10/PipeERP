@@ -39,6 +39,7 @@ from app.modules.master_data.service import (
     create_product,
     create_unit,
     create_warehouse,
+    delete_product,
     get_company_settings,
     list_categories,
     list_partners,
@@ -251,6 +252,28 @@ def edit_product(
     view = ProductView.model_validate(product)
     db.commit()
     return view
+
+
+@router.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_product(
+    product_id: UUID,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DatabaseSession,
+) -> None:
+    enforce_permission(request, db, principal, PermissionCode.PRODUCTS_MANAGE)
+    enforce_csrf(request, db, principal)
+    try:
+        delete_product(
+            db,
+            product_id=product_id,
+            actor=principal,
+            client=client_context(request),
+        )
+    except (MasterDataNotFound, IntegrityError) as exc:
+        db.rollback()
+        raise _translate_error(exc) from exc
+    db.commit()
 
 
 @router.get("/partners", response_model=list[PartnerView])

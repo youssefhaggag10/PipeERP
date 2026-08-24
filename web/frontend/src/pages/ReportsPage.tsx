@@ -96,7 +96,7 @@ export function ReportsPage() {
 
   const exportHref = `/api/v1/reports/export.xlsx?${query({ report_key: reportKey, date_from: dateFrom, date_to: dateTo, partner_id: partnerId })}`;
   return <AppShell>
-    <section className="page-heading reports-heading"><div><span className="eyebrow">المرحلة العاشرة · معلومات الإدارة</span><h2>التقارير والطباعة</h2><p>تقارير تشغيلية من نفس الدفاتر، ومستندات A4 عربية جاهزة للمعاينة.</p></div><button className="secondary-button" onClick={() => void loadOptions()}><RefreshCw size={17}/> تحديث</button></section>
+    <section className="page-heading reports-heading"><div><h2>التقارير</h2><p>تقارير محاسبية وتشغيلية مع فلترة بالعميل أو المورد وتصدير Excel.</p></div><button className="secondary-button" onClick={() => void loadOptions()}><RefreshCw size={17}/> تحديث</button></section>
     {error ? <div className="alert alert--error" role="alert">{error}</div> : null}
     <div className="sales-tabs reports-tabs"><button className={tab === "reports" ? "active" : ""} onClick={() => setTab("reports")}><BarChart3 size={17}/> التقارير</button>{canPrint ? <button className={tab === "print" ? "active" : ""} onClick={() => setTab("print")}><Printer size={17}/> مركز طباعة A4</button> : null}</div>
     {tab === "reports" ? <>
@@ -111,7 +111,7 @@ export function ReportsPage() {
   </AppShell>;
 }
 
-function Header({ company, title, number }: { company: Company; title: string; number: string }) { return <header className="a4-header"><div><h1>{company.name_ar}</h1><p>{company.address}</p><p>{company.phone}{company.tax_number ? ` · ضريبي ${company.tax_number}` : ""}</p></div><div><h2>{title}</h2><strong>{number}</strong></div></header>; }
+function Header({ company, title, number }: { company: Company; title: string; number: string }) { return <header className="a4-header"><div><h1>{company.name_ar}</h1><p>{company.address}</p><p className="a4-company-phones">{company.phone}{company.tax_number ? `\nضريبي ${company.tax_number}` : ""}</p></div><div><h2>{title}</h2><strong>{number}</strong></div></header>; }
 
 function chunks<T>(values: T[], size: number): T[][] { const pages: T[][] = []; for (let index = 0; index < values.length; index += size) pages.push(values.slice(index, index + size)); return pages.length ? pages : [[]]; }
 

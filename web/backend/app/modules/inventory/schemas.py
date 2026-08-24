@@ -69,7 +69,7 @@ class AdjustmentRequest(BaseModel):
     weight_kg: Decimal = Field(default=Decimal("0"), ge=0, max_digits=20, decimal_places=6)
     cost_basis: CostBasis
     unit_cost: Decimal = Field(default=Decimal("0"), ge=0, max_digits=20, decimal_places=6)
-    reason: str = Field(min_length=3, max_length=500)
+    reason: str = Field(default="", max_length=500)
 
     @model_validator(mode="after")
     def validate_basis_amount(self) -> "AdjustmentRequest":
@@ -140,6 +140,8 @@ class BalanceView(InventoryView):
     version: int
     product_code: str
     product_name_ar: str
+    product_type: str
+    unit_symbol: str
     warehouse_name_ar: str
 
 

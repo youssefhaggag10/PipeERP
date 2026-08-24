@@ -5,6 +5,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install --no-install-recommends --yes postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN addgroup --system pipeerp && adduser --system --ingroup pipeerp pipeerp
 
 COPY pyproject.toml ./

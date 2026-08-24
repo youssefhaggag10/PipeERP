@@ -33,8 +33,6 @@ from app.modules.purchasing.models import (  # noqa: E402
 )
 from app.modules.treasury.models import (  # noqa: E402
     FinancialAccount,
-    PaymentAllocation,
-    PaymentTransaction,
 )
 
 
@@ -176,7 +174,7 @@ def _headers(test_client: TestClient, key: str | None = None) -> dict[str, str]:
     return result
 
 
-def test_purchase_order_advance_is_attached_to_supplier_invoice() -> None:
+def test_purchase_order_rejects_advance_from_order_screen() -> None:
     factory = _database()
     product_id, warehouse_id, supplier_id = _seed(factory)
     with factory() as db:
@@ -208,77 +206,62 @@ def test_purchase_order_advance_is_attached_to_supplier_invoice() -> None:
                 ],
             },
         )
-        assert created.status_code == 201, created.text
-        order = created.json()
-        approved = test_client.post(
-            f"/api/v1/purchases/orders/{order['id']}/approval",
-            headers=_headers(test_client),
-            json={"version": order["version"]},
-        )
-        assert approved.status_code == 200, approved.text
-        line_id = approved.json()["lines"][0]["id"]
-        received = test_client.post(
-            f"/api/v1/purchases/orders/{order['id']}/receipts",
-            headers=_headers(test_client, "purchase-advance-receipt"),
-            json={
-                "lines": [
-                    {
-                        "purchase_order_line_id": line_id,
-                        "gross_quantity": "10",
-                        "gross_weight_kg": "5",
-                    }
-                ]
-            },
-        )
-        assert received.status_code == 201, received.text
-        assert received.json()["lines"][0]["lot_number"].startswith("PR-000001-")
-        invoice = test_client.post(
-            f"/api/v1/purchases/orders/{order['id']}/supplier-invoice",
-            headers=_headers(test_client),
-            json={"supplier_invoice_number": "SUP-ADV-1"},
-        )
-        assert invoice.status_code == 201, invoice.text
+        assert created.status_code == 409
+        assert "شاشة الحسابات" in created.json()["detail"]
+    app.dependency_overrides.clear()
 
-    with factory() as db:
-        payment = db.scalar(
-            select(PaymentTransaction).where(
-                PaymentTransaction.reference_type == "purchase",
-                PaymentTransaction.reference_id == UUID(order["id"]),
-            )
-        )
-        assert payment is not None
-        assert payment.amount == Decimal("75.00")
-        assert payment.supplier_invoice_id == UUID(invoice.json()["id"])
-        allocation = db.scalar(
-            select(PaymentAllocation).where(
-                PaymentAllocation.payment_transaction_id == payment.id
-            )
-        )
-        assert allocation is not None
-        assert allocation.amount == Decimal("75.00")
 
+def test_desktop_purchase_flow_receives_all_lines_and_posts_invoice() -> None:
+    factory = _database()
+    product_id, warehouse_id, supplier_id = _seed(factory)
     with _client(factory) as test_client:
         _login(test_client)
-        reversed_invoice = test_client.post(
-            f"/api/v1/purchases/supplier-invoices/{invoice.json()['id']}/reversal",
+        created = test_client.post(
+            "/api/v1/purchases/orders",
             headers=_headers(test_client),
-            json={"reason": "تصحيح فاتورة المورد"},
+            json={
+                "supplier_id": supplier_id,
+                "warehouse_id": warehouse_id,
+                "lines": [
+                    {
+                        "product_id": product_id,
+                        "cost_basis": "quantity",
+                        "ordered_quantity": "1000",
+                        "ordered_weight_kg": "0",
+                        "unit_price": "30",
+                        "additional_unit_cost": "4",
+                        "purchase_loss_quantity": "5",
+                    }
+                ],
+            },
         )
-        assert reversed_invoice.status_code == 200, reversed_invoice.text
-        assert reversed_invoice.json()["status"] == "reversed"
-        reversed_receipt = test_client.post(
-            f"/api/v1/purchases/receipts/{received.json()['id']}/reversal",
-            headers=_headers(test_client, "purchase-advance-reversal"),
-            json={"reason": "إلغاء الاستلام بعد عكس الفاتورة"},
+        assert created.status_code == 201, created.text
+        order = created.json()
+        line = order["lines"][0]
+        assert order["status"] == "draft"
+        assert line["purchase_loss_quantity"] == "5.000000"
+        assert line["net_quantity"] == "995.000000"
+        assert line["inventory_unit_cost"] == "34.170854"
+        assert line["lot_number"].startswith("PUR-PO-000001-")
+
+        received = test_client.post(
+            f"/api/v1/purchases/orders/{order['id']}/receive",
+            headers=_headers(test_client, "desktop-purchase-receive-0001"),
+            json={"version": order["version"]},
         )
-        assert reversed_receipt.status_code == 200, reversed_receipt.text
+        assert received.status_code == 200, received.text
+        result = received.json()
+        assert result["status"] == "received"
+        assert result["lines"][0]["received_quantity"] == "1000.000000"
+        assert result["supplier_invoice"]["status"] == "posted"
+        assert result["supplier_invoice"]["total"] == "30000.00"
 
     with factory() as db:
-        payment = db.scalar(select(PaymentTransaction))
-        assert payment is not None and payment.supplier_invoice_id is None
-        assert db.scalar(select(func.count(PaymentAllocation.id))) == 0
-        supplier_invoice = db.get(SupplierInvoice, UUID(invoice.json()["id"]))
-        assert supplier_invoice is not None and supplier_invoice.status == "reversed"
+        balance = db.scalar(select(InventoryBalance))
+        assert balance is not None
+        assert balance.quantity_on_hand == Decimal("995.000000")
+        assert db.scalar(select(func.count(PurchaseReceipt.id))) == 1
+        assert db.scalar(select(func.count(SupplierInvoice.id))) == 1
     app.dependency_overrides.clear()
 
 

@@ -147,7 +147,7 @@ class CompanySettings(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     company_name_ar: Mapped[str] = mapped_column(String(200), nullable=False, default="PipeERP")
-    phone: Mapped[str] = mapped_column(String(40), nullable=False, default="")
+    phone: Mapped[str] = mapped_column(Text, nullable=False, default="")
     address: Mapped[str] = mapped_column(Text, nullable=False, default="")
     tax_number: Mapped[str] = mapped_column(String(80), nullable=False, default="")
     currency_code: Mapped[str] = mapped_column(String(3), nullable=False, default="EGP")

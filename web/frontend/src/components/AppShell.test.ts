@@ -6,19 +6,19 @@ describe("permission-aware navigation", () => {
   it("shows only the dashboard and modules explicitly granted to a role", () => {
     const labels = visibleNavigationItems(["sales.read"]).map((item) => item.label);
 
-    expect(labels).toEqual(["لوحة التشغيل", "المبيعات"]);
+    expect(labels).toEqual(["الرئيسية", "المبيعات"]);
   });
 
   it("does not infer manage access from a read permission for another module", () => {
     const labels = visibleNavigationItems(["inventory.manage"]).map((item) => item.label);
 
-    expect(labels).toEqual(["لوحة التشغيل"]);
+    expect(labels).toEqual(["الرئيسية"]);
   });
 
   it("exposes the purchasing workspace only to purchasing readers", () => {
     const items = visibleNavigationItems(["purchases.read"]);
 
-    expect(items.map((item) => item.label)).toEqual(["لوحة التشغيل", "المشتريات"]);
+    expect(items.map((item) => item.label)).toEqual(["الرئيسية", "المشتريات"]);
     expect(items[1]?.to).toBe("/purchases");
   });
 
@@ -38,21 +38,20 @@ describe("permission-aware navigation", () => {
   it("links manufacturing readers to the responsive manufacturing workspace", () => {
     const items = visibleNavigationItems(["manufacturing.read"]);
 
-    expect(items.map((item) => item.label)).toEqual(["لوحة التشغيل", "التصنيع"]);
+    expect(items.map((item) => item.label)).toEqual(["الرئيسية", "التصنيع"]);
     expect(items[1]?.to).toBe("/manufacturing");
   });
 
-  it("links returns readers to the returns and refunds workspace", () => {
+  it("does not expose a standalone returns module because desktop handles returns in accounts", () => {
     const items = visibleNavigationItems(["returns.read"]);
 
-    expect(items.map((item) => item.label)).toEqual(["لوحة التشغيل", "المرتجعات"]);
-    expect(items[1]?.to).toBe("/returns");
+    expect(items.map((item) => item.label)).toEqual(["الرئيسية"]);
   });
 
   it("links report readers to the reports and A4 workspace", () => {
     const items = visibleNavigationItems(["reports.read"]);
 
-    expect(items.map((item) => item.label)).toEqual(["لوحة التشغيل", "التقارير"]);
+    expect(items.map((item) => item.label)).toEqual(["الرئيسية", "التقارير"]);
     expect(items[1]?.to).toBe("/reports");
   });
 });

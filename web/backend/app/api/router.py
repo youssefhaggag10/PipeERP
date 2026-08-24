@@ -12,6 +12,7 @@ from app.api.routes.purchasing import router as purchasing_router
 from app.api.routes.reports import router as reports_router
 from app.api.routes.returns import router as returns_router
 from app.api.routes.sales import router as sales_router
+from app.api.routes.system_settings import router as system_settings_router
 from app.api.routes.treasury import router as treasury_router
 
 api_router = APIRouter()
@@ -26,5 +27,6 @@ api_router.include_router(manufacturing_router, tags=["manufacturing"])
 api_router.include_router(purchasing_router, tags=["purchasing"])
 api_router.include_router(returns_router, tags=["returns"])
 api_router.include_router(sales_router, tags=["sales"])
+api_router.include_router(system_settings_router, tags=["system settings"])
 api_router.include_router(treasury_router, tags=["accounts"])
 api_router.include_router(reports_router, tags=["reports"])

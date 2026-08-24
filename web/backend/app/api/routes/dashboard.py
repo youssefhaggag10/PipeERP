@@ -34,11 +34,7 @@ class DashboardSummary(BaseModel):
 
 
 @router.get("/summary", response_model=DashboardSummary)
-def summary(
-    request: Request,
-    principal: CurrentPrincipal,
-    db: DatabaseSession,
-) -> DashboardSummary:
+def summary(request: Request, principal: CurrentPrincipal, db: DatabaseSession) -> DashboardSummary:
     del request
     permissions = principal.permissions
     day_start = datetime.combine(datetime.now(UTC).date(), time.min, tzinfo=UTC)
@@ -54,10 +50,7 @@ def summary(
     if can_sales:
         allowed_billing_methods = [
             method
-            for method, allowed in (
-                ("piece", can_piece_sales),
-                ("weight", can_weight_sales),
-            )
+            for method, allowed in (("piece", can_piece_sales), ("weight", can_weight_sales))
             if allowed
         ]
         sales_today = Decimal(

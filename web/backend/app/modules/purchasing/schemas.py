@@ -22,18 +22,25 @@ class CreatePurchaseOrderLineRequest(BaseModel):
     ordered_weight_kg: Decimal = Field(default=Decimal("0"), ge=0, decimal_places=6)
     unit_price: Decimal = Field(ge=0, decimal_places=6)
     additional_unit_cost: Decimal = Field(default=Decimal("0"), ge=0, decimal_places=6)
+    lot_number: str = Field(default="", max_length=80)
+    purchase_loss_quantity: Decimal | None = Field(default=None, ge=0, decimal_places=6)
 
     @model_validator(mode="after")
     def validate_basis_amount(self) -> "CreatePurchaseOrderLineRequest":
         basis = self.ordered_quantity if self.cost_basis == "quantity" else self.ordered_weight_kg
         if basis <= 0:
             raise ValueError("يجب إدخال مقدار موجب لأساس تكلفة بند الشراء")
+        if self.purchase_loss_quantity is not None:
+            if self.cost_basis != "quantity" and self.purchase_loss_quantity > 0:
+                raise ValueError("فقد الشراء في مرجع الديسكتوب يُحسب على الكمية فقط")
+            if self.purchase_loss_quantity >= self.ordered_quantity:
+                raise ValueError("فقد الشراء يجب أن يكون أقل من الكمية")
         return self
 
 
 class CreatePurchaseOrderRequest(BaseModel):
     supplier_id: UUID
-    warehouse_id: UUID
+    warehouse_id: UUID | None = None
     notes: str = Field(default="", max_length=2000)
     advance_amount: Decimal = Field(default=Decimal("0"), ge=0, decimal_places=2)
     advance_payment_method: PaymentMethod = "cash"
@@ -51,6 +58,10 @@ class CreatePurchaseOrderRequest(BaseModel):
 
 
 class ApprovePurchaseOrderRequest(BaseModel):
+    version: int = Field(gt=0)
+
+
+class ReceivePurchaseOrderRequest(BaseModel):
     version: int = Field(gt=0)
 
 
@@ -107,6 +118,10 @@ class PurchaseOrderLineView(PurchasingView):
     received_weight_kg: Decimal
     unit_price: Decimal
     additional_unit_cost: Decimal
+    lot_number: str
+    purchase_loss_quantity: Decimal
+    net_quantity: Decimal
+    inventory_unit_cost: Decimal
     line_total: Decimal
     version: int
 
@@ -174,6 +189,7 @@ class PurchaseOption(PurchasingView):
     code: str
     name_ar: str
     account_type: str = ""
+    unit_symbol: str = ""
 
 
 class PurchaseOptionsView(BaseModel):

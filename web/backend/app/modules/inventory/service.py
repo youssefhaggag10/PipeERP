@@ -32,7 +32,7 @@ from app.modules.inventory.schemas import (
     TransactionView,
     TransferRequest,
 )
-from app.modules.master_data.models import Partner, Product, Warehouse
+from app.modules.master_data.models import Partner, Product, UnitOfMeasure, Warehouse
 
 
 class InventoryError(Exception):
@@ -991,9 +991,12 @@ def list_balances(db: Session) -> list[BalanceView]:
             InventoryBalance,
             Product.code,
             Product.name_ar,
+            Product.product_type,
+            UnitOfMeasure.symbol,
             Warehouse.name_ar.label("warehouse_name_ar"),
         )
         .join(Product, Product.id == InventoryBalance.product_id)
+        .join(UnitOfMeasure, UnitOfMeasure.id == Product.unit_id)
         .join(Warehouse, Warehouse.id == InventoryBalance.warehouse_id)
         .order_by(Product.code, Warehouse.name_ar)
     )
@@ -1006,9 +1009,18 @@ def list_balances(db: Session) -> list[BalanceView]:
             version=balance.version,
             product_code=product_code,
             product_name_ar=product_name_ar,
+            product_type=product_type,
+            unit_symbol=unit_symbol,
             warehouse_name_ar=warehouse_name_ar,
         )
-        for balance, product_code, product_name_ar, warehouse_name_ar in rows
+        for (
+            balance,
+            product_code,
+            product_name_ar,
+            product_type,
+            unit_symbol,
+            warehouse_name_ar,
+        ) in rows
     ]
 
 

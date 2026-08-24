@@ -167,6 +167,18 @@ def test_product_creation_duplicate_code_and_optimistic_concurrency() -> None:
             headers=_csrf(client),
         )
         assert stale.status_code == 409
+
+        deleted = client.delete(
+            f"/api/v1/master-data/products/{product_id}",
+            headers=_csrf(client),
+        )
+        assert deleted.status_code == 204, deleted.text
+        listed = client.get("/api/v1/master-data/products")
+        assert listed.status_code == 200
+        assert all(item["id"] != product_id for item in listed.json())
+
+    with factory() as db:
+        assert "master_data.product.delete" in set(db.scalars(select(AuditLog.event_type)))
     app.dependency_overrides.clear()
 
 

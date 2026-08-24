@@ -10,7 +10,6 @@ import json
 import os
 import sys
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -152,24 +151,17 @@ def seed_master_data(api: Api) -> dict[str, dict[str, Any]]:
             {"code": "DEMO-OTHER", "name_ar": "أصناف متنوعة ديمو"},
         ),
     }
-    warehouses = {
-        "main": ensure(
-            api,
-            "/master-data/warehouses?include_inactive=true",
+    warehouse_rows = api.get("/master-data/warehouses")
+    main_warehouse = next(
+        (item for item in warehouse_rows if item.get("code") == "MAIN"),
+        next((item for item in warehouse_rows if item.get("is_default")), None),
+    )
+    if main_warehouse is None:
+        main_warehouse = api.post(
             "/master-data/warehouses",
-            "code",
-            "DEMO-WH-MAIN",
-            {"code": "DEMO-WH-MAIN", "name_ar": "مخزن الديمو الرئيسي", "is_default": False},
-        ),
-        "branch": ensure(
-            api,
-            "/master-data/warehouses?include_inactive=true",
-            "/master-data/warehouses",
-            "code",
-            "DEMO-WH-BR",
-            {"code": "DEMO-WH-BR", "name_ar": "مخزن فرع الديمو", "is_default": False},
-        ),
-    }
+            {"code": "MAIN", "name_ar": "المصنع", "is_default": True},
+        )
+    warehouses = {"main": main_warehouse}
 
     product_specs = {
         "raw": ("DEMO-RM-PVC", "خامة PVC ديمو", "raw_material", "kg", "raw", "250", "0"),
@@ -322,20 +314,7 @@ def seed_inventory(api: Api, data: dict[str, dict[str, Any]]) -> None:
             },
             f"pipeerp-demo-v1-receipt-{name}",
         )
-    api.post(
-        "/inventory/transfers",
-        {
-            "product_id": data["finished"]["id"],
-            "source_warehouse_id": data["main"]["id"],
-            "destination_warehouse_id": data["branch"]["id"],
-            "amount": "10",
-            "cost_basis": "quantity",
-            "reference_id": "PIPEERP-DEMO-TRANSFER",
-            "notes": MARKER,
-        },
-        "pipeerp-demo-v1-stock-transfer",
-    )
-    progress("أرصدة المخزون والدفعات وتحويل بين مخزنين")
+    progress("أرصدة المخزون والدفعات على مخزن المصنع")
 
 
 def seed_purchase(api: Api, data: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -357,6 +336,7 @@ def seed_purchase(api: Api, data: dict[str, dict[str, Any]]) -> dict[str, Any]:
                         "ordered_weight_kg": "0",
                         "unit_price": "26",
                         "additional_unit_cost": "1",
+                        "purchase_loss_quantity": "4",
                     },
                     {
                         "product_id": data["additive"]["id"],
@@ -365,44 +345,18 @@ def seed_purchase(api: Api, data: dict[str, dict[str, Any]]) -> dict[str, Any]:
                         "ordered_weight_kg": "0",
                         "unit_price": "42",
                         "additional_unit_cost": "0",
+                        "purchase_loss_quantity": "1",
                     },
                 ],
             },
         )
-    if order["status"] == "draft":
+    if order["status"] in {"draft", "approved", "partially_received"}:
         order = api.post(
-            f"/purchases/orders/{order['id']}/approval",
+            f"/purchases/orders/{order['id']}/receive",
             {"version": order["version"]},
+            "pipeerp-demo-v1-purchase-receive",
         )
-    if order["status"] in {"approved", "partially_received"}:
-        remaining_lines = []
-        for line in order["lines"]:
-            remaining = Decimal(line["ordered_quantity"]) - Decimal(line["received_quantity"])
-            if remaining > 0:
-                remaining_lines.append(
-                    {
-                        "purchase_order_line_id": line["id"],
-                        "gross_quantity": str(remaining),
-                        "gross_weight_kg": "0",
-                        "loss_quantity": "0",
-                        "loss_weight_kg": "0",
-                        "lot_number": f"DEMO-PO-{line['product_code']}",
-                    }
-                )
-        if remaining_lines:
-            api.post(
-                f"/purchases/orders/{order['id']}/receipts",
-                {"notes": MARKER, "lines": remaining_lines},
-                "pipeerp-demo-v1-purchase-receipt",
-            )
-            order = api.get(f"/purchases/orders/{order['id']}")
-    if order.get("supplier_invoice") is None:
-        api.post(
-            f"/purchases/orders/{order['id']}/supplier-invoice",
-            {"supplier_invoice_number": "SUP-DEMO-2026-001"},
-        )
-        order = api.get(f"/purchases/orders/{order['id']}")
-    progress("أمر شراء مع استلام وفاتورة مورد")
+    progress("أمر شراء مستلم ومُرحّل تلقائياً مع فاتورة المورد")
     return order
 
 
@@ -477,7 +431,7 @@ def seed_sales(api: Api, data: dict[str, dict[str, Any]]) -> dict[str, Any]:
             "/sales/orders",
             {
                 "customer_id": data["customer2"]["id"],
-                "warehouse_id": data["branch"]["id"],
+                "warehouse_id": data["main"]["id"],
                 "notes": f"{MARKER} draft-sale",
                 "advance_amount": "0",
                 "lines": [
@@ -665,17 +619,6 @@ def seed_treasury(
         },
         "pipeerp-demo-v1-supplier-payment",
     )
-    api.post(
-        "/accounts/transfers",
-        {
-            "from_account_id": accounts["cash"]["id"],
-            "to_account_id": accounts["bank"]["id"],
-            "amount": "1000",
-            "notes": f"{MARKER} account-transfer",
-        },
-        "pipeerp-demo-v1-account-transfer",
-    )
-
     opening = api.get("/accounts/opening-balances")
     if tagged(opening, "notes", "customer-opening") is None:
         api.post(
@@ -699,7 +642,7 @@ def seed_treasury(
                 "notes": f"{MARKER} customer-credit",
             },
         )
-    progress("تحصيل وسداد وتوزيع فواتير وتحويل خزينة وأرصدة افتتاحية")
+    progress("تحصيل وسداد وتوزيع فواتير وأرصدة افتتاحية وتسويات")
 
 
 def local_api(url: str) -> str:

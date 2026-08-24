@@ -1,8 +1,10 @@
 from datetime import date
+from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, status
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.dependencies import (
@@ -13,6 +15,10 @@ from app.api.dependencies import (
     enforce_permission,
 )
 from app.modules.identity.permissions import PermissionCode
+from app.modules.master_data.models import Partner
+from app.modules.returns.schemas import ReturnableInvoiceView
+from app.modules.returns.service import list_returnable_invoices
+from app.modules.treasury.models import PaymentAllocation, PaymentTransaction
 from app.modules.treasury.schemas import (
     CustomerAdjustmentRequest,
     CustomerAdjustmentView,
@@ -65,6 +71,14 @@ from app.modules.treasury.service import (
 
 router = APIRouter(prefix="/accounts")
 IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", min_length=12, max_length=120)]
+
+
+class AccountInvoiceView(ReturnableInvoiceView):
+    partner_phone: str
+    payment_methods: list[str]
+    invoice_status: str
+    delivery_return_status: str
+    payment_status: str
 
 
 def _translate_error(exc: Exception) -> HTTPException:
@@ -227,6 +241,81 @@ def open_invoices(
         return list_open_invoices(db, transaction_type=transaction_type, partner_id=partner_id)
     except (TreasuryNotFound, ValueError) as exc:
         raise _translate_error(exc) from exc
+
+
+def _invoice_payment_methods(
+    db: DatabaseSession, *, invoice_type: str, invoice_id: UUID
+) -> list[str]:
+    direct_column = (
+        PaymentTransaction.customer_invoice_id
+        if invoice_type == "sales"
+        else PaymentTransaction.supplier_invoice_id
+    )
+    allocation_column = (
+        PaymentAllocation.customer_invoice_id
+        if invoice_type == "sales"
+        else PaymentAllocation.supplier_invoice_id
+    )
+    return list(
+        db.scalars(
+            select(PaymentTransaction.payment_method)
+            .outerjoin(
+                PaymentAllocation,
+                PaymentAllocation.payment_transaction_id == PaymentTransaction.id,
+            )
+            .where(
+                PaymentTransaction.status == "posted",
+                or_(direct_column == invoice_id, allocation_column == invoice_id),
+            )
+            .distinct()
+            .order_by(PaymentTransaction.payment_method)
+        )
+    )
+
+
+@router.get("/invoices", response_model=list[AccountInvoiceView])
+def all_invoices(
+    invoice_type: Annotated[str, Query(pattern="^(sales|purchase)$")],
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DatabaseSession,
+) -> list[AccountInvoiceView]:
+    _read(request, db, principal)
+    rows = list_returnable_invoices(db, return_type=invoice_type)
+    result: list[AccountInvoiceView] = []
+    for row in rows:
+        partner = db.get(Partner, row.partner_id)
+        effective_paid = max(Decimal("0"), row.paid - row.refunded)
+        payment_status = (
+            "paid"
+            if row.remaining == 0 and row.net_total > 0
+            else "partial"
+            if effective_paid > 0
+            else "unpaid"
+        )
+        result.append(
+            AccountInvoiceView(
+                **row.model_dump(),
+                partner_phone=partner.phone if partner is not None else "",
+                payment_methods=_invoice_payment_methods(
+                    db,
+                    invoice_type=invoice_type,
+                    invoice_id=row.id,
+                ),
+                invoice_status="posted",
+                delivery_return_status=(
+                    "مرتجع كلي"
+                    if row.return_status == "full"
+                    else "مرتجع جزئي"
+                    if row.return_status == "partial"
+                    else "مُسلَّمة"
+                    if invoice_type == "sales"
+                    else "مستلمة"
+                ),
+                payment_status=payment_status,
+            )
+        )
+    return result
 
 
 @router.get("/open-orders", response_model=list[OpenOrderView])

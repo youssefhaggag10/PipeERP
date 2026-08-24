@@ -238,6 +238,16 @@ def test_receipt_allocations_advances_reversal_and_opening_balance() -> None:
     seeded = _seed(factory)
     with _client(factory) as client:
         _login(client)
+        invoices = client.get("/api/v1/accounts/invoices?invoice_type=sales")
+        assert invoices.status_code == 200, invoices.text
+        assert {row["invoice_number"] for row in invoices.json()} == {
+            "SI-TR-1",
+            "SI-TR-2",
+        }
+        assert all(row["invoice_status"] == "posted" for row in invoices.json())
+        assert all(row["delivery_return_status"] == "مُسلَّمة" for row in invoices.json())
+        assert all(row["payment_status"] == "unpaid" for row in invoices.json())
+        assert all(row["payment_methods"] == [] for row in invoices.json())
         receipt = client.post(
             "/api/v1/accounts/payments",
             headers=_headers(client, "customer-receipt-0001"),
@@ -286,16 +296,12 @@ def test_receipt_allocations_advances_reversal_and_opening_balance() -> None:
                 "financial_account_id": seeded["cash"],
                 "amount": "200",
                 "payment_method": "cash",
-                "allocations": [
-                    {"invoice_id": seeded["first_invoice"], "amount": "200"}
-                ],
+                "allocations": [{"invoice_id": seeded["first_invoice"], "amount": "200"}],
             },
         )
         assert excessive.status_code == 409
 
-        balances = client.get(
-            "/api/v1/accounts/partner-balances?partner_type=customer"
-        )
+        balances = client.get("/api/v1/accounts/partner-balances?partner_type=customer")
         assert balances.status_code == 200
         balance = balances.json()[0]
         assert balance["paid_total"] == "550.00"
@@ -314,9 +320,7 @@ def test_receipt_allocations_advances_reversal_and_opening_balance() -> None:
             },
         )
         assert opening.status_code == 201, opening.text
-        balances = client.get(
-            "/api/v1/accounts/partner-balances?partner_type=customer"
-        ).json()
+        balances = client.get("/api/v1/accounts/partner-balances?partner_type=customer").json()
         assert balances[0]["opening_balance"] == "100.00"
         assert balances[0]["balance"] == "700.00"
 
@@ -400,6 +404,34 @@ def test_receipt_allocations_advances_reversal_and_opening_balance() -> None:
     app.dependency_overrides.clear()
 
 
+def test_system_reset_requires_admin_password_and_preserves_master_data() -> None:
+    factory = _database()
+    _seed(factory)
+    with _client(factory) as client:
+        _login(client)
+        rejected = client.post(
+            "/api/v1/system/reset",
+            headers=_headers(client),
+            json={"password": "wrong-password", "confirmation": "تصفير النظام"},
+        )
+        assert rejected.status_code == 422
+
+        reset = client.post(
+            "/api/v1/system/reset",
+            headers=_headers(client),
+            json={
+                "password": "Admin-password-2026",
+                "confirmation": "تصفير النظام",
+            },
+        )
+        assert reset.status_code == 204, reset.text
+
+    with factory() as db:
+        assert db.scalar(select(Partner).where(Partner.code == "CUS-TR")) is not None
+        assert db.scalar(select(SalesOrder).where(SalesOrder.order_number == "SO-TR-1")) is None
+    app.dependency_overrides.clear()
+
+
 def test_order_advance_is_attached_when_invoice_is_posted() -> None:
     factory = _database()
     seeded = _seed(factory)
@@ -456,9 +488,7 @@ def test_order_advance_is_attached_when_invoice_is_posted() -> None:
         assert payment is not None
         assert payment.customer_invoice_id == invoice.id
         allocation = db.scalar(
-            select(PaymentAllocation).where(
-                PaymentAllocation.payment_transaction_id == payment.id
-            )
+            select(PaymentAllocation).where(PaymentAllocation.payment_transaction_id == payment.id)
         )
         assert allocation is not None
         assert allocation.amount == Decimal("100.00")

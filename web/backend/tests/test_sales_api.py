@@ -32,7 +32,6 @@ from app.modules.sales.models import (  # noqa: E402
 )
 from app.modules.treasury.models import (  # noqa: E402
     FinancialAccount,
-    PaymentAllocation,
     PaymentTransaction,
 )
 
@@ -199,7 +198,7 @@ def _headers(client: TestClient, key: str | None = None) -> dict[str, str]:
     return headers
 
 
-def test_sales_order_advance_posts_atomically_and_blocks_unsafe_reversal() -> None:
+def test_sales_order_rejects_advance_from_order_screen() -> None:
     factory = _database()
     product_id, warehouse_id, customer_id = _seed(factory)
     with factory() as db:
@@ -229,46 +228,14 @@ def test_sales_order_advance_posts_atomically_and_blocks_unsafe_reversal() -> No
                 ],
             },
         )
-        assert created.status_code == 201, created.text
-        order = created.json()
-
-        cancelled = client.post(
-            f"/api/v1/sales/orders/{order['id']}/cancellation",
-            headers=_headers(client),
-            json={"version": order["version"], "reason": "إلغاء للاختبار"},
-        )
-        assert cancelled.status_code == 409
-
-        delivered = client.post(
-            f"/api/v1/sales/orders/{order['id']}/delivery",
-            headers=_headers(client, "sales-advance-delivery"),
-            json={"version": order["version"]},
-        )
-        assert delivered.status_code == 200, delivered.text
-        delivery = delivered.json()["delivery"]
-
-        unsafe_reversal = client.post(
-            f"/api/v1/sales/deliveries/{delivery['id']}/reversal",
-            headers=_headers(client, "sales-advance-reversal"),
-            json={"reason": "محاولة عكس مع وجود تحصيل"},
-        )
-        assert unsafe_reversal.status_code == 409
+        assert created.status_code == 409
+        assert "شاشة الحسابات" in created.json()["detail"]
 
     with factory() as db:
-        payment = db.scalar(
-            select(PaymentTransaction).where(
-                PaymentTransaction.reference_type == "sale",
-                PaymentTransaction.reference_id == UUID(order["id"]),
-            )
+        payment_id = db.scalar(
+            select(PaymentTransaction.id).where(PaymentTransaction.reference_type == "sale")
         )
-        assert payment is not None
-        assert payment.amount == Decimal("40.00")
-        assert payment.customer_invoice_id is not None
-        allocation = db.scalar(
-            select(PaymentAllocation).where(PaymentAllocation.payment_transaction_id == payment.id)
-        )
-        assert allocation is not None
-        assert allocation.amount == Decimal("40.00")
+        assert payment_id is None
     app.dependency_overrides.clear()
 
 

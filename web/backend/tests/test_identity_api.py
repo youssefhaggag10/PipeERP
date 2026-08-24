@@ -148,6 +148,42 @@ def test_disabling_user_invalidates_existing_session_immediately() -> None:
     app.dependency_overrides.clear()
 
 
+def test_admin_can_delete_another_user_but_not_the_current_account() -> None:
+    factory = _database()
+    _bootstrap(factory)
+    with _client(factory) as admin:
+        _login(admin, "admin", "Admin-password-2026")
+        created = admin.post(
+            "/api/v1/identity/users",
+            json={
+                "username": "temporary-user",
+                "display_name": "مستخدم مؤقت",
+                "password": "Temporary-password-2026",
+                "role_codes": ["operations_manager"],
+                "must_change_password": False,
+            },
+            headers=_csrf(admin),
+        )
+        assert created.status_code == 201
+        deleted = admin.delete(
+            f"/api/v1/identity/users/{created.json()['id']}",
+            headers=_csrf(admin),
+        )
+        assert deleted.status_code == 204
+        assert all(
+            item["username"] != "temporary-user"
+            for item in admin.get("/api/v1/identity/users").json()
+        )
+
+        current_id = admin.get("/api/v1/auth/me").json()["user"]["id"]
+        protected = admin.delete(
+            f"/api/v1/identity/users/{current_id}",
+            headers=_csrf(admin),
+        )
+        assert protected.status_code == 422
+    app.dependency_overrides.clear()
+
+
 def test_repeated_failures_lock_the_account_without_revealing_user_state() -> None:
     factory = _database()
     _bootstrap(factory)

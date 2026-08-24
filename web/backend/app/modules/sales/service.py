@@ -38,7 +38,6 @@ from app.modules.sales.schemas import (
     CreateQuotationRequest,
     CreateWeightSaleRequest,
     CustomerInvoiceView,
-    PaymentMethod,
     PricingMode,
     QuotationLineView,
     QuotationView,
@@ -248,7 +247,7 @@ def sales_options(db: Session) -> SalesOptionsView:
     warehouses = list(
         db.scalars(
             select(Warehouse)
-            .where(Warehouse.is_active.is_(True))
+            .where(Warehouse.is_active.is_(True), Warehouse.is_default.is_(True))
             .order_by(Warehouse.is_default.desc(), Warehouse.code)
         )
     )
@@ -333,43 +332,6 @@ def _validate_header(db: Session, customer_id: UUID, warehouse_id: UUID) -> None
         raise SalesNotFound("المخزن غير موجود أو غير نشط")
 
 
-def _post_sales_advance(
-    db: Session,
-    *,
-    order: SalesOrder,
-    amount: Decimal,
-    payment_method: PaymentMethod,
-    financial_account_id: UUID | None,
-    actor: Principal,
-    client: ClientContext,
-) -> None:
-    if amount <= 0:
-        return
-    if amount > order.total:
-        raise SalesConflict("الدفعة المقدمة أكبر من إجمالي أمر البيع")
-    if financial_account_id is None:
-        raise SalesConflict("اختر حساب الخزينة أو البنك للدفعة المقدمة")
-    from app.modules.treasury.schemas import PostPaymentRequest
-    from app.modules.treasury.service import post_payment
-
-    post_payment(
-        db,
-        payload=PostPaymentRequest(
-            transaction_type="customer_receipt",
-            partner_id=order.customer_id,
-            financial_account_id=financial_account_id,
-            amount=amount,
-            payment_method=payment_method,
-            reference_type="sale",
-            reference_id=order.id,
-            notes=f"دفعة مقدمة عند إنشاء أمر البيع {order.order_number}",
-        ),
-        idempotency_key=f"sales-order-advance-{order.id}",
-        actor=actor,
-        client=client,
-    )
-
-
 def create_piece_order(
     db: Session,
     *,
@@ -377,6 +339,8 @@ def create_piece_order(
     actor: Principal,
     client: ClientContext,
 ) -> SalesOrderView:
+    if payload.advance_amount > 0:
+        raise SalesConflict("تحصيل العميل يتم من شاشة الحسابات بعد تسليم أمر البيع")
     _validate_header(db, payload.customer_id, payload.warehouse_id)
     products = _load_products(db, {line.product_id for line in payload.lines})
     if len(products) != len(payload.lines) or any(
@@ -418,15 +382,6 @@ def create_piece_order(
                 notes=source.notes.strip(),
             )
         )
-    _post_sales_advance(
-        db,
-        order=order,
-        amount=payload.advance_amount,
-        payment_method=payload.advance_payment_method,
-        financial_account_id=payload.advance_financial_account_id,
-        actor=actor,
-        client=client,
-    )
     add_audit(
         db,
         actor_user_id=actor.user.id,
@@ -448,6 +403,8 @@ def create_weight_sale(
     actor: Principal,
     client: ClientContext,
 ) -> SalesOrderView:
+    if payload.advance_amount > 0:
+        raise SalesConflict("تحصيل العميل يتم من شاشة الحسابات بعد اعتماد فاتورة الوزن")
     _validate_header(db, payload.customer_id, payload.warehouse_id)
     products = _load_products(db, {line.product_id for line in payload.lines})
     if len(products) != len(payload.lines) or any(
@@ -552,15 +509,6 @@ def create_weight_sale(
                 notes=source.notes.strip(),
             )
         )
-    _post_sales_advance(
-        db,
-        order=order,
-        amount=payload.advance_amount,
-        payment_method=payload.advance_payment_method,
-        financial_account_id=payload.advance_financial_account_id,
-        actor=actor,
-        client=client,
-    )
     add_audit(
         db,
         actor_user_id=actor.user.id,

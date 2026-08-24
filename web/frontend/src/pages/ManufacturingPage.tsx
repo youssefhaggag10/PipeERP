@@ -1,6 +1,5 @@
 import {
   Beaker,
-  Boxes,
   Check,
   Factory,
   PackageCheck,
@@ -230,7 +229,13 @@ export function ManufacturingPage() {
         api<Recipe[]>("/manufacturing/recipes"),
         api<Order[]>("/manufacturing/orders?limit=250"),
       ]);
-      setOptions(nextOptions);
+      const factoryWarehouse =
+        nextOptions.warehouses.find((item) => item.code === "MAIN") ??
+        nextOptions.warehouses[0];
+      setOptions({
+        ...nextOptions,
+        warehouses: factoryWarehouse ? [factoryWarehouse] : [],
+      });
       setRecipes(nextRecipes);
       setOrders(nextOrders);
       setSelectedId((current) =>
@@ -242,7 +247,7 @@ export function ManufacturingPage() {
         ...current,
         recipe_id: current.recipe_id || nextRecipes[0]?.id || "",
         warehouse_id:
-          current.warehouse_id || nextOptions.warehouses[0]?.id || "",
+          current.warehouse_id || factoryWarehouse?.id || "",
       }));
       setRecipeComponents((current) =>
         current.map((line, index) => ({
@@ -568,21 +573,12 @@ export function ManufacturingPage() {
     );
   }
 
-  const draftCount = orders.filter((item) => item.status === "draft").length;
-  const activeCount = orders.filter(
-    (item) => item.status === "in_progress",
-  ).length;
-  const completedCount = orders.filter(
-    (item) => item.status === "completed",
-  ).length;
-
   return (
     <AppShell>
       <section className="page-heading manufacturing-heading">
         <div>
-          <span className="eyebrow">المرحلة الثامنة · التشغيل</span>
-          <h2>التصنيع والخلطات</h2>
-          <p>تخطيط وصرف FIFO وإكمال فعلي بالوزن والهالك والخلطات المعدلة.</p>
+          <h2>التصنيع</h2>
+          <p>عرّف الخلطة مرة واحدة، اجمع مقاسات المواسير المطلوبة، ثم ابدأ الإنتاج بخطوات واضحة.</p>
         </div>
         <button
           className="secondary-button"
@@ -604,44 +600,6 @@ export function ManufacturingPage() {
           {notice}
         </div>
       ) : null}
-      <section className="inventory-stats manufacturing-stats">
-        <article>
-          <span className="inventory-stat__icon">
-            <Beaker size={20} />
-          </span>
-          <span>
-            <small>الخلطات النشطة</small>
-            <strong>{recipes.length}</strong>
-          </span>
-        </article>
-        <article>
-          <span className="inventory-stat__icon inventory-stat__icon--blue">
-            <Boxes size={20} />
-          </span>
-          <span>
-            <small>مسودات التخطيط</small>
-            <strong>{draftCount}</strong>
-          </span>
-        </article>
-        <article>
-          <span className="inventory-stat__icon inventory-stat__icon--amber">
-            <Factory size={20} />
-          </span>
-          <span>
-            <small>أوامر جارية</small>
-            <strong>{activeCount}</strong>
-          </span>
-        </article>
-        <article>
-          <span className="inventory-stat__icon inventory-stat__icon--green">
-            <PackageCheck size={20} />
-          </span>
-          <span>
-            <small>أوامر مكتملة</small>
-            <strong>{completedCount}</strong>
-          </span>
-        </article>
-      </section>
       <div className="sales-tabs manufacturing-tabs">
         <button
           className={tab === "orders" ? "active" : ""}
@@ -653,7 +611,7 @@ export function ManufacturingPage() {
           className={tab === "recipes" ? "active" : ""}
           onClick={() => setTab("recipes")}
         >
-          <Beaker size={16} /> الوصفات والخلطات
+          <Beaker size={16} /> تعريف الخلطات
         </button>
       </div>
 

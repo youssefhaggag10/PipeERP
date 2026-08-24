@@ -635,6 +635,37 @@ def update_user(
     return user
 
 
+def delete_user(
+    db: Session,
+    *,
+    target_user_id: UUID,
+    actor: Principal,
+    client: ClientContext,
+) -> None:
+    user = db.get(User, target_user_id)
+    if user is None:
+        raise IdentityNotFound("المستخدم غير موجود")
+    if user.id == actor.user.id:
+        raise ProtectedOperation("لا يمكنك حذف حسابك الحالي")
+    before = {
+        "username": user.username,
+        "display_name": user.display_name,
+        "is_active": user.is_active,
+        "roles": sorted(_role_codes(db, user.id)),
+    }
+    add_audit(
+        db,
+        actor_user_id=actor.user.id,
+        event_type="identity.user.delete",
+        entity_type="user",
+        entity_id=str(user.id),
+        outcome="success",
+        client=client,
+        before_state=before,
+    )
+    db.delete(user)
+
+
 def list_roles(db: Session) -> list[RoleView]:
     result: list[RoleView] = []
     for role in db.scalars(select(Role).order_by(Role.is_system.desc(), Role.name_ar)):

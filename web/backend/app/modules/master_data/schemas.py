@@ -179,7 +179,7 @@ class CompanySettingsView(MasterDataView):
 class UpdateCompanySettingsRequest(BaseModel):
     version: int = Field(ge=1)
     company_name_ar: str = Field(min_length=2, max_length=200)
-    phone: str = Field(default="", max_length=40)
+    phone: str = Field(default="", max_length=1000)
     address: str = Field(default="", max_length=2000)
     tax_number: str = Field(default="", max_length=80)
     currency_code: str = Field(pattern=r"^[A-Z]{3}$")

@@ -17,7 +17,7 @@ from app.modules.inventory.service import (
     post_receipt,
     reverse_purchase_receipt_inventory,
 )
-from app.modules.master_data.models import Partner, Product, Warehouse
+from app.modules.master_data.models import Partner, Product, UnitOfMeasure, Warehouse
 from app.modules.master_data.service import allocate_document_number
 from app.modules.purchasing.models import (
     PurchaseOrder,
@@ -36,6 +36,7 @@ from app.modules.purchasing.schemas import (
     PurchaseOrderView,
     PurchaseReceiptLineView,
     PurchaseReceiptView,
+    ReceivePurchaseOrderRequest,
     ReversePurchaseReceiptRequest,
     ReverseSupplierInvoiceRequest,
     SupplierInvoiceView,
@@ -112,6 +113,10 @@ def _order_view(db: Session, order: PurchaseOrder) -> PurchaseOrderView:
                 received_weight_kg=line.received_weight_kg,
                 unit_price=line.unit_price,
                 additional_unit_cost=line.additional_unit_cost,
+                lot_number=line.lot_number,
+                purchase_loss_quantity=line.purchase_loss_quantity,
+                net_quantity=line.net_quantity,
+                inventory_unit_cost=line.inventory_unit_cost,
                 line_total=line.line_total,
                 version=line.version,
             )
@@ -144,9 +149,16 @@ def purchase_options(db: Session) -> PurchaseOptionsView:
     )
     warehouses = list(
         db.scalars(
-            select(Warehouse).where(Warehouse.is_active.is_(True)).order_by(Warehouse.name_ar)
+            select(Warehouse)
+            .where(Warehouse.is_active.is_(True), Warehouse.is_default.is_(True))
+            .order_by(Warehouse.name_ar)
         )
     )
+    if not warehouses:
+        fallback = db.scalar(
+            select(Warehouse).where(Warehouse.is_active.is_(True)).order_by(Warehouse.name_ar)
+        )
+        warehouses = [fallback] if fallback is not None else []
     products = list(
         db.scalars(
             select(Product)
@@ -154,6 +166,12 @@ def purchase_options(db: Session) -> PurchaseOptionsView:
             .order_by(Product.name_ar)
         )
     )
+    units = {
+        item.id: item
+        for item in db.scalars(
+            select(UnitOfMeasure).where(UnitOfMeasure.id.in_({item.unit_id for item in products}))
+        )
+    }
     financial_accounts = list(
         db.scalars(
             select(FinancialAccount)
@@ -169,7 +187,13 @@ def purchase_options(db: Session) -> PurchaseOptionsView:
             PurchaseOption(id=item.id, code=item.code, name_ar=item.name_ar) for item in warehouses
         ],
         products=[
-            PurchaseOption(id=item.id, code=item.code, name_ar=item.name_ar) for item in products
+            PurchaseOption(
+                id=item.id,
+                code=item.code,
+                name_ar=item.name_ar,
+                unit_symbol=units[item.unit_id].symbol,
+            )
+            for item in products
         ],
         financial_accounts=[
             PurchaseOption(
@@ -225,12 +249,20 @@ def create_purchase_order(
     actor: Principal,
     client: ClientContext,
 ) -> PurchaseOrderView:
+    if payload.advance_amount > 0:
+        raise PurchasingConflict("سداد المورد يتم من شاشة الحسابات بعد استلام أمر الشراء")
     supplier = db.get(Partner, payload.supplier_id)
     if supplier is None or not supplier.is_active or not supplier.is_supplier:
         raise PurchasingNotFound("المورد غير موجود أو غير نشط")
-    warehouse = db.get(Warehouse, payload.warehouse_id)
-    if warehouse is None or not warehouse.is_active:
-        raise PurchasingNotFound("المخزن غير موجود أو غير نشط")
+    warehouse = db.scalar(
+        select(Warehouse).where(Warehouse.is_active.is_(True), Warehouse.is_default.is_(True))
+    )
+    if warehouse is None:
+        warehouse = db.scalar(
+            select(Warehouse).where(Warehouse.is_active.is_(True)).order_by(Warehouse.name_ar)
+        )
+    if warehouse is None:
+        raise PurchasingNotFound("لا يوجد مخزن مصنع نشط")
     products = {
         item.id: item
         for item in db.scalars(
@@ -241,11 +273,10 @@ def create_purchase_order(
         product = products.get(line.product_id)
         if product is None or not product.is_active or product.product_type == "service":
             raise PurchasingNotFound("أحد منتجات أمر الشراء غير موجود أو غير صالح للمخزون")
-
     order = PurchaseOrder(
         order_number=allocate_document_number(db, "purchase_order"),
         supplier_id=payload.supplier_id,
-        warehouse_id=payload.warehouse_id,
+        warehouse_id=warehouse.id,
         status="draft",
         notes=payload.notes.strip(),
         total=Decimal("0"),
@@ -256,12 +287,28 @@ def create_purchase_order(
     db.flush()
     total = Decimal("0")
     for payload_line in payload.lines:
+        product = products[payload_line.product_id]
         ordered_quantity = quantity(payload_line.ordered_quantity)
         ordered_weight = quantity(payload_line.ordered_weight_kg)
         basis_amount = ordered_quantity if payload_line.cost_basis == "quantity" else ordered_weight
+        default_loss = Decimal("0")
+        purchase_loss = quantity(
+            payload_line.purchase_loss_quantity
+            if payload_line.purchase_loss_quantity is not None
+            else default_loss
+        )
+        if purchase_loss >= ordered_quantity and ordered_quantity > 0:
+            raise PurchasingConflict("فقد الشراء يجب أن يكون أقل من الكمية")
+        net_quantity = quantity(ordered_quantity - purchase_loss)
         # Supplier payable excludes internal processing/handling cost. That
         # extra cost is capitalized into FIFO only when goods are received.
         line_total = money(basis_amount * payload_line.unit_price)
+        inventory_total = basis_amount * (
+            payload_line.unit_price + payload_line.additional_unit_cost
+        )
+        net_basis = net_quantity if payload_line.cost_basis == "quantity" else ordered_weight
+        inventory_unit_cost = quantity(inventory_total / net_basis)
+        lot_number = payload_line.lot_number.strip() or f"PUR-{order.order_number}-{product.code}"
         total += line_total
         db.add(
             PurchaseOrderLine(
@@ -272,6 +319,10 @@ def create_purchase_order(
                 ordered_weight_kg=ordered_weight,
                 unit_price=quantity(payload_line.unit_price),
                 additional_unit_cost=quantity(payload_line.additional_unit_cost),
+                lot_number=lot_number,
+                purchase_loss_quantity=purchase_loss,
+                net_quantity=net_quantity,
+                inventory_unit_cost=inventory_unit_cost,
                 line_total=line_total,
                 received_quantity=Decimal("0"),
                 received_weight_kg=Decimal("0"),
@@ -589,6 +640,90 @@ def create_supplier_invoice(
         },
     )
     return SupplierInvoiceView.model_validate(invoice)
+
+
+def receive_purchase_order(
+    db: Session,
+    *,
+    order_id: UUID,
+    payload: ReceivePurchaseOrderRequest,
+    idempotency_key: str,
+    actor: Principal,
+    client: ClientContext,
+) -> PurchaseOrderView:
+    """Mirror the desktop action: receive every remaining line and post its invoice."""
+    order = db.scalar(select(PurchaseOrder).where(PurchaseOrder.id == order_id).with_for_update())
+    if order is None:
+        raise PurchasingNotFound("أمر الشراء غير موجود")
+    if order.status == "received":
+        return _order_view(db, order)
+    if order.version != payload.version:
+        raise PurchasingConflict("عدّل مستخدم آخر أمر الشراء؛ حدّث الصفحة ثم أعد المحاولة")
+    if order.status not in {"draft", "approved", "partially_received"}:
+        raise PurchasingConflict("لا يمكن استلام أمر الشراء في حالته الحالية")
+
+    lines = list(
+        db.scalars(
+            select(PurchaseOrderLine)
+            .where(PurchaseOrderLine.purchase_order_id == order.id)
+            .order_by(PurchaseOrderLine.created_at, PurchaseOrderLine.id)
+            .with_for_update()
+        )
+    )
+    receipt_lines = []
+    for line in lines:
+        remaining_quantity = quantity(line.ordered_quantity - line.received_quantity)
+        remaining_weight = quantity(line.ordered_weight_kg - line.received_weight_kg)
+        if remaining_quantity <= 0 and remaining_weight <= 0:
+            continue
+        receipt_lines.append(
+            {
+                "purchase_order_line_id": line.id,
+                "gross_quantity": remaining_quantity,
+                "gross_weight_kg": remaining_weight,
+                "loss_quantity": (
+                    line.purchase_loss_quantity
+                    if line.received_quantity == 0
+                    else Decimal("0")
+                ),
+                "loss_weight_kg": Decimal("0"),
+                "lot_number": line.lot_number,
+            }
+        )
+    if not receipt_lines:
+        raise PurchasingConflict("لا توجد كميات متبقية لاستلامها")
+
+    # The web database keeps the intermediate status for compatibility, but the
+    # user-facing workflow performs this transition inside one atomic action.
+    if order.status == "draft":
+        order.status = "approved"
+        db.flush()
+    post_purchase_receipt(
+        db,
+        order_id=order.id,
+        payload=PostPurchaseReceiptRequest.model_validate(
+            {"notes": order.notes, "lines": receipt_lines}
+        ),
+        idempotency_key=idempotency_key,
+        actor=actor,
+        client=client,
+    )
+    refreshed = db.get(PurchaseOrder, order.id)
+    if refreshed is None or refreshed.status != "received":
+        raise PurchasingConflict("تعذر استلام جميع بنود أمر الشراء")
+    existing_invoice = db.scalar(
+        select(SupplierInvoice).where(SupplierInvoice.purchase_order_id == order.id)
+    )
+    if existing_invoice is None:
+        create_supplier_invoice(
+            db,
+            order_id=order.id,
+            payload=CreateSupplierInvoiceRequest(),
+            actor=actor,
+            client=client,
+        )
+    db.flush()
+    return _order_view(db, refreshed)
 
 
 def reverse_supplier_invoice(

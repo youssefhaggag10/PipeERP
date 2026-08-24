@@ -28,6 +28,7 @@ from app.modules.identity.service import (
     ProtectedOperation,
     create_role,
     create_user,
+    delete_user,
     list_roles,
     list_users,
     update_role_permissions,
@@ -80,6 +81,28 @@ def add_user(
     view = user_view(db, user)
     db.commit()
     return view
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_user(
+    user_id: UUID,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DatabaseSession,
+) -> None:
+    enforce_permission(request, db, principal, PermissionCode.USERS_MANAGE)
+    enforce_csrf(request, db, principal)
+    try:
+        delete_user(
+            db,
+            target_user_id=user_id,
+            actor=principal,
+            client=client_context(request),
+        )
+    except (IdentityNotFound, ProtectedOperation) as exc:
+        db.rollback()
+        raise _translate_error(exc) from exc
+    db.commit()
 
 
 @router.patch("/users/{user_id}", response_model=UserView)

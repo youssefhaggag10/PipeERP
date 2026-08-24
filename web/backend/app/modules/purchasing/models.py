@@ -64,6 +64,13 @@ class PurchaseOrderLine(TimestampMixin, Base):
         CheckConstraint("ordered_weight_kg >= 0", name="ordered_weight_nonnegative"),
         CheckConstraint("unit_price >= 0", name="unit_price_nonnegative"),
         CheckConstraint("additional_unit_cost >= 0", name="additional_cost_nonnegative"),
+        CheckConstraint("purchase_loss_quantity >= 0", name="purchase_loss_nonnegative"),
+        CheckConstraint(
+            "ordered_quantity = 0 OR purchase_loss_quantity < ordered_quantity",
+            name="purchase_loss_within_order",
+        ),
+        CheckConstraint("net_quantity >= 0", name="net_quantity_nonnegative"),
+        CheckConstraint("inventory_unit_cost >= 0", name="inventory_unit_cost_nonnegative"),
         CheckConstraint("line_total >= 0", name="line_total_nonnegative"),
         CheckConstraint("received_quantity >= 0", name="received_quantity_nonnegative"),
         CheckConstraint("received_weight_kg >= 0", name="received_weight_nonnegative"),
@@ -89,6 +96,14 @@ class PurchaseOrderLine(TimestampMixin, Base):
     ordered_weight_kg: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False, default=0)
     unit_price: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     additional_unit_cost: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False, default=0)
+    lot_number: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    purchase_loss_quantity: Mapped[Decimal] = mapped_column(
+        Numeric(20, 6), nullable=False, default=0
+    )
+    net_quantity: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False, default=0)
+    inventory_unit_cost: Mapped[Decimal] = mapped_column(
+        Numeric(20, 6), nullable=False, default=0
+    )
     line_total: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False)
     received_quantity: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False, default=0)
     received_weight_kg: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False, default=0)
