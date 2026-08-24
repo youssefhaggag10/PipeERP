@@ -200,7 +200,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               <Menu size={21} />
             </button>
-            <h1>3A PIPE — {user?.display_name ?? "مستخدم"}</h1>
             <span className="topbar__company-logo">
               {headerLogo.image ? (
                 <img src={headerLogo.image} alt="شعار 3A PIPE" />
@@ -208,6 +207,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <BrandMark compact />
               )}
             </span>
+            <h1>3A PIPE — {user?.display_name ?? "مستخدم"}</h1>
           </div>
           <div className="topbar__actions">
             <button

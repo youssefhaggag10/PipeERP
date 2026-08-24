@@ -114,6 +114,16 @@ Web branch: `web-rebuild`
 | TRE-07 | Desktop lacks idempotency | **Retained** Web retry protection | treasury tests | Exact retry coverage |
 | TRE-08 | No material difference | **Verified** payment method/account compatibility | treasury/returns tests | Compatibility matrix |
 | TRE-09 | Purchase/sales order contracts accepted advances | **Fixed**: fields removed and forbidden; Accounts remains the payment entry point | purchasing/sales schemas/services/pages/tests | Contract rejection and Accounts payment tests |
+| TRE-10 | Desktop Accounts offers summary and detailed customer statements; Accounts Web exposed one undifferentiated statement | **Fixed**: Accounts now offers “مجمل (مختصر)” and “تفصيلي”; detailed mode renders the original invoice lines beneath each invoice movement | `TreasuryPage.tsx`, reports statement service | Existing detailed-statement API test; frontend type-check/build |
+
+## Visual and input corrections
+
+| ID | Original deviation | Fix applied | Verification |
+| --- | --- | --- | --- |
+| UI-01 | Uploaded company logo was tiny and appeared after the user title | Moved it to the right of `3A PIPE`, enlarged the fixed header slot and compensated for transparent image padding | Browser visual check plus header-order regression test |
+| UI-02 | “تعديل” overflowed the fixed 31px cash/bank card action | Gave the labelled card action an automatic width and protected it from wrapping | CSS/layout review and production build |
+| UI-03 | Product delete action displayed as an empty pale-red control | Added the explicit `حذف` label while retaining the delete icon and confirmation workflow | Frontend test suite and production build |
+| UI-04 | Purchase quantity `100` failed native browser validation because `min=0.000001` and `step=0.001` form an offset step grid | Aligned quantity and purchase-loss precision to six decimal places, so integer and fractional UOM quantities are valid | Type-check/build; native step arithmetic corrected |
 
 ## Additional deviation found during implementation
 
@@ -124,7 +134,7 @@ Web branch: `web-rebuild`
 ## Verification summary
 
 - Backend suite: `97 passed, 7 skipped`.
-- Frontend suite: `19 passed`.
+- Frontend suite: `21 passed`.
 - Ruff: passed.
 - Mypy: passed.
 - ESLint: passed.

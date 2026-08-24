@@ -14,6 +14,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -171,6 +172,7 @@ type Statement = {
   partner_type: PartnerType;
   opening_balance: string;
   closing_balance: string;
+  invoice_details: Record<string, StatementDetailLine[]>;
   lines: Array<{
     movement_date: string;
     document_number: string;
@@ -180,6 +182,20 @@ type Statement = {
     running_balance: string;
     notes: string;
   }>;
+};
+type StatementDetailLine = {
+  code: string;
+  name: string;
+  quantity: string;
+  unit: string;
+  unit_price: string;
+  line_total: string;
+  notes: string;
+};
+type StatementReport = {
+  detailed: boolean;
+  invoice_details: Record<string, StatementDetailLine[]>;
+  statement: Omit<Statement, "invoice_details">;
 };
 
 const currency = new Intl.NumberFormat("ar-EG", {
@@ -287,6 +303,7 @@ export function TreasuryPage() {
   const [statementTo, setStatementTo] = useState(
     new Date().toISOString().slice(0, 10),
   );
+  const [statementDetailed, setStatementDetailed] = useState(false);
   const [statement, setStatement] = useState<Statement | null>(null);
 
   const availablePartners = useMemo(
@@ -614,11 +631,13 @@ export function TreasuryPage() {
     event.preventDefault();
     setError("");
     try {
-      setStatement(
-        await api<Statement>(
-          `/accounts/partners/${statementPartnerId}/statement?date_from=${statementFrom}&date_to=${statementTo}&partner_type=${partnerType}`,
-        ),
+      const report = await api<StatementReport>(
+        `/reports/print/customer-statements/${statementPartnerId}?date_from=${statementFrom}&date_to=${statementTo}&detailed=${statementDetailed}&include_drafts=false`,
       );
+      setStatement({
+        ...report.statement,
+        invoice_details: report.invoice_details,
+      });
     } catch (reason) {
       showError(reason, "تعذر إنشاء كشف الحساب");
     }
@@ -1408,6 +1427,19 @@ export function TreasuryPage() {
                     ))}
                   </select>
                 </label>
+                <label>
+                  نوع كشف الحساب
+                  <select
+                    value={statementDetailed ? "detailed" : "summary"}
+                    onChange={(event) => {
+                      setStatementDetailed(event.target.value === "detailed");
+                      setStatement(null);
+                    }}
+                  >
+                    <option value="summary">كشف مجمل (مختصر)</option>
+                    <option value="detailed">كشف تفصيلي</option>
+                  </select>
+                </label>
                 <div className="form-pair">
                   <label>
                     من
@@ -1433,7 +1465,9 @@ export function TreasuryPage() {
               {statement ? (
                 <div className="statement-result">
                   <header>
-                    <strong>{statement.partner_name_ar}</strong>
+                    <strong>
+                      {statementDetailed ? "كشف تفصيلي" : "كشف مجمل"} — {statement.partner_name_ar}
+                    </strong>
                     <span>
                       افتتاحي{" "}
                       {currency.format(Number(statement.opening_balance))} ·
@@ -1454,20 +1488,40 @@ export function TreasuryPage() {
                       </thead>
                       <tbody>
                         {statement.lines.map((line, index) => (
-                          <tr key={`${line.document_number}-${index}`}>
-                            <td>
-                              {new Date(line.movement_date).toLocaleDateString(
-                                "ar-EG",
-                              )}
-                            </td>
-                            <td dir="ltr">{line.document_number}</td>
-                            <td>{line.movement_type}</td>
-                            <td>{currency.format(Number(line.debit))}</td>
-                            <td>{currency.format(Number(line.credit))}</td>
-                            <td>
-                              {currency.format(Number(line.running_balance))}
-                            </td>
-                          </tr>
+                          <Fragment key={`${line.document_number}-${index}`}>
+                            <tr>
+                              <td>
+                                {new Date(line.movement_date).toLocaleDateString(
+                                  "ar-EG",
+                                )}
+                              </td>
+                              <td dir="ltr">{line.document_number}</td>
+                              <td>{line.movement_type}</td>
+                              <td>{currency.format(Number(line.debit))}</td>
+                              <td>{currency.format(Number(line.credit))}</td>
+                              <td>
+                                {currency.format(Number(line.running_balance))}
+                              </td>
+                            </tr>
+                            {(statement.invoice_details[line.document_number] ?? []).map(
+                              (detail, detailIndex) => (
+                                <tr
+                                  className="statement-detail-row"
+                                  key={`${line.document_number}-detail-${detailIndex}`}
+                                >
+                                  <td />
+                                  <td>↳ بند فاتورة</td>
+                                  <td colSpan={3}>
+                                    <strong>{detail.code} · {detail.name}</strong>
+                                    <small>
+                                      الكمية {detail.quantity} {detail.unit} · سعر الوحدة {currency.format(Number(detail.unit_price))}
+                                    </small>
+                                  </td>
+                                  <td>{currency.format(Number(detail.line_total))}</td>
+                                </tr>
+                              ),
+                            )}
+                          </Fragment>
                         ))}
                       </tbody>
                     </table>

@@ -140,3 +140,13 @@ After every phase, run Ruff, Mypy, focused Pytest, frontend lint/tests/build, an
 ## Explicit stop/risk condition
 
 `SRET-3` changes the cost used when stock re-enters inventory and therefore can change future FIFO valuation. Desktop behavior is clear, but the requested rules explicitly reserve valuation-changing fixes for approval. It will be isolated from all other work and recorded as the only approval-dependent implementation item unless tests prove the two formulas produce the same value for all reachable Web histories.
+
+## 2026-08-25 UI acceptance addendum
+
+| ID | Module | Desktop / required behavior | Previous Web behavior | Required change | Files affected | Risk | Testing approach |
+|---|---|---|---|---|---|---|---|
+| TRE-10 | Customer statement | Accounts provides a short/summary statement and a detailed statement with invoice-line children | Accounts exposed only the movement table, although the report service already supported invoice details | Add a summary/detailed selector to Accounts and render detailed invoice lines under their movements | `TreasuryPage.tsx`, styles | Low | Existing detailed API test; type-check and build |
+| UI-01 | Fixed header logo | Owner-approved logo appears immediately to the right of `3A PIPE` at a readable size | Custom image appeared tiny and after the full title | Reorder header elements and enlarge the custom image viewport | `AppShell.tsx`, styles, layout test | Low | Browser visual check and DOM-order test |
+| UI-02 | Financial account cards | Labelled edit action remains inside each card | Generic square icon sizing clipped/overflowed “تعديل” | Scope automatic width to this labelled action | styles | Low | Layout review and build |
+| UI-03 | Product deletion | Delete action explicitly says “حذف” | Pale icon-only control appeared blank | Add visible label without changing delete confirmation logic | `ProductsPage.tsx`, styles | Low | UI source review and build |
+| UI-04 | Purchase quantities | Positive integer and fractional UOM quantities are accepted | Offset HTML step grid rejected valid integer `100` | Align `min` and `step` to six-decimal quantity precision | `PurchasesPage.tsx` | Low | Browser validity rule review, type-check and build |

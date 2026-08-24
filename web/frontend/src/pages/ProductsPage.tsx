@@ -243,11 +243,12 @@ export function ProductsPage() {
                               <Pencil size={15} />
                             </button>
                             <button
-                              className="mini-action danger-button"
+                              className="mini-action danger-button product-delete-action"
                               onClick={() => void deleteProduct(product)}
                               aria-label="حذف الصنف"
                             >
                               <Trash2 size={15} />
+                              <span>حذف</span>
                             </button>
                           </div>
                         </td>

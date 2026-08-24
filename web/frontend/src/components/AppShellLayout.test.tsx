@@ -25,6 +25,9 @@ describe("fixed header company logo", () => {
 
     expect(markup).toContain("3A PIPE — مدير النظام");
     expect(markup).toContain("topbar__company-logo");
+    expect(markup.indexOf("topbar__company-logo")).toBeLessThan(
+      markup.indexOf("3A PIPE — مدير النظام"),
+    );
     expect(markup).not.toContain("app-watermark");
   });
 });
