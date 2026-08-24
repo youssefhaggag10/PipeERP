@@ -42,7 +42,7 @@ from app.modules.purchasing.schemas import (
     SupplierInvoiceView,
 )
 from app.modules.returns.models import InvoiceReturn
-from app.modules.treasury.models import FinancialAccount, PaymentAllocation, PaymentTransaction
+from app.modules.treasury.models import PaymentAllocation, PaymentTransaction
 
 
 class PurchasingError(Exception):
@@ -106,11 +106,8 @@ def _order_view(db: Session, order: PurchaseOrder) -> PurchaseOrderView:
                 product_id=line.product_id,
                 product_code=products[line.product_id].code,
                 product_name_ar=products[line.product_id].name_ar,
-                cost_basis=line.cost_basis,  # type: ignore[arg-type]
                 ordered_quantity=line.ordered_quantity,
-                ordered_weight_kg=line.ordered_weight_kg,
                 received_quantity=line.received_quantity,
-                received_weight_kg=line.received_weight_kg,
                 unit_price=line.unit_price,
                 additional_unit_cost=line.additional_unit_cost,
                 lot_number=line.lot_number,
@@ -172,13 +169,6 @@ def purchase_options(db: Session) -> PurchaseOptionsView:
             select(UnitOfMeasure).where(UnitOfMeasure.id.in_({item.unit_id for item in products}))
         )
     }
-    financial_accounts = list(
-        db.scalars(
-            select(FinancialAccount)
-            .where(FinancialAccount.is_active.is_(True))
-            .order_by(FinancialAccount.is_default.desc(), FinancialAccount.name_ar)
-        )
-    )
     return PurchaseOptionsView(
         suppliers=[
             PurchaseOption(id=item.id, code=item.code, name_ar=item.name_ar) for item in suppliers
@@ -195,50 +185,6 @@ def purchase_options(db: Session) -> PurchaseOptionsView:
             )
             for item in products
         ],
-        financial_accounts=[
-            PurchaseOption(
-                id=item.id,
-                code=item.code,
-                name_ar=item.name_ar,
-                account_type=item.account_type,
-            )
-            for item in financial_accounts
-        ],
-    )
-
-
-def _post_purchase_advance(
-    db: Session,
-    *,
-    order: PurchaseOrder,
-    payload: CreatePurchaseOrderRequest,
-    actor: Principal,
-    client: ClientContext,
-) -> None:
-    if payload.advance_amount <= 0:
-        return
-    if payload.advance_amount > order.total:
-        raise PurchasingConflict("الدفعة المقدمة أكبر من إجمالي أمر الشراء")
-    if payload.advance_financial_account_id is None:
-        raise PurchasingConflict("اختر حساب الخزينة أو البنك للدفعة المقدمة")
-    from app.modules.treasury.schemas import PostPaymentRequest
-    from app.modules.treasury.service import post_payment
-
-    post_payment(
-        db,
-        payload=PostPaymentRequest(
-            transaction_type="supplier_payment",
-            partner_id=order.supplier_id,
-            financial_account_id=payload.advance_financial_account_id,
-            amount=payload.advance_amount,
-            payment_method=payload.advance_payment_method,
-            reference_type="purchase",
-            reference_id=order.id,
-            notes=f"دفعة مقدمة عند إنشاء أمر الشراء {order.order_number}",
-        ),
-        idempotency_key=f"purchase-order-advance-{order.id}",
-        actor=actor,
-        client=client,
     )
 
 
@@ -249,8 +195,6 @@ def create_purchase_order(
     actor: Principal,
     client: ClientContext,
 ) -> PurchaseOrderView:
-    if payload.advance_amount > 0:
-        raise PurchasingConflict("سداد المورد يتم من شاشة الحسابات بعد استلام أمر الشراء")
     supplier = db.get(Partner, payload.supplier_id)
     if supplier is None or not supplier.is_active or not supplier.is_supplier:
         raise PurchasingNotFound("المورد غير موجود أو غير نشط")
@@ -289,8 +233,6 @@ def create_purchase_order(
     for payload_line in payload.lines:
         product = products[payload_line.product_id]
         ordered_quantity = quantity(payload_line.ordered_quantity)
-        ordered_weight = quantity(payload_line.ordered_weight_kg)
-        basis_amount = ordered_quantity if payload_line.cost_basis == "quantity" else ordered_weight
         default_loss = Decimal("0")
         purchase_loss = quantity(
             payload_line.purchase_loss_quantity
@@ -302,21 +244,20 @@ def create_purchase_order(
         net_quantity = quantity(ordered_quantity - purchase_loss)
         # Supplier payable excludes internal processing/handling cost. That
         # extra cost is capitalized into FIFO only when goods are received.
-        line_total = money(basis_amount * payload_line.unit_price)
-        inventory_total = basis_amount * (
+        line_total = money(ordered_quantity * payload_line.unit_price)
+        inventory_total = ordered_quantity * (
             payload_line.unit_price + payload_line.additional_unit_cost
         )
-        net_basis = net_quantity if payload_line.cost_basis == "quantity" else ordered_weight
-        inventory_unit_cost = quantity(inventory_total / net_basis)
+        inventory_unit_cost = quantity(inventory_total / net_quantity)
         lot_number = payload_line.lot_number.strip() or f"PUR-{order.order_number}-{product.code}"
         total += line_total
         db.add(
             PurchaseOrderLine(
                 purchase_order_id=order.id,
                 product_id=payload_line.product_id,
-                cost_basis=payload_line.cost_basis,
+                cost_basis="quantity",
                 ordered_quantity=ordered_quantity,
-                ordered_weight_kg=ordered_weight,
+                ordered_weight_kg=Decimal("0"),
                 unit_price=quantity(payload_line.unit_price),
                 additional_unit_cost=quantity(payload_line.additional_unit_cost),
                 lot_number=lot_number,
@@ -331,7 +272,6 @@ def create_purchase_order(
         )
     order.total = money(total)
     db.flush()
-    _post_purchase_advance(db, order=order, payload=payload, actor=actor, client=client)
     add_audit(
         db,
         actor_user_id=actor.user.id,

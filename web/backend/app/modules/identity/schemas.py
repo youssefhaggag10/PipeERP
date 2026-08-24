@@ -41,8 +41,8 @@ class CreateUserRequest(BaseModel):
     username: str = Field(min_length=1, max_length=80)
     display_name: str = Field(min_length=2, max_length=160)
     password: str = Field(min_length=12, max_length=512)
-    role_codes: set[str] = Field(min_length=1)
-    must_change_password: bool = True
+    role_codes: set[str] = Field(default_factory=set)
+    must_change_password: bool = False
 
     @field_validator("username")
     @classmethod
@@ -60,7 +60,7 @@ class CreateUserRequest(BaseModel):
 class UpdateUserRequest(BaseModel):
     display_name: str | None = Field(default=None, min_length=2, max_length=160)
     is_active: bool | None = None
-    role_codes: set[str] | None = Field(default=None, min_length=1)
+    role_codes: set[str] | None = None
     new_password: str | None = Field(default=None, min_length=12, max_length=512)
     must_change_password: bool | None = None
 

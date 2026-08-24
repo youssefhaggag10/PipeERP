@@ -73,6 +73,8 @@ class PostPaymentRequest(BaseModel):
             raise ValueError("يجب تحديد نوع المستند ورقمه معًا")
         if self.allocations and self.reference_id is not None:
             raise ValueError("اختر إما أمرًا مرتبطًا أو توزيعًا على الفواتير")
+        if self.transaction_type == "supplier_payment" and self.allocations:
+            raise ValueError("سداد المورد يرتبط بأمر شراء أو يسجل كدفعة مقدمة")
         if self.reference_type == "sale" and self.transaction_type != "customer_receipt":
             raise ValueError("أمر البيع لا يقبل إلا تحصيل عميل")
         if self.reference_type == "purchase" and self.transaction_type != "supplier_payment":

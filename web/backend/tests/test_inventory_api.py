@@ -140,7 +140,7 @@ def headers(test_client: TestClient, key: str) -> dict[str, str]:
 
 def test_receipt_issue_fifo_idempotency_and_negative_stock_protection() -> None:
     factory = database()
-    product_id, warehouse_id, secondary_id, inactive_id = seed(factory)
+    product_id, warehouse_id, secondary_id, _ = seed(factory)
     with client(factory) as test_client:
         login(test_client)
         receipt_payload = {
@@ -241,51 +241,11 @@ def test_receipt_issue_fifo_idempotency_and_negative_stock_protection() -> None:
             },
             headers=headers(test_client, "transfer-test-0001"),
         )
-        assert transfer.status_code == 201, transfer.text
-        assert transfer.json()["outbound"]["quantity_delta"] == "-2.000000"
-        assert transfer.json()["inbound"]["quantity_delta"] == "2.000000"
-        assert transfer.json()["outbound"]["total_cost"] == "10.000000"
-        assert transfer.json()["inbound"]["total_cost"] == "10.000000"
-        transfer_card = test_client.get(
-            f"/api/v1/inventory/stock-card?product_id={product_id}&limit=500"
-        )
-        transfer_in_rows = [
-            row
-            for row in transfer_card.json()
-            if row["transaction_id"] == transfer.json()["inbound"]["id"]
-        ]
-        assert [
-            (row["lot_number"], row["quantity_in"], row["unit_cost"]) for row in transfer_in_rows
-        ] == [("LOT-001", "2.000000", "5.000000")]
-
-        failed_transfer = test_client.post(
-            "/api/v1/inventory/transfers",
-            json={
-                "product_id": product_id,
-                "source_warehouse_id": warehouse_id,
-                "destination_warehouse_id": secondary_id,
-                "amount": "99",
-                "cost_basis": "quantity",
-            },
-            headers=headers(test_client, "transfer-test-0002"),
-        )
-        assert failed_transfer.status_code == 409
-        atomic_failure = test_client.post(
-            "/api/v1/inventory/transfers",
-            json={
-                "product_id": product_id,
-                "source_warehouse_id": warehouse_id,
-                "destination_warehouse_id": inactive_id,
-                "amount": "1",
-                "cost_basis": "quantity",
-            },
-            headers=headers(test_client, "transfer-test-0003"),
-        )
-        assert atomic_failure.status_code == 404
+        assert transfer.status_code == 404
         balances_after_transfer = test_client.get("/api/v1/inventory/balances").json()
         indexed = {item["warehouse_id"]: item for item in balances_after_transfer}
-        assert indexed[warehouse_id]["quantity_on_hand"] == "4.000000"
-        assert indexed[secondary_id]["quantity_on_hand"] == "2.000000"
+        assert indexed[warehouse_id]["quantity_on_hand"] == "6.000000"
+        assert secondary_id not in indexed
 
         adjustment = test_client.post(
             "/api/v1/inventory/adjustments",
@@ -297,7 +257,7 @@ def test_receipt_issue_fifo_idempotency_and_negative_stock_protection() -> None:
                 "weight_kg": "10",
                 "cost_basis": "quantity",
                 "unit_cost": "7",
-                "reason": "نتيجة الجرد الفعلي",
+                "reason": "",
             },
             headers=headers(test_client, "adjustment-test-0001"),
         )
@@ -323,8 +283,8 @@ def test_receipt_issue_fifo_idempotency_and_negative_stock_protection() -> None:
         assert repeated_reversal.status_code == 409
 
     with factory() as db:
-        assert db.scalar(select(func.count(InventoryTransaction.id))) == 6
-        assert db.scalar(select(func.count(InventoryAllocation.id))) == 2
+        assert db.scalar(select(func.count(InventoryTransaction.id))) == 4
+        assert db.scalar(select(func.count(InventoryAllocation.id))) == 1
         stock_layers = list(db.scalars(select(InventoryLayer)))
         assert sum((item.quantity_remaining for item in stock_layers), 0) == 11
         assert sum((item.weight_remaining_kg for item in stock_layers), 0) == 110
@@ -332,15 +292,13 @@ def test_receipt_issue_fifo_idempotency_and_negative_stock_protection() -> None:
         assert {
             "inventory.receipt.post",
             "inventory.issue.post",
-            "inventory.transfer_out.post",
-            "inventory.transfer_in.post",
             "inventory.adjustment_in.post",
             "inventory.reversal_in.post",
         } <= events
     app.dependency_overrides.clear()
 
 
-def test_stock_card_expands_fifo_issue_into_the_source_lots() -> None:
+def test_stock_card_groups_fifo_allocations_into_one_desktop_movement_row() -> None:
     factory = database()
     product_id, warehouse_id, _, _ = seed(factory)
     with client(factory) as test_client:
@@ -385,10 +343,10 @@ def test_stock_card_expands_fifo_issue_into_the_source_lots() -> None:
         assert response.status_code == 200, response.text
         rows = response.json()
         outbound = [row for row in rows if row["transaction_id"] == issue.json()["id"]]
-        assert [(row["lot_number"], row["quantity_out"], row["unit_cost"]) for row in outbound] == [
-            ("LOT-OLD", "5.000000", "3.000000"),
-            ("LOT-NEW", "3.000000", "7.000000"),
-        ]
+        assert len(outbound) == 1
+        assert outbound[0]["lot_number"] == "LOT-OLD، LOT-NEW"
+        assert outbound[0]["quantity_out"] == "8.000000"
+        assert outbound[0]["unit_cost"] == "4.5"
         assert all(row["product_code"] == "FG-INV" for row in outbound)
         assert all(row["product_name_ar"] == "منتج مخزون" for row in outbound)
         assert all(row["warehouse_name_ar"] == "المصنع" for row in outbound)

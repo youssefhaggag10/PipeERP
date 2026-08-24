@@ -157,7 +157,9 @@ def test_demo_seed_builds_full_dataset_and_is_repeatable() -> None:
 
         assert first_summary == second_summary
         assert len(api.get("/inventory/lot-balances")) >= 4
-        assert len(api.get("/crm/leads")) == 1
+        crm_leads = api.get("/crm/leads")
+        assert len(crm_leads) == 3
+        assert sum("[PIPEERP-DEMO-V1]" in row["general_notes"] for row in crm_leads) == 1
         assert len(api.get("/returns/documents")) == 1
         assert len(api.get("/manufacturing/orders")) == 1
     app.dependency_overrides.clear()

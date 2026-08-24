@@ -5,10 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.modules.inventory.schemas import CostBasis
-
 PurchaseOrderStatus = Literal["draft", "approved", "partially_received", "received", "cancelled"]
-PaymentMethod = Literal["cash", "bank_transfer", "cheque", "wallet"]
 
 
 class PurchasingView(BaseModel):
@@ -16,35 +13,31 @@ class PurchasingView(BaseModel):
 
 
 class CreatePurchaseOrderLineRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     product_id: UUID
-    cost_basis: CostBasis
-    ordered_quantity: Decimal = Field(default=Decimal("0"), ge=0, decimal_places=6)
-    ordered_weight_kg: Decimal = Field(default=Decimal("0"), ge=0, decimal_places=6)
+    ordered_quantity: Decimal = Field(gt=0, decimal_places=6)
     unit_price: Decimal = Field(ge=0, decimal_places=6)
     additional_unit_cost: Decimal = Field(default=Decimal("0"), ge=0, decimal_places=6)
     lot_number: str = Field(default="", max_length=80)
     purchase_loss_quantity: Decimal | None = Field(default=None, ge=0, decimal_places=6)
 
     @model_validator(mode="after")
-    def validate_basis_amount(self) -> "CreatePurchaseOrderLineRequest":
-        basis = self.ordered_quantity if self.cost_basis == "quantity" else self.ordered_weight_kg
-        if basis <= 0:
-            raise ValueError("يجب إدخال مقدار موجب لأساس تكلفة بند الشراء")
-        if self.purchase_loss_quantity is not None:
-            if self.cost_basis != "quantity" and self.purchase_loss_quantity > 0:
-                raise ValueError("فقد الشراء في مرجع الديسكتوب يُحسب على الكمية فقط")
-            if self.purchase_loss_quantity >= self.ordered_quantity:
-                raise ValueError("فقد الشراء يجب أن يكون أقل من الكمية")
+    def validate_loss(self) -> "CreatePurchaseOrderLineRequest":
+        if (
+            self.purchase_loss_quantity is not None
+            and self.purchase_loss_quantity >= self.ordered_quantity
+        ):
+            raise ValueError("فقد الشراء يجب أن يكون أقل من الكمية")
         return self
 
 
 class CreatePurchaseOrderRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     supplier_id: UUID
     warehouse_id: UUID | None = None
     notes: str = Field(default="", max_length=2000)
-    advance_amount: Decimal = Field(default=Decimal("0"), ge=0, decimal_places=2)
-    advance_payment_method: PaymentMethod = "cash"
-    advance_financial_account_id: UUID | None = None
     lines: list[CreatePurchaseOrderLineRequest] = Field(min_length=1, max_length=100)
 
     @model_validator(mode="after")
@@ -52,8 +45,6 @@ class CreatePurchaseOrderRequest(BaseModel):
         product_ids = [line.product_id for line in self.lines]
         if len(product_ids) != len(set(product_ids)):
             raise ValueError("لا يمكن تكرار المنتج داخل أمر الشراء نفسه")
-        if self.advance_amount > 0 and self.advance_financial_account_id is None:
-            raise ValueError("اختر حساب الخزينة أو البنك للدفعة المقدمة")
         return self
 
 
@@ -111,11 +102,8 @@ class PurchaseOrderLineView(PurchasingView):
     product_id: UUID
     product_code: str
     product_name_ar: str
-    cost_basis: CostBasis
     ordered_quantity: Decimal
-    ordered_weight_kg: Decimal
     received_quantity: Decimal
-    received_weight_kg: Decimal
     unit_price: Decimal
     additional_unit_cost: Decimal
     lot_number: str
@@ -196,4 +184,3 @@ class PurchaseOptionsView(BaseModel):
     suppliers: list[PurchaseOption]
     warehouses: list[PurchaseOption]
     products: list[PurchaseOption]
-    financial_accounts: list[PurchaseOption]

@@ -32,7 +32,6 @@ type PurchaseOptions = {
   suppliers: Option[];
   warehouses: Option[];
   products: Option[];
-  financial_accounts: Option[];
 };
 
 type OrderLine = {
@@ -125,7 +124,7 @@ export function PurchasesPage() {
   const canManage = user?.permissions.includes("purchases.manage") ?? false;
   const requestedFocus = new URLSearchParams(location.search).get("focus");
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
-  const [options, setOptions] = useState<PurchaseOptions>({ suppliers: [], warehouses: [], products: [], financial_accounts: [] });
+  const [options, setOptions] = useState<PurchaseOptions>({ suppliers: [], warehouses: [], products: [] });
   const [selectedId, setSelectedId] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [notes, setNotes] = useState("");
@@ -200,12 +199,9 @@ export function PurchasesPage() {
           supplier_id: supplierId,
           warehouse_id: options.warehouses[0]?.id ?? null,
           notes,
-          advance_amount: "0",
           lines: draftLines.map((line) => ({
             product_id: line.product_id,
-            cost_basis: "quantity",
             ordered_quantity: line.quantity,
-            ordered_weight_kg: "0",
             unit_price: line.unit_price || "0",
             additional_unit_cost: line.internal_unit_cost || "0",
             purchase_loss_quantity: line.purchase_loss || "0",

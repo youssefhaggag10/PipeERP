@@ -327,22 +327,17 @@ def seed_purchase(api: Api, data: dict[str, dict[str, Any]]) -> dict[str, Any]:
                 "supplier_id": data["supplier"]["id"],
                 "warehouse_id": data["main"]["id"],
                 "notes": f"{MARKER} purchase",
-                "advance_amount": "0",
                 "lines": [
                     {
                         "product_id": data["raw"]["id"],
-                        "cost_basis": "quantity",
                         "ordered_quantity": "800",
-                        "ordered_weight_kg": "0",
                         "unit_price": "26",
                         "additional_unit_cost": "1",
                         "purchase_loss_quantity": "4",
                     },
                     {
                         "product_id": data["additive"]["id"],
-                        "cost_basis": "quantity",
                         "ordered_quantity": "200",
-                        "ordered_weight_kg": "0",
                         "unit_price": "42",
                         "additional_unit_cost": "0",
                         "purchase_loss_quantity": "1",
@@ -373,7 +368,6 @@ def seed_sales(api: Api, data: dict[str, dict[str, Any]]) -> dict[str, Any]:
                 "customer_id": data["customer"]["id"],
                 "warehouse_id": data["main"]["id"],
                 "notes": f"{MARKER} piece-sale",
-                "advance_amount": "0",
                 "lines": [
                     {
                         "product_id": data["finished"]["id"],
@@ -406,7 +400,6 @@ def seed_sales(api: Api, data: dict[str, dict[str, Any]]) -> dict[str, Any]:
                 "transport_amount": "200",
                 "tax_amount": "0",
                 "notes": f"{MARKER} weight-sale",
-                "advance_amount": "0",
                 "lines": [
                     {
                         "product_id": data["finished"]["id"],
@@ -433,7 +426,6 @@ def seed_sales(api: Api, data: dict[str, dict[str, Any]]) -> dict[str, Any]:
                 "customer_id": data["customer2"]["id"],
                 "warehouse_id": data["main"]["id"],
                 "notes": f"{MARKER} draft-sale",
-                "advance_amount": "0",
                 "lines": [
                     {
                         "product_id": data["finished"]["id"],
@@ -614,7 +606,8 @@ def seed_treasury(
             "financial_account_id": accounts["bank"]["id"],
             "amount": "5000",
             "payment_method": "bank_transfer",
-            "allocations": [{"invoice_id": supplier_invoice["id"], "amount": "5000"}],
+            "reference_type": "purchase",
+            "reference_id": purchase["id"],
             "notes": f"{MARKER} supplier-payment",
         },
         "pipeerp-demo-v1-supplier-payment",
@@ -631,18 +624,7 @@ def seed_treasury(
                 "notes": f"{MARKER} customer-opening",
             },
         )
-    adjustments = api.get("/accounts/customer-adjustments")
-    if tagged(adjustments, "notes", "customer-credit") is None:
-        api.post(
-            "/accounts/customer-adjustments",
-            {
-                "customer_id": data["customer"]["id"],
-                "adjustment_type": "credit",
-                "amount": "100",
-                "notes": f"{MARKER} customer-credit",
-            },
-        )
-    progress("تحصيل وسداد وتوزيع فواتير وأرصدة افتتاحية وتسويات")
+    progress("تحصيل وسداد وتوزيع فواتير ورصيد افتتاحي")
 
 
 def local_api(url: str) -> str:

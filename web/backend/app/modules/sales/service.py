@@ -51,7 +51,7 @@ from app.modules.sales.schemas import (
     WeightCardView,
     WeightMode,
 )
-from app.modules.treasury.models import FinancialAccount, PaymentTransaction
+from app.modules.treasury.models import PaymentTransaction
 
 WeightCardStatus = Literal["draft", "posted", "cancelled"]
 DeliveryStatus = Literal["posted", "reversed"]
@@ -258,13 +258,6 @@ def sales_options(db: Session) -> SalesOptionsView:
             .order_by(Product.code)
         )
     )
-    financial_accounts = list(
-        db.scalars(
-            select(FinancialAccount)
-            .where(FinancialAccount.is_active.is_(True))
-            .order_by(FinancialAccount.is_default.desc(), FinancialAccount.name_ar)
-        )
-    )
     units = {
         item.id: item.symbol
         for item in db.scalars(
@@ -285,15 +278,6 @@ def sales_options(db: Session) -> SalesOptionsView:
                 unit_symbol=units.get(x.unit_id, ""),
             )
             for x in products
-        ],
-        financial_accounts=[
-            SalesOption(
-                id=x.id,
-                code=x.code,
-                name_ar=x.name_ar,
-                account_type=x.account_type,
-            )
-            for x in financial_accounts
         ],
     )
 
@@ -339,8 +323,6 @@ def create_piece_order(
     actor: Principal,
     client: ClientContext,
 ) -> SalesOrderView:
-    if payload.advance_amount > 0:
-        raise SalesConflict("تحصيل العميل يتم من شاشة الحسابات بعد تسليم أمر البيع")
     _validate_header(db, payload.customer_id, payload.warehouse_id)
     products = _load_products(db, {line.product_id for line in payload.lines})
     if len(products) != len(payload.lines) or any(
@@ -403,8 +385,6 @@ def create_weight_sale(
     actor: Principal,
     client: ClientContext,
 ) -> SalesOrderView:
-    if payload.advance_amount > 0:
-        raise SalesConflict("تحصيل العميل يتم من شاشة الحسابات بعد اعتماد فاتورة الوزن")
     _validate_header(db, payload.customer_id, payload.warehouse_id)
     products = _load_products(db, {line.product_id for line in payload.lines})
     if len(products) != len(payload.lines) or any(

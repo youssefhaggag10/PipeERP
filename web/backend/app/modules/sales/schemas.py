@@ -8,7 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 BillingMethod = Literal["piece", "weight"]
 WeightMode = Literal["total_card", "per_line"]
 PricingMode = Literal["uniform", "per_line"]
-PaymentMethod = Literal["cash", "bank_transfer", "cheque", "wallet"]
 
 
 class SalesView(BaseModel):
@@ -24,12 +23,11 @@ class CreatePieceLineRequest(BaseModel):
 
 
 class CreatePieceOrderRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     customer_id: UUID
     warehouse_id: UUID
     notes: str = Field(default="", max_length=2000)
-    advance_amount: Decimal = Field(default=Decimal("0"), ge=0, decimal_places=2)
-    advance_payment_method: PaymentMethod = "cash"
-    advance_financial_account_id: UUID | None = None
     lines: list[CreatePieceLineRequest] = Field(min_length=1, max_length=100)
 
     @model_validator(mode="after")
@@ -37,8 +35,6 @@ class CreatePieceOrderRequest(BaseModel):
         values = [line.product_id for line in self.lines]
         if len(values) != len(set(values)):
             raise ValueError("لا يمكن تكرار المنتج داخل أمر البيع")
-        if self.advance_amount > 0 and self.advance_financial_account_id is None:
-            raise ValueError("اختر حساب الخزينة أو البنك للدفعة المقدمة")
         return self
 
 
@@ -52,6 +48,8 @@ class WeightSaleLineRequest(BaseModel):
 
 
 class CreateWeightSaleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     customer_id: UUID
     warehouse_id: UUID
     weight_mode: WeightMode
@@ -66,9 +64,6 @@ class CreateWeightSaleRequest(BaseModel):
     transport_amount: Decimal = Field(default=Decimal("0"), ge=0, decimal_places=2)
     tax_amount: Decimal = Field(default=Decimal("0"), ge=0, decimal_places=2)
     notes: str = Field(default="", max_length=2000)
-    advance_amount: Decimal = Field(default=Decimal("0"), ge=0, decimal_places=2)
-    advance_payment_method: PaymentMethod = "cash"
-    advance_financial_account_id: UUID | None = None
     lines: list[WeightSaleLineRequest] = Field(min_length=1, max_length=100)
 
     @model_validator(mode="after")
@@ -91,18 +86,11 @@ class CreateWeightSaleRequest(BaseModel):
             line.price_per_kg is None for line in self.lines
         ):
             raise ValueError("أدخل سعر الكيلو لكل بند")
-        if self.advance_amount > 0 and self.advance_financial_account_id is None:
-            raise ValueError("اختر حساب الخزينة أو البنك للدفعة المقدمة")
         return self
 
 
 class DeliverOrderRequest(BaseModel):
     version: int = Field(gt=0)
-
-
-class CancelOrderRequest(BaseModel):
-    version: int = Field(gt=0)
-    reason: str = Field(min_length=3, max_length=500)
 
 
 class ReverseDeliveryRequest(BaseModel):
@@ -278,4 +266,3 @@ class SalesOptionsView(BaseModel):
     customers: list[SalesOption]
     warehouses: list[SalesOption]
     products: list[SalesOption]
-    financial_accounts: list[SalesOption]

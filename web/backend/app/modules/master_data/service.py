@@ -292,7 +292,7 @@ def create_product(
         unit_id=payload.unit_id,
         category_id=payload.category_id,
         min_stock=payload.min_stock,
-        track_lots=payload.track_lots,
+        track_lots=True,
         standard_weight_kg=(
             payload.standard_weight_kg if payload.product_type == "finished_good" else Decimal("0")
         ),
@@ -345,7 +345,6 @@ def update_product(
     product.category_id = category_id
     for field in (
         "min_stock",
-        "track_lots",
         "standard_weight_kg",
         "weight_tolerance_percent",
         "is_active",
@@ -353,6 +352,7 @@ def update_product(
         value = getattr(payload, field)
         if value is not None:
             setattr(product, field, value)
+    product.track_lots = True
     if product.product_type != "finished_good":
         product.standard_weight_kg = Decimal("0")
     product.weight_tolerance_percent = Decimal("0")
@@ -509,20 +509,23 @@ def create_warehouse(
     actor: Principal,
     client: ClientContext,
 ) -> Warehouse:
+    if db.scalar(select(Warehouse.id).limit(1)) is not None:
+        raise MasterDataConflict("النظام مضبوط على مخزن واحد فقط باسم المصنع")
     normalized_code = normalize_code(payload.code)
+    if normalized_code != "MAIN" or payload.name_ar.strip() != "المصنع":
+        raise MasterDataConflict("المخزن الوحيد هو MAIN باسم المصنع")
     _ensure_code_available(db, Warehouse, normalized_code)
     warehouse = Warehouse(
         code=payload.code.strip(),
         normalized_code=normalized_code,
         name_ar=payload.name_ar.strip(),
-        is_default=False,
+        is_default=True,
         is_active=True,
         version=1,
     )
     db.add(warehouse)
     db.flush()
-    if payload.is_default:
-        _make_default_warehouse(db, warehouse)
+    _make_default_warehouse(db, warehouse)
     db.flush()
     add_audit(
         db,
@@ -552,43 +555,7 @@ def update_warehouse(
     warehouse = db.get(Warehouse, warehouse_id)
     if warehouse is None:
         raise MasterDataNotFound("المخزن غير موجود")
-    if warehouse.version != payload.version:
-        raise MasterDataConflict("عدّل مستخدم آخر المخزن؛ حدّث الصفحة ثم أعد المحاولة")
-    if warehouse.is_default and (not payload.is_default or not payload.is_active):
-        raise MasterDataConflict("عيّن مخزنًا افتراضيًا آخر قبل تعطيل المخزن الافتراضي")
-    normalized_code = normalize_code(payload.code)
-    _ensure_code_available(db, Warehouse, normalized_code, excluding_id=warehouse.id)
-    before = {
-        "code": warehouse.code,
-        "name_ar": warehouse.name_ar,
-        "is_default": warehouse.is_default,
-        "version": warehouse.version,
-    }
-    warehouse.code = payload.code.strip()
-    warehouse.normalized_code = normalized_code
-    warehouse.name_ar = payload.name_ar.strip()
-    warehouse.is_active = payload.is_active
-    warehouse.version += 1
-    if payload.is_default:
-        _make_default_warehouse(db, warehouse)
-    db.flush()
-    add_audit(
-        db,
-        actor_user_id=actor.user.id,
-        event_type="master_data.warehouse.update",
-        entity_type="warehouse",
-        entity_id=str(warehouse.id),
-        outcome="success",
-        client=client,
-        before_state=before,
-        after_state={
-            "code": warehouse.code,
-            "name_ar": warehouse.name_ar,
-            "is_default": warehouse.is_default,
-            "version": warehouse.version,
-        },
-    )
-    return warehouse
+    raise MasterDataConflict("مخزن المصنع ثابت ولا يقبل التعديل")
 
 
 def get_company_settings(db: Session) -> CompanySettings:

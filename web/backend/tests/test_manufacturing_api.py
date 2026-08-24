@@ -237,6 +237,61 @@ def _create_recipe_and_order(test_client: TestClient, ids: dict[str, str]) -> di
     return order.json()
 
 
+def test_material_availability_previews_and_atomically_blocks_basic_shortage() -> None:
+    factory = _database()
+    ids = _seed(factory)
+    with _client(factory) as test_client:
+        _login(test_client)
+        order = _create_recipe_and_order(test_client, ids)
+        available = test_client.get(
+            f"/api/v1/manufacturing/orders/{order['id']}/material-availability"
+        )
+        assert available.status_code == 200, available.text
+        by_product = {row["product_id"]: row for row in available.json()["rows"]}
+        assert by_product[ids["raw_a"]]["required_quantity"] == "180.000000"
+        assert by_product[ids["raw_a"]]["available_quantity"] == "500.000000"
+        assert by_product[ids["raw_a"]]["shortage_quantity"] == "0.000000"
+        assert available.json()["has_blocking_shortage"] is False
+
+        with factory.begin() as db:
+            balance = db.get(
+                InventoryBalance, (UUID(ids["raw_a"]), UUID(ids["warehouse"]))
+            )
+            layer = db.scalar(
+                select(InventoryLayer).where(
+                    InventoryLayer.product_id == UUID(ids["raw_a"])
+                )
+            )
+            assert balance is not None and layer is not None
+            balance.quantity_on_hand = Decimal("100")
+            layer.quantity_remaining = Decimal("100")
+
+        shortage = test_client.get(
+            f"/api/v1/manufacturing/orders/{order['id']}/material-availability"
+        )
+        assert shortage.status_code == 200, shortage.text
+        raw_a = next(
+            row for row in shortage.json()["rows"] if row["product_id"] == ids["raw_a"]
+        )
+        assert raw_a["required_quantity"] == "180.000000"
+        assert raw_a["available_quantity"] == "100.000000"
+        assert raw_a["shortage_quantity"] == "80.000000"
+        assert raw_a["blocks_start"] is True
+        assert shortage.json()["has_blocking_shortage"] is True
+
+        blocked = test_client.post(
+            f"/api/v1/manufacturing/orders/{order['id']}/start",
+            headers=_headers(test_client, "manufacturing-start-shortage"),
+            json={"version": order["version"]},
+        )
+        assert blocked.status_code == 409
+
+    with factory() as db:
+        stored = db.get(ManufacturingOrder, UUID(order["id"]))
+        assert stored is not None and stored.status == "draft"
+        assert db.scalar(select(ManufacturingMaterialIssue.id)) is None
+
+
 def test_manufacturing_full_cycle_posts_fifo_outputs_scrap_and_completion() -> None:
     factory = _database()
     ids = _seed(factory)

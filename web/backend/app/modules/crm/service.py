@@ -71,6 +71,86 @@ def _can_manage(principal: Principal) -> bool:
     return PermissionCode.CRM_MANAGE in principal.permissions
 
 
+def can_schedule_activities(principal: Principal) -> bool:
+    return "system_admin" in principal.roles
+
+
+def sync_customers_to_leads(db: Session, principal: Principal) -> int:
+    """Mirror Desktop's idempotent customer-to-CRM synchronization on navigation."""
+    customers = list(
+        db.scalars(
+            select(Partner)
+            .where(Partner.is_customer.is_(True), Partner.is_active.is_(True))
+            .order_by(Partner.id)
+            .with_for_update()
+        )
+    )
+    synced = 0
+    now = datetime.now(UTC)
+    for customer in customers:
+        lead = db.scalar(
+            select(CrmLead).where(CrmLead.customer_partner_id == customer.id).limit(1)
+        )
+        subject = ""
+        if lead is None and customer.phone.strip():
+            lead = db.scalar(
+                select(CrmLead)
+                .where(
+                    CrmLead.phone == customer.phone.strip(),
+                    CrmLead.is_active.is_(True),
+                    CrmLead.customer_partner_id.is_(None),
+                )
+                .order_by(CrmLead.created_at.desc(), CrmLead.id.desc())
+                .limit(1)
+            )
+            if lead is not None:
+                subject = "ربط العميل الحالي بسجل CRM"
+        if lead is None:
+            lead = CrmLead(
+                lead_number=allocate_document_number(db, "crm_lead"),
+                name=customer.name_ar,
+                phone=customer.phone.strip(),
+                address=customer.address,
+                source_code="other",
+                customer_type="customer",
+                temperature="warm",
+                stage_code="won",
+                assigned_user_id=principal.user.id,
+                tags="عميل سابق",
+                general_notes=f"تمت المزامنة من شاشة العملاء — الكود: {customer.code or '-'}",
+                customer_partner_id=customer.id,
+                created_by_id=principal.user.id,
+                is_active=True,
+            )
+            db.add(lead)
+            db.flush()
+            subject = "استيراد عميل حالي إلى CRM"
+        else:
+            lead.name = customer.name_ar
+            lead.phone = customer.phone.strip()
+            lead.address = customer.address
+            lead.customer_partner_id = customer.id
+            lead.customer_type = "customer"
+            lead.stage_code = "won"
+            lead.is_active = True
+        if subject:
+            db.add(
+                CrmActivity(
+                    lead_id=lead.id,
+                    activity_type="conversion",
+                    subject=subject,
+                    notes=f"تم الربط بالعميل رقم {customer.id}",
+                    assigned_user_id=principal.user.id,
+                    status="done",
+                    created_by_id=principal.user.id,
+                    completed_at=now,
+                )
+            )
+            synced += 1
+    db.flush()
+    return synced
+
+
 def _lead_query(principal: Principal) -> Select[tuple[CrmLead]]:
     statement = select(CrmLead)
     return (
@@ -301,6 +381,8 @@ def add_note(
 def schedule_activity(
     db: Session, *, lead_id: UUID, payload: ScheduleActivityRequest, principal: Principal
 ) -> ActivityView:
+    if not can_schedule_activities(principal):
+        raise CrmConflict("جدولة الأنشطة متاحة للأدمن فقط")
     lead = _get_lead(db, lead_id, principal)
     owner_id = payload.assigned_user_id if _can_manage(principal) else principal.user.id
     activity = CrmActivity(

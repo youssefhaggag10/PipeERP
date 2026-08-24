@@ -204,7 +204,7 @@ def test_repeated_failures_lock_the_account_without_revealing_user_state() -> No
     app.dependency_overrides.clear()
 
 
-def test_temporary_password_cannot_bypass_forced_change_through_api() -> None:
+def test_desktop_parity_does_not_force_password_change_on_first_login() -> None:
     factory = _database()
     _bootstrap(factory)
     with _client(factory) as admin:
@@ -221,9 +221,9 @@ def test_temporary_password_cannot_bypass_forced_change_through_api() -> None:
             headers=_csrf(admin),
         )
         assert created.status_code == 201
+        assert created.json()["must_change_password"] is False
         with _client(factory) as temporary:
             _login(temporary, "temporary-admin", "Temporary-password-2026")
-            bypass = temporary.get("/api/v1/identity/users")
-            assert bypass.status_code == 403
-            assert bypass.json()["detail"] == "يجب تغيير كلمة المرور المؤقتة أولًا"
+            users = temporary.get("/api/v1/identity/users")
+            assert users.status_code == 200
     app.dependency_overrides.clear()

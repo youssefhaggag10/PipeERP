@@ -14,9 +14,6 @@ export function ProtectedRoute({ children, requiredPermissions = [] }: Protected
   const location = useLocation();
   if (loading) return <main className="route-loading">جارٍ تجهيز مساحة العمل…</main>;
   if (!user) return <Navigate to="/login" state={{ from: location.pathname }} replace />;
-  if (user.must_change_password && location.pathname !== "/change-password") {
-    return <Navigate to="/change-password" replace />;
-  }
   if (!hasEveryPermission(user.permissions, requiredPermissions)) {
     return <Navigate to="/" replace />;
   }

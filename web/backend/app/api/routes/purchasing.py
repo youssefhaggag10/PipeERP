@@ -13,10 +13,7 @@ from app.api.dependencies import (
 )
 from app.modules.identity.permissions import PermissionCode
 from app.modules.purchasing.schemas import (
-    ApprovePurchaseOrderRequest,
     CreatePurchaseOrderRequest,
-    CreateSupplierInvoiceRequest,
-    PostPurchaseReceiptRequest,
     PurchaseOptionsView,
     PurchaseOrderView,
     PurchaseReceiptView,
@@ -28,13 +25,10 @@ from app.modules.purchasing.schemas import (
 from app.modules.purchasing.service import (
     PurchasingConflict,
     PurchasingNotFound,
-    approve_purchase_order,
     create_purchase_order,
-    create_supplier_invoice,
     get_purchase_order,
     list_purchase_orders,
     list_purchase_receipts,
-    post_purchase_receipt,
     purchase_options,
     receive_purchase_order,
     reverse_purchase_receipt,
@@ -124,31 +118,6 @@ def create_order(
         raise _translate_error(exc) from exc
 
 
-@router.post("/orders/{order_id}/approval", response_model=PurchaseOrderView)
-def approve_order(
-    order_id: UUID,
-    payload: ApprovePurchaseOrderRequest,
-    request: Request,
-    principal: CurrentPrincipal,
-    db: DatabaseSession,
-) -> PurchaseOrderView:
-    enforce_permission(request, db, principal, PermissionCode.PURCHASES_MANAGE)
-    enforce_csrf(request, db, principal)
-    try:
-        view = approve_purchase_order(
-            db,
-            order_id=order_id,
-            version=payload.version,
-            actor=principal,
-            client=client_context(request),
-        )
-        db.commit()
-        return view
-    except (PurchasingNotFound, PurchasingConflict, IntegrityError, ValueError) as exc:
-        db.rollback()
-        raise _translate_error(exc) from exc
-
-
 @router.post("/orders/{order_id}/receive", response_model=PurchaseOrderView)
 def receive_full_order(
     order_id: UUID,
@@ -162,37 +131,6 @@ def receive_full_order(
     enforce_csrf(request, db, principal)
     try:
         view = receive_purchase_order(
-            db,
-            order_id=order_id,
-            payload=payload,
-            idempotency_key=idempotency_key,
-            actor=principal,
-            client=client_context(request),
-        )
-        db.commit()
-        return view
-    except (PurchasingNotFound, PurchasingConflict, IntegrityError, ValueError) as exc:
-        db.rollback()
-        raise _translate_error(exc) from exc
-
-
-@router.post(
-    "/orders/{order_id}/receipts",
-    response_model=PurchaseReceiptView,
-    status_code=status.HTTP_201_CREATED,
-)
-def receive_order(
-    order_id: UUID,
-    payload: PostPurchaseReceiptRequest,
-    request: Request,
-    principal: CurrentPrincipal,
-    db: DatabaseSession,
-    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=12, max_length=120)],
-) -> PurchaseReceiptView:
-    enforce_permission(request, db, principal, PermissionCode.PURCHASES_MANAGE)
-    enforce_csrf(request, db, principal)
-    try:
-        view = post_purchase_receipt(
             db,
             order_id=order_id,
             payload=payload,
@@ -224,35 +162,6 @@ def reverse_receipt(
             receipt_id=receipt_id,
             payload=payload,
             idempotency_key=idempotency_key,
-            actor=principal,
-            client=client_context(request),
-        )
-        db.commit()
-        return view
-    except (PurchasingNotFound, PurchasingConflict, IntegrityError, ValueError) as exc:
-        db.rollback()
-        raise _translate_error(exc) from exc
-
-
-@router.post(
-    "/orders/{order_id}/supplier-invoice",
-    response_model=SupplierInvoiceView,
-    status_code=status.HTTP_201_CREATED,
-)
-def supplier_invoice(
-    order_id: UUID,
-    payload: CreateSupplierInvoiceRequest,
-    request: Request,
-    principal: CurrentPrincipal,
-    db: DatabaseSession,
-) -> SupplierInvoiceView:
-    enforce_permission(request, db, principal, PermissionCode.PURCHASES_MANAGE)
-    enforce_csrf(request, db, principal)
-    try:
-        view = create_supplier_invoice(
-            db,
-            order_id=order_id,
-            payload=payload,
             actor=principal,
             client=client_context(request),
         )

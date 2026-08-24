@@ -190,7 +190,7 @@ export function SettingsPage() {
           method: "PATCH",
           body: JSON.stringify({
             display_name: userDisplayName,
-            ...(!editingCurrentUser ? { is_active: userActive, role_codes: [userRole] } : {}),
+            ...(!editingCurrentUser ? { is_active: userActive, role_codes: userRole ? [userRole] : [] } : {}),
             ...(userPassword ? { new_password: userPassword, must_change_password: false } : {}),
           }),
         });
@@ -202,7 +202,7 @@ export function SettingsPage() {
             username: userUsername,
             display_name: userDisplayName,
             password: userPassword,
-            role_codes: [userRole],
+            role_codes: userRole ? [userRole] : [],
             must_change_password: false,
           }),
         });
@@ -261,12 +261,12 @@ export function SettingsPage() {
     </form></section> : null}
     {tab === "backup" && isSystemAdmin && canManage ? <section className="panel settings-panel settings-backup"><DatabaseBackup size={36}/><h3>حماية بيانات PipeERP</h3><p>ينشئ النظام نسخة PostgreSQL كاملة تشمل البيانات والإعدادات، ثم ينزّلها على جهازك. احتفظ بها في مكان آمن.</p><a className="primary-button" href="/api/v1/system/backup" download><Download size={17}/> إنشاء وتنزيل نسخة احتياطية الآن</a></section> : null}
     {tab === "users" && canReadUsers ? <section className="settings-users-layout">
-      <article className="panel settings-panel settings-users-table"><header className="panel__head"><div><h3>المستخدمون</h3><p>اختر مستخدمًا لتعديل بياناته وصلاحياته.</p></div><ShieldCheck size={20}/></header><div className="table-scroll"><table><thead><tr><th>الكود</th><th>اسم المستخدم</th><th>الاسم الكامل</th><th>الدور</th><th>الحالة</th></tr></thead><tbody>{users.map((item, index) => <tr key={item.id} className={selectedUserId === item.id ? "selected-row" : ""} onClick={() => selectUser(item)}><td>{index + 1}</td><td dir="ltr">{item.username}</td><td>{item.display_name}</td><td>{roles.find((role) => role.code === item.roles[0])?.name_ar ?? item.roles.join("، ")}</td><td><span className={`status-badge ${item.is_active ? "status-badge--active" : ""}`}>{item.is_active ? "نشط" : "موقوف"}</span></td></tr>)}</tbody></table></div></article>
+      <article className="panel settings-panel settings-users-table"><header className="panel__head"><div><h3>المستخدمون</h3><p>اختر مستخدمًا لتعديل بياناته وصلاحياته.</p></div><ShieldCheck size={20}/></header><div className="table-scroll"><table><thead><tr><th>الكود</th><th>اسم المستخدم</th><th>الاسم الكامل</th><th>الدور</th><th>الحالة</th></tr></thead><tbody>{users.map((item, index) => <tr key={item.id} className={selectedUserId === item.id ? "selected-row" : ""} onClick={() => selectUser(item)}><td>{index + 1}</td><td dir="ltr">{item.username}</td><td>{item.display_name}</td><td>{roles.find((role) => role.code === item.roles[0])?.name_ar ?? (item.roles.join("، ") || "بدون صلاحيات")}</td><td><span className={`status-badge ${item.is_active ? "status-badge--active" : ""}`}>{item.is_active ? "نشط" : "موقوف"}</span></td></tr>)}</tbody></table></div></article>
       <article className="panel settings-panel"><header className="panel__head"><div><h3>بيانات المستخدم</h3><p>{selectedUserId ? "تعديل المستخدم المحدد" : "إضافة مستخدم جديد"}</p></div></header><form className="compact-form settings-user-form" onSubmit={saveUser}>
         <label>اسم المستخدم<input value={userUsername} disabled={Boolean(selectedUserId) || !canManageUsers} onChange={(event) => setUserUsername(event.target.value)} required/></label>
         <label>الاسم الكامل<input value={userDisplayName} disabled={!canManageUsers} onChange={(event) => setUserDisplayName(event.target.value)} required minLength={2}/></label>
         <label>كلمة المرور<input type="password" value={userPassword} disabled={!canManageUsers} placeholder={selectedUserId ? "اتركها فارغة للاحتفاظ بالحالية" : "12 حرفًا على الأقل"} onChange={(event) => setUserPassword(event.target.value)} required={!selectedUserId} minLength={12}/></label>
-        <label>الدور<select value={userRole} disabled={!canManageUsers || selectedUserId === user?.id} onChange={(event) => setUserRole(event.target.value)}>{roles.map((role) => <option value={role.code} key={role.id}>{role.name_ar}</option>)}</select></label>
+        <label>الدور<select value={userRole} disabled={!canManageUsers || selectedUserId === user?.id} onChange={(event) => setUserRole(event.target.value)}><option value="">بدون صلاحيات</option>{roles.map((role) => <option value={role.code} key={role.id}>{role.name_ar}</option>)}</select></label>
         <label className="check-row"><input type="checkbox" checked={userActive} disabled={!canManageUsers || selectedUserId === user?.id} onChange={(event) => setUserActive(event.target.checked)}/> مستخدم نشط</label>
         {canManageUsers ? <div className="settings-user-actions"><button className="primary-button"><Save size={17}/> حفظ المستخدم والصلاحيات</button><button type="button" className="secondary-button" onClick={clearUserForm}><Plus size={17}/> مستخدم جديد</button><button type="button" className="danger-button" disabled={!selectedUserId || selectedUserId === user?.id} onClick={() => void removeSelectedUser()}><Trash2 size={17}/> حذف المستخدم</button></div> : null}
       </form></article>

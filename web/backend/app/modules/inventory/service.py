@@ -1288,48 +1288,24 @@ def list_stock_card(
                 else []
             )
             if source_allocations:
-                for allocation, _layer, lot_number in source_allocations:
-                    result.append(
-                        StockCardLineView(
-                            id=uuid5(
-                                NAMESPACE_URL,
-                                f"pipeerp-stock-card:{transaction.id}:{allocation.id}",
-                            ),
-                            transaction_id=transaction.id,
-                            product_id=transaction.product_id,
-                            warehouse_id=transaction.warehouse_id,
-                            product_code=product.code,
-                            product_name_ar=product.name_ar,
-                            warehouse_name_ar=warehouse.name_ar,
-                            lot_number=lot_number or "",
-                            quantity_in=allocation.quantity,
-                            quantity_out=Decimal("0"),
-                            unit_cost=allocation.unit_cost,
-                            total_cost=allocation.total_cost,
-                            reference_type=transaction.reference_type,
-                            reference_number=reference_number,
-                            partner_name_ar=partner_name,
-                            notes=transaction.notes,
-                            posted_at=transaction.posted_at,
-                        )
-                    )
-                continue
-        if allocations:
-            for allocation, _layer, lot_number in allocations:
+                quantity_in = sum((item[0].quantity for item in source_allocations), Decimal("0"))
+                total_cost = sum((item[0].total_cost for item in source_allocations), Decimal("0"))
                 result.append(
                     StockCardLineView(
-                        id=allocation.id,
+                        id=uuid5(NAMESPACE_URL, f"pipeerp-stock-card:{transaction.id}"),
                         transaction_id=transaction.id,
                         product_id=transaction.product_id,
                         warehouse_id=transaction.warehouse_id,
                         product_code=product.code,
                         product_name_ar=product.name_ar,
                         warehouse_name_ar=warehouse.name_ar,
-                        lot_number=lot_number or "",
-                        quantity_in=Decimal("0"),
-                        quantity_out=allocation.quantity,
-                        unit_cost=allocation.unit_cost,
-                        total_cost=allocation.total_cost,
+                        lot_number="، ".join(
+                            dict.fromkeys(item[2] for item in source_allocations if item[2])
+                        ),
+                        quantity_in=quantity_in,
+                        quantity_out=Decimal("0"),
+                        unit_cost=(total_cost / quantity_in if quantity_in > 0 else Decimal("0")),
+                        total_cost=total_cost,
                         reference_type=transaction.reference_type,
                         reference_number=reference_number,
                         partner_name_ar=partner_name,
@@ -1337,6 +1313,31 @@ def list_stock_card(
                         posted_at=transaction.posted_at,
                     )
                 )
+                continue
+        if allocations:
+            quantity_out = sum((item[0].quantity for item in allocations), Decimal("0"))
+            total_cost = sum((item[0].total_cost for item in allocations), Decimal("0"))
+            result.append(
+                StockCardLineView(
+                    id=transaction.id,
+                    transaction_id=transaction.id,
+                    product_id=transaction.product_id,
+                    warehouse_id=transaction.warehouse_id,
+                    product_code=product.code,
+                    product_name_ar=product.name_ar,
+                    warehouse_name_ar=warehouse.name_ar,
+                    lot_number="، ".join(dict.fromkeys(item[2] for item in allocations if item[2])),
+                    quantity_in=Decimal("0"),
+                    quantity_out=quantity_out,
+                    unit_cost=(total_cost / quantity_out if quantity_out > 0 else Decimal("0")),
+                    total_cost=total_cost,
+                    reference_type=transaction.reference_type,
+                    reference_number=reference_number,
+                    partner_name_ar=partner_name,
+                    notes=transaction.notes,
+                    posted_at=transaction.posted_at,
+                )
+            )
             continue
         inbound = transaction.quantity_delta > 0 or transaction.weight_delta_kg > 0
         lot_number = ""

@@ -31,6 +31,24 @@ type Partner = {
   is_active: boolean;
   version: number;
 };
+type LinkedMovements = {
+  partner_name_ar: string;
+  closing_balance: string;
+  lines: Array<{
+    movement_date: string;
+    document_number: string;
+    movement_type: string;
+    debit: string;
+    credit: string;
+    running_balance: string;
+    notes: string;
+  }>;
+};
+
+const money = new Intl.NumberFormat("ar-EG", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 export function PartnersPage() {
   const { user } = useAuth();
@@ -56,6 +74,9 @@ export function PartnersPage() {
   const [isSupplier, setIsSupplier] = useState(partnerType === "supplier");
   const [isActive, setIsActive] = useState(true);
   const [editing, setEditing] = useState<Partner | null>(null);
+  const [selectedId, setSelectedId] = useState("");
+  const [linkedMovements, setLinkedMovements] =
+    useState<LinkedMovements | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -92,6 +113,24 @@ export function PartnersPage() {
     setIsSupplier(partnerType === "supplier");
     setIsActive(true);
   }, [partnerType]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setLinkedMovements(null);
+      return;
+    }
+    void api<LinkedMovements>(
+      `/master-data/partners/${selectedId}/linked-movements?partner_type=${partnerType}`,
+    )
+      .then(setLinkedMovements)
+      .catch((reason) =>
+        setError(
+          reason instanceof ApiError
+            ? reason.message
+            : "تعذر تحميل حركات الطرف",
+        ),
+      );
+  }, [partnerType, selectedId]);
 
   async function savePartner(event: FormEvent) {
     event.preventDefault();
@@ -221,8 +260,9 @@ export function PartnersPage() {
             <div className="partner-cards">
               {visiblePartners.map((partner) => (
                 <article
-                  className={`partner-card ${partner.is_active ? "" : "partner-card--inactive"}`}
+                  className={`partner-card ${partner.is_active ? "" : "partner-card--inactive"} ${selectedId === partner.id ? "partner-card--selected" : ""}`}
                   key={partner.id}
+                  onClick={() => setSelectedId(partner.id)}
                 >
                   <span className="partner-card__avatar">
                     {partner.name_ar.charAt(0)}
@@ -241,7 +281,10 @@ export function PartnersPage() {
                   {canManage ? (
                     <button
                       className="mini-action partner-card__edit"
-                      onClick={() => editPartner(partner)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        editPartner(partner);
+                      }}
                       aria-label={`تعديل ${singular}`}
                     >
                       <Pencil size={15} />
@@ -311,14 +354,6 @@ export function PartnersPage() {
                   onChange={(event) => setAddress(event.target.value)}
                 />
               </label>
-              <label>
-                الرقم الضريبي
-                <input
-                  dir="ltr"
-                  value={taxNumber}
-                  onChange={(event) => setTaxNumber(event.target.value)}
-                />
-              </label>
               {editing ? (
                 <label className="check-field">
                   <input
@@ -348,6 +383,39 @@ export function PartnersPage() {
           </article>
         ) : null}
       </section>
+      {linkedMovements ? (
+        <section className="panel partner-linked-movements">
+          <header className="panel__head">
+            <div>
+              <h3>الحركات المرتبطة — {linkedMovements.partner_name_ar}</h3>
+              <p>سجل محاسبي للعرض فقط كما في الديسكتوب</p>
+            </div>
+            <strong>{money.format(Number(linkedMovements.closing_balance))} ج.م</strong>
+          </header>
+          <div className="data-table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>التاريخ</th><th>المستند</th><th>البيان</th>
+                  <th>مدين</th><th>دائن</th><th>الرصيد</th>
+                </tr>
+              </thead>
+              <tbody>
+                {linkedMovements.lines.map((line, index) => (
+                  <tr key={`${line.document_number}-${index}`}>
+                    <td>{new Date(line.movement_date).toLocaleDateString("ar-EG")}</td>
+                    <td dir="ltr">{line.document_number}</td>
+                    <td>{line.movement_type}</td>
+                    <td>{money.format(Number(line.debit))}</td>
+                    <td>{money.format(Number(line.credit))}</td>
+                    <td><strong>{money.format(Number(line.running_balance))}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
     </AppShell>
   );
 }

@@ -20,7 +20,6 @@ from app.modules.returns.schemas import ReturnableInvoiceView
 from app.modules.returns.service import list_returnable_invoices
 from app.modules.treasury.models import PaymentAllocation, PaymentTransaction
 from app.modules.treasury.schemas import (
-    CustomerAdjustmentRequest,
     CustomerAdjustmentView,
     FinancialAccountRequest,
     FinancialAccountView,
@@ -54,7 +53,6 @@ from app.modules.treasury.service import (
     list_payments,
     list_transfers,
     partner_statement,
-    post_customer_adjustment,
     post_financial_adjustment,
     post_opening_balance,
     post_payment,
@@ -230,7 +228,7 @@ def undo_payment(
 
 @router.get("/open-invoices", response_model=list[OpenInvoiceView])
 def open_invoices(
-    transaction_type: Annotated[str, Query(pattern="^(customer_receipt|supplier_payment)$")],
+    transaction_type: Annotated[str, Query(pattern="^customer_receipt$")],
     partner_id: UUID,
     request: Request,
     principal: CurrentPrincipal,
@@ -518,29 +516,6 @@ def customer_adjustments(
 
 
 @router.post(
-    "/customer-adjustments",
-    response_model=CustomerAdjustmentView,
-    status_code=status.HTTP_201_CREATED,
-)
-def add_customer_adjustment(
-    payload: CustomerAdjustmentRequest,
-    request: Request,
-    principal: CurrentPrincipal,
-    db: DatabaseSession,
-) -> CustomerAdjustmentView:
-    _manage(request, db, principal)
-    try:
-        result = post_customer_adjustment(
-            db, payload=payload, actor=principal, client=client_context(request)
-        )
-        db.commit()
-        return result
-    except (TreasuryNotFound, TreasuryConflict, IntegrityError, ValueError) as exc:
-        db.rollback()
-        raise _translate_error(exc) from exc
-
-
-@router.post(
     "/customer-adjustments/{adjustment_id}/reversal",
     response_model=CustomerAdjustmentView,
 )
@@ -596,7 +571,7 @@ def statement(
     request: Request,
     principal: CurrentPrincipal,
     db: DatabaseSession,
-    partner_type: Annotated[str | None, Query(pattern="^(customer|supplier)$")] = None,
+    partner_type: Annotated[str | None, Query(pattern="^customer$")] = "customer",
 ) -> PartnerStatementView:
     _read(request, db, principal)
     try:

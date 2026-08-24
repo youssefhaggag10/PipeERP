@@ -2,7 +2,7 @@ import os
 from collections.abc import Generator
 from datetime import date
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
@@ -341,13 +341,13 @@ def test_receipt_allocations_advances_reversal_and_opening_balance() -> None:
                 "notes": "فروق مراجعة حساب العميل",
             },
         )
-        assert customer_adjustment.status_code == 201, customer_adjustment.text
+        assert customer_adjustment.status_code == 405
 
         summary = client.get("/api/v1/accounts/summary")
         assert summary.status_code == 200
         assert summary.json()["financial_balance"] == "1600.00"
         assert summary.json()["customer_advances"] == "50.00"
-        assert summary.json()["receivables"] == "725.00"
+        assert summary.json()["receivables"] == "700.00"
 
         statement = client.get(
             f"/api/v1/accounts/partners/{seeded['customer']}/statement",
@@ -358,21 +358,12 @@ def test_receipt_allocations_advances_reversal_and_opening_balance() -> None:
             },
         )
         assert statement.status_code == 200, statement.text
-        assert statement.json()["closing_balance"] == "725.00"
+        assert statement.json()["closing_balance"] == "700.00"
         assert {row["movement_type"] for row in statement.json()["lines"]} == {
             "رصيد افتتاحي",
             "فاتورة مبيعات",
-            "تسوية حساب عميل",
             "تحصيل عميل",
         }
-
-        reversed_adjustment = client.post(
-            f"/api/v1/accounts/customer-adjustments/{customer_adjustment.json()['id']}/reversal",
-            headers=_headers(client),
-            json={"reason": "إلغاء فرق المراجعة"},
-        )
-        assert reversed_adjustment.status_code == 200
-        assert reversed_adjustment.json()["status"] == "reversed"
 
         reversed_opening = client.post(
             f"/api/v1/accounts/opening-balances/{opening.json()['id']}/reversal",
@@ -581,6 +572,30 @@ def test_transfer_and_adjustment_are_atomic_and_reversible() -> None:
         accounts = client.get("/api/v1/accounts/financial-accounts").json()
         by_code = {row["code"]: row for row in accounts}
         assert by_code["BANK-1"]["current_balance"] == "0.00"
+
+        supplier_allocation = client.post(
+            "/api/v1/accounts/payments",
+            headers=_headers(client, "supplier-allocation-disabled"),
+            json={
+                "transaction_type": "supplier_payment",
+                "partner_id": seeded["supplier"],
+                "financial_account_id": seeded["cash"],
+                "amount": "100",
+                "payment_method": "cash",
+                "allocations": [{"invoice_id": str(uuid4()), "amount": "100"}],
+            },
+        )
+        assert supplier_allocation.status_code == 422
+
+        supplier_statement = client.get(
+            f"/api/v1/accounts/partners/{seeded['supplier']}/statement",
+            params={
+                "date_from": "2020-01-01",
+                "date_to": "2030-12-31",
+                "partner_type": "supplier",
+            },
+        )
+        assert supplier_statement.status_code == 422
 
         supplier_payment = client.post(
             "/api/v1/accounts/payments",

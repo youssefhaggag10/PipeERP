@@ -29,6 +29,7 @@ from app.modules.crm.service import (
     CrmConflict,
     CrmNotFound,
     add_note,
+    can_schedule_activities,
     cancel_activity,
     complete_activity,
     convert_to_customer,
@@ -42,6 +43,7 @@ from app.modules.crm.service import (
     schedule_activity,
     set_stage,
     summary,
+    sync_customers_to_leads,
 )
 from app.modules.identity.permissions import PermissionCode
 
@@ -68,7 +70,14 @@ def _manage(request: Request, db: DatabaseSession, principal: CurrentPrincipal) 
 @router.get("/options", response_model=CrmOptions)
 def crm_options(request: Request, principal: CurrentPrincipal, db: DatabaseSession) -> CrmOptions:
     _read(request, db, principal)
-    return options(db, principal)
+    try:
+        sync_customers_to_leads(db, principal)
+        result = options(db, principal)
+        db.commit()
+        return result
+    except (CrmNotFound, CrmConflict, IntegrityError, ValueError) as exc:
+        db.rollback()
+        raise _error(exc) from exc
 
 
 @router.get("/summary", response_model=CrmSummary)
@@ -197,6 +206,8 @@ def create_activity(
     db: DatabaseSession,
 ) -> ActivityView:
     _manage(request, db, principal)
+    if not can_schedule_activities(principal):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "جدولة الأنشطة متاحة للأدمن فقط")
     try:
         result = schedule_activity(db, lead_id=lead_id, payload=payload, principal=principal)
         db.commit()

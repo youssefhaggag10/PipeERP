@@ -159,3 +159,71 @@ def test_crm_lead_activity_pipeline_and_conversion_flow() -> None:
         partner = db.scalar(select(Partner).where(Partner.phone == "01000000000"))
         assert partner is not None and partner.is_customer
     app.dependency_overrides.clear()
+
+
+def test_crm_navigation_syncs_customers_once_and_only_admin_schedules() -> None:
+    factory = _database()
+    _seed(factory)
+    with factory.begin() as db:
+        db.add(
+            Partner(
+                code="CUS-SYNC",
+                normalized_code="CUS-SYNC",
+                name_ar="عميل موجود",
+                phone="01011111111",
+                address="القاهرة",
+                tax_number="",
+                is_customer=True,
+                is_supplier=False,
+                is_active=True,
+                version=1,
+            )
+        )
+    with _client(factory) as client:
+        headers = _login(client)
+        first = client.get("/api/v1/crm/options")
+        second = client.get("/api/v1/crm/options")
+        assert first.status_code == 200 and second.status_code == 200
+        leads = client.get("/api/v1/crm/leads").json()
+        assert len(leads) == 1
+        assert leads[0]["name"] == "عميل موجود"
+        assert leads[0]["customer_partner_id"] is not None
+        assert leads[0]["stage_code"] == "won"
+
+        role = client.post(
+            "/api/v1/identity/roles",
+            headers=headers,
+            json={
+                "code": "crm_manager_non_admin",
+                "name_ar": "مدير CRM",
+                "permissions": ["crm.read", "crm.manage"],
+            },
+        )
+        assert role.status_code == 201, role.text
+        user = client.post(
+            "/api/v1/identity/users",
+            headers=headers,
+            json={
+                "username": "crm.manager",
+                "display_name": "مدير متابعة",
+                "password": "CRM-manager-password-2026",
+                "role_codes": ["crm_manager_non_admin"],
+            },
+        )
+        assert user.status_code == 201, user.text
+        manager_headers = _login_as(client, "crm.manager", "CRM-manager-password-2026")
+        denied = client.post(
+            f"/api/v1/crm/leads/{leads[0]['id']}/activities",
+            headers=manager_headers,
+            json={"subject": "متابعة", "due_at": "2026-08-25T10:00:00Z"},
+        )
+        assert denied.status_code == 403
+    app.dependency_overrides.clear()
+
+
+def _login_as(client: TestClient, username: str, password: str) -> dict[str, str]:
+    response = client.post("/api/v1/auth/login", json={"username": username, "password": password})
+    assert response.status_code == 200, response.text
+    token = client.cookies.get("pipeerp_csrf")
+    assert token
+    return {"X-CSRF-Token": token}

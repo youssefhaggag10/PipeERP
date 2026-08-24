@@ -51,6 +51,8 @@ from app.modules.manufacturing.schemas import (
     ManufacturingOptionsView,
     ManufacturingOrderView,
     ManufacturingStatus,
+    MaterialAvailabilityLineView,
+    MaterialAvailabilityView,
     MaterialIssueView,
     MixAdjustmentMaterialView,
     MixAdjustmentView,
@@ -682,16 +684,23 @@ def create_order(
         .where(ManufacturingRecipe.id == payload.recipe_id)
         .with_for_update()
     )
-    warehouse = db.get(Warehouse, payload.warehouse_id)
+    warehouse = db.scalar(
+        select(Warehouse).where(
+            Warehouse.normalized_code == "MAIN",
+            Warehouse.is_active.is_(True),
+        )
+    )
     if recipe is None or not recipe.is_active:
         raise ManufacturingNotFound("الخلطة غير موجودة أو غير نشطة")
-    if warehouse is None or not warehouse.is_active:
-        raise ManufacturingNotFound("المخزن غير موجود أو غير نشط")
+    if warehouse is None:
+        raise ManufacturingNotFound("مخزن المصنع غير موجود أو غير نشط")
+    if payload.warehouse_id != warehouse.id:
+        raise ManufacturingConflict("أوامر التصنيع تعمل على مخزن المصنع فقط")
     output_snapshot, material_snapshot, plan = _order_snapshot(db, recipe=recipe, payload=payload)
     order = ManufacturingOrder(
         order_number=allocate_document_number(db, "manufacturing_order"),
         recipe_id=recipe.id,
-        warehouse_id=payload.warehouse_id,
+        warehouse_id=warehouse.id,
         status="draft",
         order_date=datetime.now(UTC),
         planned_batches=plan.batches,
@@ -769,11 +778,18 @@ def _replace_draft_order(
         .where(ManufacturingRecipe.id == payload.recipe_id)
         .with_for_update()
     )
-    warehouse = db.get(Warehouse, payload.warehouse_id)
+    warehouse = db.scalar(
+        select(Warehouse).where(
+            Warehouse.normalized_code == "MAIN",
+            Warehouse.is_active.is_(True),
+        )
+    )
     if recipe is None or not recipe.is_active:
         raise ManufacturingNotFound("الخلطة غير موجودة أو غير نشطة")
-    if warehouse is None or not warehouse.is_active:
-        raise ManufacturingNotFound("المخزن غير موجود أو غير نشط")
+    if warehouse is None:
+        raise ManufacturingNotFound("مخزن المصنع غير موجود أو غير نشط")
+    if payload.warehouse_id != warehouse.id:
+        raise ManufacturingConflict("أوامر التصنيع تعمل على مخزن المصنع فقط")
     output_snapshot, material_snapshot, plan = _order_snapshot(db, recipe=recipe, payload=payload)
     db.execute(
         delete(ManufacturingOrderOutput).where(
@@ -786,7 +802,7 @@ def _replace_draft_order(
         )
     )
     order.recipe_id = recipe.id
-    order.warehouse_id = payload.warehouse_id
+    order.warehouse_id = warehouse.id
     order.planned_batches = plan.batches
     order.target_weight_kg = plan.target_weight_kg
     order.planned_input_weight_kg = plan.planned_input_weight_kg
@@ -951,6 +967,67 @@ def preview_replan(db: Session, order_id: UUID) -> ReplanView:
     return _stock_aware_plan(db, order=order, lock=False)
 
 
+def _material_availability(
+    db: Session,
+    *,
+    order: ManufacturingOrder,
+    target_batches: int,
+    lock: bool,
+) -> list[MaterialAvailabilityLineView]:
+    statement = (
+        select(ManufacturingOrderMaterial, Product)
+        .join(Product, Product.id == ManufacturingOrderMaterial.product_id)
+        .where(ManufacturingOrderMaterial.manufacturing_order_id == order.id)
+        .order_by(ManufacturingOrderMaterial.created_at, ManufacturingOrderMaterial.id)
+    )
+    if lock:
+        statement = statement.with_for_update()
+    rows: list[MaterialAvailabilityLineView] = []
+    for material, product in db.execute(statement):
+        required = quantity(material.quantity_per_batch * Decimal(target_batches))
+        available = quantity(
+            _available_quantity(db, material.product_id, order.warehouse_id, lock=lock)
+        )
+        shortage = quantity(max(Decimal("0"), required - available))
+        is_scrap = material.component_kind == "scrap"
+        rows.append(
+            MaterialAvailabilityLineView(
+                product_id=material.product_id,
+                product_code=product.code,
+                product_name_ar=product.name_ar,
+                component_kind=material.component_kind,
+                required_quantity=required,
+                available_quantity=available,
+                issue_quantity=min(required, available) if is_scrap else required,
+                shortage_quantity=shortage,
+                blocks_start=shortage > 0 and not is_scrap,
+            )
+        )
+    return rows
+
+
+def preview_material_availability(db: Session, order_id: UUID) -> MaterialAvailabilityView:
+    order = db.get(ManufacturingOrder, order_id)
+    if order is None:
+        raise ManufacturingNotFound("أمر التصنيع غير موجود")
+    if order.status != "draft":
+        raise ManufacturingConflict("يمكن فحص خامات أمر تصنيع في حالة المسودة فقط")
+    plan = _stock_aware_plan(db, order=order, lock=False)
+    rows = _material_availability(
+        db,
+        order=order,
+        target_batches=plan.new_batches,
+        lock=False,
+    )
+    return MaterialAvailabilityView(
+        order_id=order.id,
+        order_number=order.order_number,
+        plan=plan,
+        rows=rows,
+        has_blocking_shortage=any(item.blocks_start for item in rows),
+    )
+
+
 def apply_replan(
     db: Session,
     *,
@@ -1096,6 +1173,9 @@ def start_order(
         raise ManufacturingConflict("يمكن بدء أمر تصنيع في حالة المسودة فقط")
     if order.version != payload.version:
         raise ManufacturingConflict("تم تعديل الأمر بواسطة مستخدم آخر؛ حدّث الصفحة")
+    current_plan = _stock_aware_plan(db, order=order, lock=True)
+    if current_plan.changed:
+        raise ManufacturingConflict("راجع توافر الخامات وأعد تخطيط الكسر قبل بدء الأمر")
     materials = list(
         db.scalars(
             select(ManufacturingOrderMaterial)
@@ -1103,6 +1183,14 @@ def start_order(
             .with_for_update()
         )
     )
+    availability = _material_availability(
+        db,
+        order=order,
+        target_batches=order.planned_batches,
+        lock=True,
+    )
+    if any(item.blocks_start for item in availability):
+        raise ManufacturingConflict("يوجد عجز في خامات أمر التصنيع")
     _issue_batches(
         db,
         order=order,

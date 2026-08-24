@@ -147,6 +147,30 @@ type AdjustmentDraft = {
   reason: string;
   quantities: Record<string, string>;
 };
+type AvailabilityPreview = {
+  order_id: string;
+  order_number: string;
+  plan: {
+    changed: boolean;
+    old_batches: number;
+    new_batches: number;
+    usable_scrap_kg: string;
+    planned_input_weight_kg: string;
+    expected_overage_kg: string;
+  };
+  rows: Array<{
+    product_id: string;
+    product_code: string;
+    product_name_ar: string;
+    component_kind: "material" | "scrap";
+    required_quantity: string;
+    available_quantity: string;
+    issue_quantity: string;
+    shortage_quantity: string;
+    blocks_start: boolean;
+  }>;
+  has_blocking_shortage: boolean;
+};
 
 const blankOptions: Options = {
   recipes: [],
@@ -210,6 +234,9 @@ export function ManufacturingPage() {
     Record<string, { good: string; defective: string; weight: string }>
   >({});
   const [adjustments, setAdjustments] = useState<AdjustmentDraft[]>([]);
+  const [availability, setAvailability] =
+    useState<AvailabilityPreview | null>(null);
+  const [availabilityOrder, setAvailabilityOrder] = useState<Order | null>(null);
 
   const selected = useMemo(
     () => orders.find((item) => item.id === selectedId) ?? orders[0] ?? null,
@@ -464,17 +491,50 @@ export function ManufacturingPage() {
     );
   }
   async function start(item: Order) {
-    await perform(
-      () =>
-        api(`/manufacturing/orders/${item.id}/start`, {
+    setSubmitting(true);
+    setError("");
+    try {
+      const preview = await api<AvailabilityPreview>(
+        `/manufacturing/orders/${item.id}/material-availability`,
+      );
+      setAvailabilityOrder(item);
+      setAvailability(preview);
+    } catch (reason) {
+      showError(reason, "تعذر فحص توافر الخامات");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+  async function confirmStart() {
+    if (!availability || !availabilityOrder || availability.has_blocking_shortage) return;
+    setSubmitting(true);
+    setError("");
+    setNotice("");
+    try {
+      let order = availabilityOrder;
+      if (availability.plan.changed) {
+        order = await api<Order>(`/manufacturing/orders/${order.id}/replan`, {
           method: "POST",
-          headers: {
-            "Idempotency-Key": clientId("manufacturing-start"),
-          },
-          body: JSON.stringify({ version: item.version }),
-        }),
-      "تم صرف الخامات من FIFO وبدء الأمر.",
-    );
+          body: JSON.stringify({ version: order.version }),
+        });
+      }
+      await api(`/manufacturing/orders/${order.id}/start`, {
+        method: "POST",
+        headers: {
+          "Idempotency-Key": clientId("manufacturing-start"),
+        },
+        body: JSON.stringify({ version: order.version }),
+      });
+      setAvailability(null);
+      setAvailabilityOrder(null);
+      setNotice("تم صرف الخامات وبدء أمر التصنيع.");
+      await load();
+    } catch (reason) {
+      showError(reason, "تعذر بدء أمر التصنيع");
+      await load();
+    } finally {
+      setSubmitting(false);
+    }
   }
   async function replan(item: Order) {
     setSubmitting(true);
@@ -1529,6 +1589,92 @@ export function ManufacturingPage() {
           ) : null}
         </>
       )}
+      {availability ? (
+        <div className="availability-backdrop" role="presentation">
+          <section
+            className="availability-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="availability-title"
+          >
+            <header className="panel__head">
+              <div>
+                <h3 id="availability-title">مراجعة توافر خامات أمر التصنيع</h3>
+                <p>{availability.order_number} · راجع المطلوب والمتاح والعجز قبل الصرف.</p>
+              </div>
+              <button
+                type="button"
+                className="mini-action"
+                aria-label="إغلاق"
+                onClick={() => {
+                  setAvailability(null);
+                  setAvailabilityOrder(null);
+                }}
+              >
+                <X size={16} />
+              </button>
+            </header>
+            {availability.plan.changed ? (
+              <div className="alert alert--warning">
+                الكسر المتاح سيعيد تخطيط الأمر من {availability.plan.old_batches} إلى{" "}
+                {availability.plan.new_batches} خلطات، وسيُصرف منه{" "}
+                {number.format(Number(availability.plan.usable_scrap_kg))} كجم.
+              </div>
+            ) : null}
+            <div className="data-table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>الخامة</th>
+                    <th>النوع</th>
+                    <th>المطلوب</th>
+                    <th>المتاح</th>
+                    <th>سيُصرف</th>
+                    <th>العجز</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {availability.rows.map((row) => (
+                    <tr key={row.product_id} className={row.blocks_start ? "availability-row--blocked" : ""}>
+                      <td><strong>{row.product_name_ar}</strong><small>{row.product_code}</small></td>
+                      <td>{row.component_kind === "scrap" ? "كسر اختياري" : "خامة أساسية"}</td>
+                      <td>{number.format(Number(row.required_quantity))}</td>
+                      <td>{number.format(Number(row.available_quantity))}</td>
+                      <td>{number.format(Number(row.issue_quantity))}</td>
+                      <td>{number.format(Number(row.shortage_quantity))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className={availability.has_blocking_shortage ? "availability-result availability-result--blocked" : "availability-result"}>
+              {availability.has_blocking_shortage
+                ? "يوجد عجز في خامات أساسية — لا يمكن بدء الأمر."
+                : "جميع الخامات الأساسية متاحة ويمكن صرف الخامات وبدء الأمر."}
+            </p>
+            <footer className="availability-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  setAvailability(null);
+                  setAvailabilityOrder(null);
+                }}
+              >
+                إغلاق
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={submitting || availability.has_blocking_shortage}
+                onClick={() => void confirmStart()}
+              >
+                <Play size={16} /> صرف الخامات وبدء الأمر
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
     </AppShell>
   );
 }

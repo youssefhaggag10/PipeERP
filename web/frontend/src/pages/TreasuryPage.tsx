@@ -280,12 +280,6 @@ export function TreasuryPage() {
     entry_date: new Date().toISOString().slice(0, 10),
     notes: "",
   });
-  const [customerAdjustmentForm, setCustomerAdjustmentForm] = useState({
-    customer_id: "",
-    adjustment_type: "debit",
-    amount: "",
-    notes: "",
-  });
   const [statementPartnerId, setStatementPartnerId] = useState("");
   const [statementFrom, setStatementFrom] = useState(
     `${new Date().getFullYear()}-01-01`,
@@ -393,13 +387,6 @@ export function TreasuryPage() {
           partnerRows.find((item) => item.is_customer)?.id ||
           "",
       }));
-      setCustomerAdjustmentForm((current) => ({
-        ...current,
-        customer_id:
-          current.customer_id ||
-          partnerRows.find((item) => item.is_customer)?.id ||
-          "",
-      }));
       setStatementPartnerId(
         (current) =>
           current || partnerRows.find((item) => item.is_customer)?.id || "",
@@ -439,7 +426,9 @@ export function TreasuryPage() {
       partner_id: partnerId,
     });
     Promise.all([
-      api<OpenInvoice[]>(`/accounts/open-invoices?${query}`),
+      transactionType === "customer_receipt"
+        ? api<OpenInvoice[]>(`/accounts/open-invoices?${query}`)
+        : Promise.resolve([] as OpenInvoice[]),
       api<OpenOrder[]>(`/accounts/open-orders?${query}`),
     ])
       .then(([invoices, orders]) => {
@@ -458,14 +447,26 @@ export function TreasuryPage() {
   }, [partnerId, transactionType]);
   useEffect(() => {
     if (!invoicePaymentTarget) return;
-    if (!openInvoices.some((item) => item.id === invoicePaymentTarget.id)) return;
+    if (invoicePaymentTarget.invoice_type === "purchase") {
+      const order = openOrders.find(
+        (item) => item.order_number === invoicePaymentTarget.order_number,
+      );
+      if (!order) return;
+      setLinkMode("order");
+      setOrderId(order.id);
+      setAmount(invoicePaymentTarget.remaining);
+      setInvoicePaymentTarget(null);
+      return;
+    }
+    if (!openInvoices.some((item) => item.id === invoicePaymentTarget.id))
+      return;
     setLinkMode("invoices");
     setAmount(invoicePaymentTarget.remaining);
     setAllocationAmounts({
       [invoicePaymentTarget.id]: invoicePaymentTarget.remaining,
     });
     setInvoicePaymentTarget(null);
-  }, [invoicePaymentTarget, openInvoices]);
+  }, [invoicePaymentTarget, openInvoices, openOrders]);
 
   function showError(reason: unknown, fallback: string) {
     setError(reason instanceof ApiError ? reason.message : fallback);
@@ -588,22 +589,6 @@ export function TreasuryPage() {
       "تم تسجيل الرصيد الافتتاحي دون التأثير على الخزينة.",
     );
     setOpeningForm((current) => ({ ...current, amount: "", notes: "" }));
-  }
-  async function postCustomerAdjustment(event: FormEvent) {
-    event.preventDefault();
-    await perform(
-      () =>
-        api("/accounts/customer-adjustments", {
-          method: "POST",
-          body: JSON.stringify(customerAdjustmentForm),
-        }),
-      "تم تسجيل تسوية حساب العميل.",
-    );
-    setCustomerAdjustmentForm((current) => ({
-      ...current,
-      amount: "",
-      notes: "",
-    }));
   }
   async function reverse(
     path: string,
@@ -996,14 +981,16 @@ export function TreasuryPage() {
                     />{" "}
                     أمر بيع/شراء
                   </label>
-                  <label>
-                    <input
-                      type="radio"
-                      checked={linkMode === "invoices"}
-                      onChange={() => setLinkMode("invoices")}
-                    />{" "}
-                    توزيع فواتير
-                  </label>
+                  {transactionType === "customer_receipt" ? (
+                    <label>
+                      <input
+                        type="radio"
+                        checked={linkMode === "invoices"}
+                        onChange={() => setLinkMode("invoices")}
+                      />{" "}
+                      توزيع فواتير
+                    </label>
+                  ) : null}
                 </fieldset>
                 {linkMode === "order" ? (
                   <label>
@@ -1394,6 +1381,7 @@ export function TreasuryPage() {
               </table>
             </div>
           </section>
+          {partnerType === "customer" ? (
           <section className="treasury-partner-grid">
             <article className="panel">
               <header className="panel__head">
@@ -1605,86 +1593,13 @@ export function TreasuryPage() {
                     ))}
                   </div>
                 </section>
-                <section className="panel">
+                {customerAdjustments.length ? <section className="panel">
                   <header className="panel__head">
                     <div>
-                      <h3>تسوية حساب عميل</h3>
-                      <p>خصم مسموح أو إضافة مدينة</p>
+                      <h3>تسويات ويب سابقة</h3>
+                      <p>للعرض والعكس فقط؛ لا يمكن إنشاء تسوية جديدة.</p>
                     </div>
                   </header>
-                  <form
-                    className="compact-form"
-                    onSubmit={postCustomerAdjustment}
-                  >
-                    <label>
-                      العميل
-                      <select
-                        value={customerAdjustmentForm.customer_id}
-                        onChange={(e) =>
-                          setCustomerAdjustmentForm({
-                            ...customerAdjustmentForm,
-                            customer_id: e.target.value,
-                          })
-                        }
-                      >
-                        {partners
-                          .filter((x) => x.is_customer)
-                          .map((x) => (
-                            <option key={x.id} value={x.id}>
-                              {x.name_ar}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-                    <div className="form-pair">
-                      <label>
-                        النوع
-                        <select
-                          value={customerAdjustmentForm.adjustment_type}
-                          onChange={(e) =>
-                            setCustomerAdjustmentForm({
-                              ...customerAdjustmentForm,
-                              adjustment_type: e.target.value,
-                            })
-                          }
-                        >
-                          <option value="debit">مدينة</option>
-                          <option value="credit">دائنة</option>
-                        </select>
-                      </label>
-                      <label>
-                        المبلغ
-                        <input
-                          type="number"
-                          min="0.01"
-                          step="0.01"
-                          value={customerAdjustmentForm.amount}
-                          onChange={(e) =>
-                            setCustomerAdjustmentForm({
-                              ...customerAdjustmentForm,
-                              amount: e.target.value,
-                            })
-                          }
-                          required
-                        />
-                      </label>
-                    </div>
-                    <label>
-                      السبب
-                      <input
-                        value={customerAdjustmentForm.notes}
-                        onChange={(e) =>
-                          setCustomerAdjustmentForm({
-                            ...customerAdjustmentForm,
-                            notes: e.target.value,
-                          })
-                        }
-                        minLength={3}
-                        required
-                      />
-                    </label>
-                    <button className="primary-button">تسجيل التسوية</button>
-                  </form>
                   <div className="compact-history">
                     {customerAdjustments.slice(0, 6).map((item) => (
                       <div key={item.id}>
@@ -1713,10 +1628,11 @@ export function TreasuryPage() {
                       </div>
                     ))}
                   </div>
-                </section>
+                </section> : null}
               </article>
             ) : null}
           </section>
+          ) : null}
         </>
       ) : null}
       {tab === "sales-invoices" || tab === "purchase-invoices" ? (

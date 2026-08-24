@@ -109,7 +109,7 @@ def test_product_creation_duplicate_code_and_optimistic_concurrency() -> None:
             "product_type": "raw_material",
             "unit_id": unit_id,
             "min_stock": "10.000",
-            "track_lots": True,
+            "track_lots": False,
             "standard_weight_kg": "12.500",
             "weight_tolerance_percent": "5",
         }
@@ -122,6 +122,7 @@ def test_product_creation_duplicate_code_and_optimistic_concurrency() -> None:
         assert created.json()["version"] == 1
         assert created.json()["standard_weight_kg"] == "0"
         assert created.json()["weight_tolerance_percent"] == "0"
+        assert created.json()["track_lots"] is True
 
         duplicate = client.post(
             "/api/v1/master-data/products",
@@ -182,7 +183,7 @@ def test_product_creation_duplicate_code_and_optimistic_concurrency() -> None:
     app.dependency_overrides.clear()
 
 
-def test_partner_can_be_customer_and_supplier_and_writes_require_manage_permission() -> None:
+def test_partner_must_have_one_desktop_type_and_writes_require_manage_permission() -> None:
     factory = _database()
     _seed(factory)
     with _client(factory) as admin:
@@ -197,9 +198,7 @@ def test_partner_can_be_customer_and_supplier_and_writes_require_manage_permissi
             },
             headers=_csrf(admin),
         )
-        assert created.status_code == 201, created.text
-        assert created.json()["is_customer"] is True
-        assert created.json()["is_supplier"] is True
+        assert created.status_code == 422
 
         operator_name = f"operator-{uuid4().hex[:6]}"
         operator = admin.post(
@@ -349,7 +348,7 @@ def test_reference_data_crud_rejects_duplicates_stale_updates_and_category_cycle
     app.dependency_overrides.clear()
 
 
-def test_warehouse_default_and_company_settings_are_concurrency_safe() -> None:
+def test_single_factory_warehouse_and_company_settings_are_concurrency_safe() -> None:
     factory = _database()
     _seed(factory)
     with _client(factory) as client:
@@ -359,16 +358,19 @@ def test_warehouse_default_and_company_settings_are_concurrency_safe() -> None:
             json={"code": "SECOND", "name_ar": "المخزن الثاني", "is_default": True},
             headers=_csrf(client),
         )
-        assert created.status_code == 201, created.text
-        assert created.json()["is_default"] is True
+        assert created.status_code == 409
 
         warehouses = client.get("/api/v1/master-data/warehouses?include_inactive=true")
         assert warehouses.status_code == 200
-        assert sum(item["is_default"] for item in warehouses.json()) == 1
+        assert len(warehouses.json()) == 1
+        factory_warehouse = warehouses.json()[0]
+        assert factory_warehouse["code"] == "MAIN"
+        assert factory_warehouse["name_ar"] == "المصنع"
+        assert factory_warehouse["is_default"] is True
 
         settings = client.get("/api/v1/master-data/settings")
         assert settings.status_code == 200
-        assert settings.json()["default_warehouse_id"] == created.json()["id"]
+        assert settings.json()["default_warehouse_id"] == factory_warehouse["id"]
         current_version = settings.json()["version"]
 
         payload = {
@@ -392,11 +394,11 @@ def test_warehouse_default_and_company_settings_are_concurrency_safe() -> None:
         assert stale.status_code == 409
 
         deactivate_default = client.put(
-            f"/api/v1/master-data/warehouses/{created.json()['id']}",
+            f"/api/v1/master-data/warehouses/{factory_warehouse['id']}",
             json={
-                "version": created.json()["version"],
-                "code": "SECOND",
-                "name_ar": "المخزن الثاني",
+                "version": factory_warehouse["version"],
+                "code": "MAIN",
+                "name_ar": "المصنع",
                 "is_default": False,
                 "is_active": False,
             },

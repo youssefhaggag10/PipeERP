@@ -532,7 +532,7 @@ def create_user(
         display_name=display_name.strip(),
         password_hash=hash_password(password),
         is_active=True,
-        must_change_password=must_change_password,
+        must_change_password=False,
         failed_login_attempts=0,
         version=1,
     )
@@ -593,7 +593,7 @@ def update_user(
         user.password_hash = hash_password(new_password)
         security_changed = True
     if must_change_password is not None:
-        user.must_change_password = must_change_password
+        user.must_change_password = False
     if role_codes is not None:
         roles = _resolve_roles(db, role_codes)
         db.execute(delete(UserRole).where(UserRole.user_id == user.id))

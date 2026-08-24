@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
@@ -53,6 +54,8 @@ from app.modules.master_data.service import (
     update_unit,
     update_warehouse,
 )
+from app.modules.treasury.schemas import PartnerStatementView
+from app.modules.treasury.service import TreasuryNotFound, partner_statement
 
 router = APIRouter(prefix="/master-data")
 
@@ -338,6 +341,27 @@ def edit_partner(
     view = PartnerView.model_validate(partner)
     db.commit()
     return view
+
+
+@router.get("/partners/{partner_id}/linked-movements", response_model=PartnerStatementView)
+def partner_linked_movements(
+    partner_id: UUID,
+    partner_type: Annotated[str, Query(pattern="^(customer|supplier)$")],
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DatabaseSession,
+) -> PartnerStatementView:
+    enforce_permission(request, db, principal, PermissionCode.PARTNERS_READ)
+    try:
+        return partner_statement(
+            db,
+            partner_id=partner_id,
+            date_from=date(1900, 1, 1),
+            date_to=date.today(),
+            partner_type=partner_type,
+        )
+    except TreasuryNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
 
 
 @router.get("/warehouses", response_model=list[WarehouseView])

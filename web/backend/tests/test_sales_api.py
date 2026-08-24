@@ -228,8 +228,7 @@ def test_sales_order_rejects_advance_from_order_screen() -> None:
                 ],
             },
         )
-        assert created.status_code == 409
-        assert "شاشة الحسابات" in created.json()["detail"]
+        assert created.status_code == 422
 
     with factory() as db:
         payment_id = db.scalar(
@@ -423,7 +422,7 @@ def test_quotation_has_no_stock_invoice_or_order_effect() -> None:
         assert db.scalar(select(func.count(CustomerInvoice.id))) == 0
 
 
-def test_weight_draft_can_be_cancelled_without_stock_or_invoice_effect() -> None:
+def test_web_only_weight_draft_cancellation_route_is_disabled() -> None:
     factory = _database()
     product_id, warehouse_id, customer_id = _seed(factory)
     with _client(factory) as client:
@@ -446,16 +445,10 @@ def test_weight_draft_can_be_cancelled_without_stock_or_invoice_effect() -> None
             headers=_headers(client),
             json={"version": created["version"], "reason": "العميل ألغى الطلب"},
         )
-        assert cancelled.status_code == 200, cancelled.text
-        result = cancelled.json()
-        assert result["status"] == "cancelled"
-        assert result["weight_cards"][0]["status"] == "cancelled"
-        refused = client.post(
-            f"/api/v1/sales/orders/{created['id']}/delivery",
-            headers=_headers(client, "cancelled-weight-delivery"),
-            json={"version": result["version"]},
-        )
-        assert refused.status_code == 409
+        assert cancelled.status_code == 404
+        result = client.get(f"/api/v1/sales/orders/{created['id']}").json()
+        assert result["status"] == "draft"
+        assert result["weight_cards"][0]["status"] == "draft"
 
     with factory() as db:
         balance = db.get(InventoryBalance, (UUID(product_id), UUID(warehouse_id)))

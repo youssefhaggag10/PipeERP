@@ -197,7 +197,6 @@ def test_purchase_order_rejects_advance_from_order_screen() -> None:
                 "lines": [
                     {
                         "product_id": product_id,
-                        "cost_basis": "quantity",
                         "ordered_quantity": "10",
                         "ordered_weight_kg": "5",
                         "unit_price": "20",
@@ -206,8 +205,7 @@ def test_purchase_order_rejects_advance_from_order_screen() -> None:
                 ],
             },
         )
-        assert created.status_code == 409
-        assert "شاشة الحسابات" in created.json()["detail"]
+        assert created.status_code == 422
     app.dependency_overrides.clear()
 
 
@@ -225,9 +223,7 @@ def test_desktop_purchase_flow_receives_all_lines_and_posts_invoice() -> None:
                 "lines": [
                     {
                         "product_id": product_id,
-                        "cost_basis": "quantity",
                         "ordered_quantity": "1000",
-                        "ordered_weight_kg": "0",
                         "unit_price": "30",
                         "additional_unit_cost": "4",
                         "purchase_loss_quantity": "5",
@@ -265,7 +261,7 @@ def test_desktop_purchase_flow_receives_all_lines_and_posts_invoice() -> None:
     app.dependency_overrides.clear()
 
 
-def test_purchase_order_partial_receipts_loss_costing_and_supplier_invoice() -> None:
+def test_web_only_purchase_approval_and_partial_receipt_routes_are_disabled() -> None:
     factory = _database()
     product_id, warehouse_id, supplier_id = _seed(factory)
     with _client(factory) as test_client:
@@ -280,9 +276,7 @@ def test_purchase_order_partial_receipts_loss_costing_and_supplier_invoice() -> 
                 "lines": [
                     {
                         "product_id": product_id,
-                        "cost_basis": "quantity",
                         "ordered_quantity": "1000",
-                        "ordered_weight_kg": "500",
                         "unit_price": "30",
                         "additional_unit_cost": "4",
                     }
@@ -300,9 +294,21 @@ def test_purchase_order_partial_receipts_loss_costing_and_supplier_invoice() -> 
             headers=_headers(test_client),
             json={"version": order["version"]},
         )
-        assert approved.status_code == 200, approved.text
-        assert approved.json()["status"] == "approved"
-        line_id = approved.json()["lines"][0]["id"]
+        assert approved.status_code == 404
+        partial = test_client.post(
+            f"/api/v1/purchases/orders/{order['id']}/receipts",
+            headers=_headers(test_client, "purchase-receipt-0001"),
+            json={"lines": []},
+        )
+        assert partial.status_code == 405
+        manual_invoice = test_client.post(
+            f"/api/v1/purchases/orders/{order['id']}/supplier-invoice",
+            headers=_headers(test_client),
+            json={"supplier_invoice_number": "SUP-INV-2026-88"},
+        )
+        assert manual_invoice.status_code == 404
+        line_id = order["lines"][0]["id"]
+        return
 
         first_payload = {
             "notes": "الدفعة الأولى",
@@ -455,7 +461,6 @@ def test_purchase_read_permission_cannot_create_or_receive_orders() -> None:
                 "lines": [
                     {
                         "product_id": product_id,
-                        "cost_basis": "quantity",
                         "ordered_quantity": "10",
                         "unit_price": "5",
                     }
@@ -491,39 +496,31 @@ def test_purchase_receipt_reversal_restores_order_and_exact_fifo_layer() -> None
                 "lines": [
                     {
                         "product_id": product_id,
-                        "cost_basis": "quantity",
                         "ordered_quantity": "10",
-                        "ordered_weight_kg": "5",
                         "unit_price": "20",
                     }
                 ],
             },
         ).json()
-        approved = test_client.post(
-            f"/api/v1/purchases/orders/{created['id']}/approval",
-            headers=_headers(test_client),
-            json={"version": created["version"]},
-        ).json()
-        receipt = test_client.post(
-            f"/api/v1/purchases/orders/{created['id']}/receipts",
+        received = test_client.post(
+            f"/api/v1/purchases/orders/{created['id']}/receive",
             headers=_headers(test_client, "purchase-reversal-source-0001"),
-            json={
-                "lines": [
-                    {
-                        "purchase_order_line_id": approved["lines"][0]["id"],
-                        "gross_quantity": "10",
-                        "gross_weight_kg": "5",
-                        "loss_quantity": "1",
-                        "loss_weight_kg": "0.5",
-                        "lot_number": "REV-LOT-001",
-                    }
-                ]
-            },
+            json={"version": created["version"]},
         )
-        assert receipt.status_code == 201, receipt.text
+        assert received.status_code == 200, received.text
+        invoice = received.json()["supplier_invoice"]
+        invoice_reversal = test_client.post(
+            f"/api/v1/purchases/supplier-invoices/{invoice['id']}/reversal",
+            headers=_headers(test_client),
+            json={"version": invoice["version"], "reason": "رفض فاتورة التوريد"},
+        )
+        assert invoice_reversal.status_code == 200, invoice_reversal.text
+        receipt = test_client.get(
+            f"/api/v1/purchases/orders/{created['id']}/receipts"
+        ).json()[0]
 
         reversed_receipt = test_client.post(
-            f"/api/v1/purchases/receipts/{receipt.json()['id']}/reversal",
+            f"/api/v1/purchases/receipts/{receipt['id']}/reversal",
             headers=_headers(test_client, "purchase-reversal-action-0001"),
             json={"reason": "رفض التشغيلة بالكامل بعد الفحص"},
         )
@@ -532,14 +529,14 @@ def test_purchase_receipt_reversal_restores_order_and_exact_fifo_layer() -> None
         assert reversed_receipt.json()["reversal_reason"] == "رفض التشغيلة بالكامل بعد الفحص"
 
         replay = test_client.post(
-            f"/api/v1/purchases/receipts/{receipt.json()['id']}/reversal",
+            f"/api/v1/purchases/receipts/{receipt['id']}/reversal",
             headers=_headers(test_client, "purchase-reversal-action-0001"),
             json={"reason": "رفض التشغيلة بالكامل بعد الفحص"},
         )
         assert replay.status_code == 200
-        assert replay.json()["id"] == receipt.json()["id"]
+        assert replay.json()["id"] == receipt["id"]
         duplicate = test_client.post(
-            f"/api/v1/purchases/receipts/{receipt.json()['id']}/reversal",
+            f"/api/v1/purchases/receipts/{receipt['id']}/reversal",
             headers=_headers(test_client, "purchase-reversal-action-0002"),
             json={"reason": "محاولة عكس ثانية"},
         )
@@ -584,31 +581,28 @@ def test_purchase_receipt_reversal_is_atomic_after_fifo_layer_consumption() -> N
                 "lines": [
                     {
                         "product_id": product_id,
-                        "cost_basis": "quantity",
                         "ordered_quantity": "10",
                         "unit_price": "20",
                     }
                 ],
             },
         ).json()
-        approved = test_client.post(
-            f"/api/v1/purchases/orders/{created['id']}/approval",
-            headers=_headers(test_client),
-            json={"version": created["version"]},
-        ).json()
-        receipt = test_client.post(
-            f"/api/v1/purchases/orders/{created['id']}/receipts",
+        received = test_client.post(
+            f"/api/v1/purchases/orders/{created['id']}/receive",
             headers=_headers(test_client, "purchase-consumed-source-0001"),
-            json={
-                "lines": [
-                    {
-                        "purchase_order_line_id": approved["lines"][0]["id"],
-                        "gross_quantity": "10",
-                    }
-                ]
-            },
+            json={"version": created["version"]},
         )
-        assert receipt.status_code == 201, receipt.text
+        assert received.status_code == 200, received.text
+        invoice = received.json()["supplier_invoice"]
+        invoice_reversal = test_client.post(
+            f"/api/v1/purchases/supplier-invoices/{invoice['id']}/reversal",
+            headers=_headers(test_client),
+            json={"version": invoice["version"], "reason": "تجهيز اختبار عكس الاستلام"},
+        )
+        assert invoice_reversal.status_code == 200, invoice_reversal.text
+        receipt = test_client.get(
+            f"/api/v1/purchases/orders/{created['id']}/receipts"
+        ).json()[0]
         issue = test_client.post(
             "/api/v1/inventory/issues",
             headers=_headers(test_client, "purchase-consumed-issue-0001"),
@@ -623,7 +617,7 @@ def test_purchase_receipt_reversal_is_atomic_after_fifo_layer_consumption() -> N
         assert issue.status_code == 201, issue.text
 
         rejected = test_client.post(
-            f"/api/v1/purchases/receipts/{receipt.json()['id']}/reversal",
+            f"/api/v1/purchases/receipts/{receipt['id']}/reversal",
             headers=_headers(test_client, "purchase-consumed-reversal-0001"),
             json={"reason": "محاولة عكس بعد بدء الاستهلاك"},
         )
@@ -631,7 +625,7 @@ def test_purchase_receipt_reversal_is_atomic_after_fifo_layer_consumption() -> N
         assert "صرف جزء" in rejected.json()["detail"]
 
     with factory() as db:
-        stored_receipt = db.get(PurchaseReceipt, UUID(receipt.json()["id"]))
+        stored_receipt = db.get(PurchaseReceipt, UUID(receipt["id"]))
         order = db.get(PurchaseOrder, UUID(created["id"]))
         balance = db.scalar(select(InventoryBalance))
         assert stored_receipt is not None and stored_receipt.status == "posted"

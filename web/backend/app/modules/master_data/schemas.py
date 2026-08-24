@@ -129,8 +129,8 @@ class PartnerPayload(BaseModel):
 
     @model_validator(mode="after")
     def partner_has_type(self) -> "PartnerPayload":
-        if not self.is_customer and not self.is_supplier:
-            raise ValueError("يجب اختيار عميل أو مورد على الأقل")
+        if self.is_customer == self.is_supplier:
+            raise ValueError("يجب أن يكون السجل عميلًا أو موردًا فقط")
         return self
 
 

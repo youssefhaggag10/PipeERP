@@ -120,6 +120,26 @@ class ReplanView(BaseModel):
     expected_overage_kg: Decimal
 
 
+class MaterialAvailabilityLineView(BaseModel):
+    product_id: UUID
+    product_code: str
+    product_name_ar: str
+    component_kind: ComponentKind
+    required_quantity: Decimal
+    available_quantity: Decimal
+    issue_quantity: Decimal
+    shortage_quantity: Decimal
+    blocks_start: bool
+
+
+class MaterialAvailabilityView(BaseModel):
+    order_id: UUID
+    order_number: str
+    plan: ReplanView
+    rows: list[MaterialAvailabilityLineView]
+    has_blocking_shortage: bool
+
+
 class CancelManufacturingOrderRequest(TransitionRequest):
     reason: str = Field(min_length=3, max_length=500)
 

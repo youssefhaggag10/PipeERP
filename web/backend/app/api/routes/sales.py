@@ -13,7 +13,6 @@ from app.api.dependencies import (
 )
 from app.modules.identity.permissions import PermissionCode
 from app.modules.sales.schemas import (
-    CancelOrderRequest,
     CreatePieceOrderRequest,
     CreateQuotationRequest,
     CreateWeightSaleRequest,
@@ -26,7 +25,6 @@ from app.modules.sales.schemas import (
 from app.modules.sales.service import (
     SalesConflict,
     SalesNotFound,
-    cancel_sales_order,
     create_piece_order,
     create_quotation,
     create_weight_sale,
@@ -174,38 +172,6 @@ def deliver(
             order_id=order_id,
             version=payload.version,
             idempotency_key=idempotency_key,
-            actor=principal,
-            client=client_context(request),
-        )
-        db.commit()
-        return view
-    except (SalesNotFound, SalesConflict, IntegrityError, ValueError) as exc:
-        db.rollback()
-        raise _translate(exc) from exc
-
-
-@router.post("/orders/{order_id}/cancellation", response_model=SalesOrderView)
-def cancel_order(
-    order_id: UUID,
-    payload: CancelOrderRequest,
-    request: Request,
-    principal: CurrentPrincipal,
-    db: DatabaseSession,
-) -> SalesOrderView:
-    try:
-        order_view = get_sales_order(db, order_id)
-        permission = (
-            PermissionCode.WEIGHT_SALES_MANAGE
-            if order_view.billing_method == "weight"
-            else PermissionCode.SALES_MANAGE
-        )
-        enforce_permission(request, db, principal, permission)
-        enforce_csrf(request, db, principal)
-        view = cancel_sales_order(
-            db,
-            order_id=order_id,
-            version=payload.version,
-            reason=payload.reason,
             actor=principal,
             client=client_context(request),
         )

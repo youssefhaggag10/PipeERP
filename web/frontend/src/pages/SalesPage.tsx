@@ -5,6 +5,7 @@ import {
   PackageCheck,
   Plus,
   RefreshCw,
+  RotateCcw,
   Scale,
   ShoppingCart,
   Trash2,
@@ -38,7 +39,6 @@ type Options = {
   customers: Option[];
   warehouses: Option[];
   products: Option[];
-  financial_accounts: Option[];
 };
 type Status = "draft" | "delivered" | "reversed" | "cancelled";
 type OrderLine = {
@@ -194,7 +194,6 @@ export function SalesPage() {
     customers: [],
     warehouses: [],
     products: [],
-    financial_accounts: [],
   });
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
@@ -373,8 +372,6 @@ export function SalesPage() {
           customer_id: customerId,
           warehouse_id: warehouseId,
           notes,
-          advance_amount: "0",
-          advance_financial_account_id: null,
           lines: pieceLines.map(
             ({ product_id, quantity, unit, unit_price, notes: lineNotes }) => ({
               product_id,
@@ -425,8 +422,6 @@ export function SalesPage() {
           transport_amount: transport || "0",
           tax_amount: tax || "0",
           notes,
-          advance_amount: "0",
-          advance_financial_account_id: null,
           lines: weightLines.map(
             ({
               product_id,
@@ -528,6 +523,30 @@ export function SalesPage() {
       setError(
         reason instanceof ApiError ? reason.message : "تعذر تسليم أمر البيع",
       );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function reverseDelivery() {
+    if (!selected?.delivery) return;
+    const reason = window.prompt("سبب عكس التسليم والفاتورة:");
+    if (!reason?.trim()) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await api<SalesOrder>(
+        `/sales/deliveries/${selected.delivery.id}/reversal`,
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": clientId("sales-reversal") },
+          body: JSON.stringify({ reason: reason.trim() }),
+        },
+      );
+      setNotice("تم عكس التسليم والفاتورة وأثر المخزون.");
+      await load();
+    } catch (reason) {
+      setError(reason instanceof ApiError ? reason.message : "تعذر عكس التسليم");
     } finally {
       setSubmitting(false);
     }
@@ -1316,6 +1335,26 @@ export function SalesPage() {
               <strong>
                 {currency.format(Number(selected.invoice.total))} ج.م
               </strong>
+            </div>
+          ) : null}
+          {selected.status === "delivered" &&
+          selected.delivery?.status === "posted" &&
+          canManageCurrent ? (
+            <div className="sales-delivery-action">
+              <div>
+                <RotateCcw size={22} />
+                <span>
+                  <strong>عكس التسليم</strong>
+                  <small>استثناء معتمد: يعيد المخزون ويعكس الفاتورة.</small>
+                </span>
+              </div>
+              <button
+                className="danger-button"
+                onClick={() => void reverseDelivery()}
+                disabled={submitting}
+              >
+                <RotateCcw size={17} /> عكس التسليم
+              </button>
             </div>
           ) : null}
         </section>

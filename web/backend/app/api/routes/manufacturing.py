@@ -20,6 +20,7 @@ from app.modules.manufacturing.schemas import (
     CreateRecipeRequest,
     ManufacturingOptionsView,
     ManufacturingOrderView,
+    MaterialAvailabilityView,
     RecipeView,
     ReplanView,
     TransitionRequest,
@@ -40,6 +41,7 @@ from app.modules.manufacturing.service import (
     list_orders,
     list_recipes,
     manufacturing_options,
+    preview_material_availability,
     preview_replan,
     start_order,
     update_order,
@@ -260,6 +262,23 @@ def replan_preview(
     _read(request, db, principal)
     try:
         return preview_replan(db, order_id)
+    except (ManufacturingNotFound, ManufacturingConflict, ValueError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get(
+    "/orders/{order_id}/material-availability",
+    response_model=MaterialAvailabilityView,
+)
+def material_availability_preview(
+    order_id: UUID,
+    request: Request,
+    principal: CurrentPrincipal,
+    db: DatabaseSession,
+) -> MaterialAvailabilityView:
+    _read(request, db, principal)
+    try:
+        return preview_material_availability(db, order_id)
     except (ManufacturingNotFound, ManufacturingConflict, ValueError) as exc:
         raise _translate_error(exc) from exc
 
