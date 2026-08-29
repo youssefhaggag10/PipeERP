@@ -4,6 +4,7 @@ import {
   FileText,
   PackageCheck,
   Plus,
+  Printer,
   RefreshCw,
   RotateCcw,
   Scale,
@@ -22,9 +23,14 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
+import {
+  BrandedDocumentPreview,
+  type PrintDocument,
+} from "../components/A4PrintDocuments";
 import { AppShell } from "../components/AppShell";
 import { api, ApiError } from "../lib/api";
 import { clientId } from "../lib/clientId";
+import { printA4 } from "../lib/printA4";
 
 type SalesTab = "piece" | "weight" | "quotation";
 type Option = {
@@ -68,6 +74,7 @@ type Delivery = {
   }>;
 };
 type Invoice = {
+  id: string;
   invoice_number: string;
   invoice_type: "standard" | "weight";
   status: "posted" | "reversed";
@@ -224,6 +231,7 @@ export function SalesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [printDocument, setPrintDocument] = useState<PrintDocument | null>(null);
   const createRef = useRef<HTMLElement>(null);
   const detailRef = useRef<HTMLElement>(null);
 
@@ -306,6 +314,13 @@ export function SalesPage() {
     );
   }, [createRequested]);
   const selected = orders.find((order) => order.id === selectedId) ?? null;
+  useEffect(() => {
+    if (!printDocument) return;
+    const clear = () => setPrintDocument(null);
+    window.addEventListener("afterprint", clear, { once: true });
+    printA4();
+    return () => window.removeEventListener("afterprint", clear);
+  }, [printDocument]);
   const visibleOrders = useMemo(
     () =>
       orders.filter(
@@ -522,6 +537,25 @@ export function SalesPage() {
     } catch (reason) {
       setError(
         reason instanceof ApiError ? reason.message : "تعذر تسليم أمر البيع",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function printSelectedInvoice() {
+    if (!selected?.invoice || selected.invoice.status !== "posted") return;
+    setSubmitting(true);
+    setError("");
+    try {
+      setPrintDocument(
+        await api<PrintDocument>(
+          `/reports/print/sales-invoices/${selected.invoice.id}`,
+        ),
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof ApiError ? reason.message : "تعذر تجهيز فاتورة A4",
       );
     } finally {
       setSubmitting(false);
@@ -1335,6 +1369,15 @@ export function SalesPage() {
               <strong>
                 {currency.format(Number(selected.invoice.total))} ج.م
               </strong>
+              {selected.invoice.status === "posted" ? (
+                <button
+                  className="secondary-button invoice-print-button"
+                  onClick={() => void printSelectedInvoice()}
+                  disabled={submitting}
+                >
+                  <Printer size={17} /> طباعة فاتورة A4
+                </button>
+              ) : null}
             </div>
           ) : null}
           {selected.status === "delivered" &&
@@ -1358,6 +1401,11 @@ export function SalesPage() {
             </div>
           ) : null}
         </section>
+      ) : null}
+      {printDocument ? (
+        <div className="sales-print-preview">
+          <BrandedDocumentPreview document={printDocument} />
+        </div>
       ) : null}
     </AppShell>
   );

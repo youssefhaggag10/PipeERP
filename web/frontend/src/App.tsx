@@ -9,6 +9,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { ManufacturingPage } from "./pages/ManufacturingPage";
 import { PartnersPage } from "./pages/PartnersPage";
 import { ProductsPage } from "./pages/ProductsPage";
+import { PrintDesignPreviewPage } from "./pages/PrintDesignPreviewPage";
 import { PurchasesPage } from "./pages/PurchasesPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { SalesPage } from "./pages/SalesPage";
@@ -35,7 +36,10 @@ export function App() {
       <Route path="/reports" element={<ProtectedRoute requiredPermissions={["reports.read"]}><ReportsPage /></ProtectedRoute>} />
       <Route path="/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
       {import.meta.env.DEV ? (
-        <Route path="/design-preview" element={<DashboardPage />} />
+        <>
+          <Route path="/design-preview" element={<DashboardPage />} />
+          <Route path="/print-design-preview" element={<PrintDesignPreviewPage />} />
+        </>
       ) : null}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>

@@ -415,8 +415,13 @@ def test_reports_exports_and_a4_print_data() -> None:
         f"{period}&detailed=true&include_drafts=true"
     )
     assert statement.status_code == 200, statement.text
+    assert statement.json()["partner_phone"] == "01000000000"
     assert statement.json()["statement"]["closing_balance"] == "60.00"
     assert len(statement.json()["invoice_details"]["SI-RPT-1"]) == 1
+    assert statement.json()["summary"]["standard_sales_total"] == "100.00"
+    assert statement.json()["summary"]["weight_sales_total"] == "0.00"
+    assert statement.json()["summary"]["receipts_total"] == "40.00"
+    assert statement.json()["summary"]["closing_balance"] == "60.00"
     draft_line = next(
         line
         for line in statement.json()["statement"]["lines"]

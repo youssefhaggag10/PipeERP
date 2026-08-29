@@ -92,9 +92,23 @@ class PrintDocumentView(BaseModel):
     company: PrintCompanyView
 
 
+class CustomerStatementSummaryView(BaseModel):
+    opening_balance: Decimal
+    standard_sales_total: Decimal
+    weight_sales_total: Decimal
+    returns_total: Decimal
+    receipts_total: Decimal
+    customer_refunds_total: Decimal
+    adjustments_total: Decimal
+    net_movement: Decimal
+    closing_balance: Decimal
+
+
 class CustomerStatementPrintView(BaseModel):
     company: PrintCompanyView
+    partner_phone: str
     statement: PartnerStatementView
     detailed: bool
     include_drafts: bool
     invoice_details: dict[str, list[PrintDocumentLineView]]
+    summary: CustomerStatementSummaryView

@@ -15,6 +15,7 @@ from app.modules.master_data.models import CompanySettings, Partner, Product, Wa
 from app.modules.purchasing.models import PurchaseOrder, SupplierInvoice
 from app.modules.reports.schemas import (
     CustomerStatementPrintView,
+    CustomerStatementSummaryView,
     PrintCompanyView,
     PrintDocumentLineView,
     PrintDocumentView,
@@ -301,6 +302,9 @@ def customer_statement_print_data(
     detailed: bool = False,
     include_drafts: bool = False,
 ) -> CustomerStatementPrintView:
+    customer = db.get(Partner, customer_id)
+    if customer is None or not customer.is_customer:
+        raise PrintDocumentNotFound("العميل غير موجود")
     statement = partner_statement(
         db,
         partner_id=customer_id,
@@ -376,12 +380,56 @@ def customer_statement_print_data(
                     notes=line.notes,
                 )
             )
+    invoice_totals: dict[str, Decimal] = {}
+    invoice_total_rows = db.execute(
+        select(
+            CustomerInvoice.invoice_type,
+            func.coalesce(func.sum(CustomerInvoice.total), 0),
+        )
+        .where(
+            CustomerInvoice.customer_id == customer_id,
+            CustomerInvoice.status == "posted",
+            CustomerInvoice.invoice_date >= start,
+            CustomerInvoice.invoice_date < end,
+        )
+        .group_by(CustomerInvoice.invoice_type)
+    )
+    for invoice_type, total in invoice_total_rows.tuples():
+        invoice_totals[invoice_type] = money(total)
+    returns_total = ZERO
+    receipts_total = ZERO
+    refunds_total = ZERO
+    adjustments_total = ZERO
+    for line in statement.lines:
+        if line.movement_type == "مرتجع مبيعات":
+            returns_total += line.credit
+        elif line.movement_type == "تحصيل عميل":
+            receipts_total += line.credit
+        elif line.movement_type == "رد مبلغ لعميل":
+            refunds_total += line.debit
+        elif line.movement_type == "تسوية حساب عميل":
+            adjustments_total += line.debit - line.credit
+    summary = CustomerStatementSummaryView(
+        opening_balance=statement.opening_balance,
+        standard_sales_total=money(invoice_totals.get("standard", ZERO)),
+        weight_sales_total=money(invoice_totals.get("weight", ZERO)),
+        returns_total=money(returns_total),
+        receipts_total=money(receipts_total),
+        customer_refunds_total=money(refunds_total),
+        adjustments_total=money(adjustments_total),
+        net_movement=money(
+            sum((line.debit - line.credit for line in statement.lines), ZERO)
+        ),
+        closing_balance=statement.closing_balance,
+    )
     return CustomerStatementPrintView(
         company=_company(db),
+        partner_phone=customer.phone,
         statement=statement,
         detailed=detailed,
         include_drafts=include_drafts,
         invoice_details=invoice_details,
+        summary=summary,
     )
 
 

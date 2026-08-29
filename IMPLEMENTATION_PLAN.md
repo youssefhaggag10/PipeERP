@@ -37,8 +37,8 @@ Each row records Desktop behavior, the current Web state after commit `2c5389a`,
 | PROD-1 | Products | No product-category workflow | Category backend exists; category/track-lot controls are already hidden in normal UI | Keep legacy schema for compatibility; do not expose category CRUD or category decision in normal Web workflow | products/master-data routes and docs | Low | Product form contains only Desktop fields |
 | PROD-2 | Products/UOM | Free-text unit | Normalized UOM master | Keep normalized storage as technical consolidation; seed Desktop-equivalent units and show one UOM choice | master-data tests/UI | Low | kg scenario stores `1037.5` as quantity with kg UOM |
 | PROD-3 | Products | `track_lots` always true in UI | Backend supports false; UI now sends true | Enforce true in normal product create/update path; retain column internally | master-data service/tests | Low | Create/edit product and verify true |
-| RPT-1 | Printing | A4 and 80mm thermal printing | A4 browser printing only | Add an 80mm print layout/action using existing invoice data; do not change posting workflow | reports UI/styles/tests | Medium | Browser print preview at 80mm; posted-only guard |
-| RPT-2 | Printing | Fixed 300-DPI A4 renderer | Browser print renderer | Keep browser technology; verify identical fields, pagination and RTL; physical printer remains acceptance evidence | reports UI/styles/docs | Medium | PDF/print snapshot plus physical-printer checklist |
+| RPT-1 | Printing | Active Desktop workflows print branded A4 documents; an unused thermal service exists without an active UI path | Web exposed an 80mm action | Remove thermal output completely by owner decision; retain A4 only | reports UI/styles/tests/docs | Low | No thermal action/CSS; grep and frontend regression test |
+| RPT-2 | Printing | Fixed 300-DPI A4 renderer using the approved background and document-specific layouts | Generic browser A4 layout | Reproduce the Desktop background, metadata, tables, totals, terms, footer and pagination in browser A4; add a posted-invoice-only action inside Sales | shared print component, reports/sales UI/styles, statement print schema/service/tests | Medium | Real browser-generated A4 PDF, rendered PNG comparison, posted-only API guard, full test suites |
 | RPT-3 | Reports | Six reports and RTL XLSX | Same six plus statement export | Keep six report workflows; statement export may remain as output of Desktop statement screen, not a new posting action | reports tests | Low | Generate each XLSX and validate headers/data |
 | RPT-4 | Reports | Exactly six report types | Same six | Keep | reports tests | Low | Parameterized six-report test |
 | RPT-5 | Settings | Appearance, watermark, multi-phone | Owner requested the selected logo fixed beside the user name instead of a page watermark | **Owner-approved UI exception**: migrate the saved watermark image to a fixed header logo and retain appearance/multi-phone settings | `AppShell.tsx`, `SettingsPage.tsx`, styles | Low | Persist/reload legacy image; verify fixed header position while scrolling |
@@ -133,7 +133,7 @@ Each row records Desktop behavior, the current Web state after commit `2c5389a`,
 3. **Manufacturing:** verify replan/start/completion/cancellation calculations and stock/accounting impact.
 4. **Purchasing:** full kg/loss/cost/payable golden flow and purchase return.
 5. **Inventory:** movement-level stock card, optional adjustment notes, single-factory enforcement and FIFO regression suite.
-6. **Medium/low:** identity gates, CRM sync/admin scheduling, partner linked history, thermal printing, dashboard and documentation alignment.
+6. **Medium/low:** identity gates, CRM sync/admin scheduling, partner linked history, branded A4 printing, dashboard and documentation alignment.
 
 After every phase, run Ruff, Mypy, focused Pytest, frontend lint/tests/build, and browser workflow tests. Record completed rows and exact evidence in `IMPLEMENTATION_CHANGELOG.md`.
 

@@ -8,8 +8,15 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "../auth/AuthContext";
+import {
+  BrandedDocumentPreview,
+  BrandedStatementPreview,
+  type PrintDocument,
+  type Statement,
+} from "../components/A4PrintDocuments";
 import { AppShell } from "../components/AppShell";
 import { api, ApiError } from "../lib/api";
+import { printA4 } from "../lib/printA4";
 
 type ReportKey =
   | "sales"
@@ -33,78 +40,6 @@ type ReportView = {
   columns: string[];
   rows: Array<Record<string, string>>;
   summary: Record<string, string>;
-};
-type DocumentLine = {
-  code: string;
-  name: string;
-  quantity: string;
-  unit: string;
-  unit_price: string;
-  line_total: string;
-  notes: string;
-  actual_weight_kg: string | null;
-  price_per_kg: string | null;
-};
-type PrintDocument = {
-  document_type: "sales_invoice" | "weight_invoice" | "quotation";
-  document_title: string;
-  document_number: string;
-  document_date: string;
-  order_number: string;
-  partner_name_ar: string;
-  partner_code: string;
-  partner_phone: string;
-  partner_address: string;
-  payment_methods: string[];
-  subtotal: string;
-  discount_amount: string;
-  transport_amount: string;
-  tax_amount: string;
-  original_total: string;
-  returned_total: string;
-  net_total: string;
-  paid: string;
-  refunded: string;
-  remaining: string;
-  notes: string;
-  valid_until: string | null;
-  card_number: string;
-  vehicle_number: string;
-  gross_weight_kg: string;
-  tare_weight_kg: string;
-  net_weight_kg: string;
-  lines: DocumentLine[];
-  company: Company;
-};
-type Company = {
-  name_ar: string;
-  phone: string;
-  address: string;
-  tax_number: string;
-  currency_code: string;
-};
-type Statement = {
-  company: Company;
-  detailed: boolean;
-  include_drafts: boolean;
-  invoice_details: Record<string, DocumentLine[]>;
-  statement: {
-    partner_code: string;
-    partner_name_ar: string;
-    date_from: string;
-    date_to: string;
-    opening_balance: string;
-    closing_balance: string;
-    lines: Array<{
-      movement_date: string;
-      document_number: string;
-      movement_type: string;
-      debit: string;
-      credit: string;
-      running_balance: string;
-      notes: string;
-    }>;
-  };
 };
 type OrderOption = {
   id: string;
@@ -133,10 +68,6 @@ const reports: Array<{
 ];
 const today = new Date().toISOString().slice(0, 10);
 const monthStart = `${today.slice(0, 8)}01`;
-const money = new Intl.NumberFormat("ar-EG", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 const summaryLabels: Record<string, string> = {
   original: "الإجمالي الأصلي",
   returned: "المرتجعات",
@@ -291,27 +222,6 @@ export function ReportsPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  function printPreview(format: "a4" | "thermal") {
-    const root = window.document.documentElement;
-    root.dataset.printFormat = format;
-    const pageStyle = window.document.createElement("style");
-    pageStyle.id = "pipeerp-print-page-size";
-    pageStyle.textContent =
-      format === "thermal"
-        ? "@page { size: 80mm auto; margin: 3mm; }"
-        : "@page { size: A4 portrait; margin: 10mm; }";
-    window.document.head.appendChild(pageStyle);
-    window.addEventListener(
-      "afterprint",
-      () => {
-        delete root.dataset.printFormat;
-        pageStyle.remove();
-      },
-      { once: true },
-    );
-    window.print();
   }
 
   const exportHref = `/api/v1/reports/export.xlsx?${query({ report_key: reportKey, date_from: dateFrom, date_to: dateTo, partner_id: partnerId })}`;
@@ -557,17 +467,9 @@ export function ReportsPage() {
             {document || statement ? (
               <button
                 className="secondary-button"
-                onClick={() => printPreview("a4")}
+                onClick={printA4}
               >
                 <Printer size={17} /> A4 / PDF
-              </button>
-            ) : null}
-            {document ? (
-              <button
-                className="secondary-button"
-                onClick={() => printPreview("thermal")}
-              >
-                <Printer size={17} /> حراري 80mm
               </button>
             ) : null}
             {statement ? (
@@ -579,8 +481,8 @@ export function ReportsPage() {
               </a>
             ) : null}
           </section>
-          {document ? <DocumentPreview document={document} /> : null}
-          {statement ? <StatementPreview data={statement} /> : null}
+          {document ? <BrandedDocumentPreview document={document} /> : null}
+          {statement ? <BrandedStatementPreview data={statement} /> : null}
           {!document && !statement ? (
             <section className="empty-state report-empty">
               <Printer size={34} />
@@ -591,323 +493,5 @@ export function ReportsPage() {
         </>
       )}
     </AppShell>
-  );
-}
-
-function Header({
-  company,
-  title,
-  number,
-}: {
-  company: Company;
-  title: string;
-  number: string;
-}) {
-  return (
-    <header className="a4-header">
-      <div>
-        <h1>{company.name_ar}</h1>
-        <p>{company.address}</p>
-        <p className="a4-company-phones">
-          {company.phone}
-          {company.tax_number ? `\nضريبي ${company.tax_number}` : ""}
-        </p>
-      </div>
-      <div>
-        <h2>{title}</h2>
-        <strong>{number}</strong>
-      </div>
-    </header>
-  );
-}
-
-function chunks<T>(values: T[], size: number): T[][] {
-  const pages: T[][] = [];
-  for (let index = 0; index < values.length; index += size)
-    pages.push(values.slice(index, index + size));
-  return pages.length ? pages : [[]];
-}
-
-function DocumentPreview({ document }: { document: PrintDocument }) {
-  const pages = chunks(document.lines, 6);
-  return (
-    <div className="a4-document">
-      {pages.map((lines, pageIndex) => {
-        const isLast = pageIndex === pages.length - 1;
-        return (
-          <article className="a4-sheet" dir="rtl" key={pageIndex}>
-            <Header
-              company={document.company}
-              title={document.document_title}
-              number={document.document_number}
-            />
-            <section className="a4-meta">
-              <span>
-                التاريخ{" "}
-                <b>
-                  {new Date(document.document_date).toLocaleDateString("ar-EG")}
-                </b>
-              </span>
-              <span>
-                العميل <b>{document.partner_name_ar}</b>
-              </span>
-              <span>
-                الكود <b>{document.partner_code}</b>
-              </span>
-              <span>
-                الهاتف <b>{document.partner_phone || "—"}</b>
-              </span>
-              <span>
-                الأمر <b>{document.order_number}</b>
-              </span>
-              {document.payment_methods.length ? (
-                <span>
-                  الدفع <b>{document.payment_methods.join("، ")}</b>
-                </span>
-              ) : null}
-              {document.valid_until ? (
-                <span>
-                  صالح حتى{" "}
-                  <b>
-                    {new Date(document.valid_until).toLocaleDateString("ar-EG")}
-                  </b>
-                </span>
-              ) : null}
-              {document.card_number ? (
-                <span>
-                  الكارتة <b>{document.card_number}</b>
-                </span>
-              ) : null}
-              {document.vehicle_number ? (
-                <span>
-                  السيارة <b>{document.vehicle_number}</b>
-                </span>
-              ) : null}
-            </section>
-            <table className="a4-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>الكود والصنف</th>
-                  <th>الكمية</th>
-                  {document.document_type === "weight_invoice" ? (
-                    <th>الوزن الفعلي</th>
-                  ) : null}
-                  <th>
-                    {document.document_type === "weight_invoice"
-                      ? "سعر كجم"
-                      : "السعر"}
-                  </th>
-                  <th>الإجمالي</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lines.map((line, lineIndex) => {
-                  const absoluteIndex = pageIndex * 6 + lineIndex;
-                  return (
-                    <tr key={`${line.code}-${absoluteIndex}`}>
-                      <td>{absoluteIndex + 1}</td>
-                      <td>
-                        <strong>{line.name}</strong>
-                        <small>
-                          {line.code}
-                          {line.notes ? ` · ${line.notes}` : ""}
-                        </small>
-                      </td>
-                      <td>
-                        {line.quantity} {line.unit}
-                      </td>
-                      {document.document_type === "weight_invoice" ? (
-                        <td>{line.actual_weight_kg} كجم</td>
-                      ) : null}
-                      <td>
-                        {money.format(
-                          Number(
-                            document.document_type === "weight_invoice"
-                              ? line.price_per_kg
-                              : line.unit_price,
-                          ),
-                        )}
-                      </td>
-                      <td>{money.format(Number(line.line_total))}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            {isLast && document.document_type === "weight_invoice" ? (
-              <div className="a4-weight">
-                <span>الإجمالي القائم {document.gross_weight_kg} كجم</span>
-                <span>الفارغ {document.tare_weight_kg} كجم</span>
-                <strong>الصافي {document.net_weight_kg} كجم</strong>
-              </div>
-            ) : null}
-            {isLast ? (
-              <>
-                <footer className="a4-totals">
-                  <span>
-                    الإجمالي الأصلي{" "}
-                    <b>{money.format(Number(document.original_total))}</b>
-                  </span>
-                  {Number(document.discount_amount) ? (
-                    <span>
-                      الخصم{" "}
-                      <b>{money.format(Number(document.discount_amount))}</b>
-                    </span>
-                  ) : null}
-                  {Number(document.transport_amount) ? (
-                    <span>
-                      النقل{" "}
-                      <b>{money.format(Number(document.transport_amount))}</b>
-                    </span>
-                  ) : null}
-                  {Number(document.tax_amount) ? (
-                    <span>
-                      الضريبة <b>{money.format(Number(document.tax_amount))}</b>
-                    </span>
-                  ) : null}
-                  {Number(document.returned_total) ? (
-                    <span>
-                      المرتجعات{" "}
-                      <b>{money.format(Number(document.returned_total))}</b>
-                    </span>
-                  ) : null}
-                  <span>
-                    الصافي <b>{money.format(Number(document.net_total))}</b>
-                  </span>
-                  <span>
-                    المدفوع <b>{money.format(Number(document.paid))}</b>
-                  </span>
-                  <span className="a4-due">
-                    المتبقي{" "}
-                    <b>
-                      {money.format(Number(document.remaining))}{" "}
-                      {document.company.currency_code}
-                    </b>
-                  </span>
-                </footer>
-                {document.notes ? (
-                  <p className="a4-notes">ملاحظات: {document.notes}</p>
-                ) : null}
-              </>
-            ) : null}
-            <div className="a4-page-number">
-              صفحة {pageIndex + 1} من {pages.length}
-            </div>
-          </article>
-        );
-      })}
-    </div>
-  );
-}
-
-function StatementPreview({ data }: { data: Statement }) {
-  const { statement } = data;
-  const rows = statement.lines.flatMap((line) => [
-    { line, detail: null as DocumentLine | null },
-    ...(data.invoice_details[line.document_number] || []).map((detail) => ({
-      line,
-      detail,
-    })),
-  ]);
-  const pages = chunks(rows, 18);
-  return (
-    <div className="a4-document">
-      {pages.map((pageRows, pageIndex) => {
-        const isLast = pageIndex === pages.length - 1;
-        return (
-          <article className="a4-sheet" dir="rtl" key={pageIndex}>
-            <Header
-              company={data.company}
-              title={data.detailed ? "كشف حساب عميل تفصيلي" : "كشف حساب عميل"}
-              number={statement.partner_code}
-            />
-            <section className="a4-meta">
-              <span>
-                العميل <b>{statement.partner_name_ar}</b>
-              </span>
-              <span>
-                الفترة{" "}
-                <b>
-                  {statement.date_from} — {statement.date_to}
-                </b>
-              </span>
-              <span>
-                رصيد أول المدة{" "}
-                <b>{money.format(Number(statement.opening_balance))}</b>
-              </span>
-              <span>
-                الرصيد النهائي{" "}
-                <b>{money.format(Number(statement.closing_balance))}</b>
-              </span>
-            </section>
-            <table className="a4-table a4-statement">
-              <thead>
-                <tr>
-                  <th>التاريخ</th>
-                  <th>المستند</th>
-                  <th>النوع والبيان</th>
-                  <th>مدين</th>
-                  <th>دائن</th>
-                  <th>الرصيد</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pageRows.map(({ line, detail }, rowIndex) =>
-                  detail ? (
-                    <tr
-                      className="a4-detail-row"
-                      key={`${pageIndex}-${rowIndex}-detail`}
-                    >
-                      <td />
-                      <td />
-                      <td>
-                        ↳ {detail.code} · {detail.name} · {detail.quantity}{" "}
-                        {detail.unit}
-                      </td>
-                      <td />
-                      <td />
-                      <td>{money.format(Number(detail.line_total))}</td>
-                    </tr>
-                  ) : (
-                    <tr
-                      key={`${pageIndex}-${rowIndex}-${line.document_number}`}
-                    >
-                      <td>
-                        {new Date(line.movement_date).toLocaleDateString(
-                          "ar-EG",
-                        )}
-                      </td>
-                      <td>{line.document_number}</td>
-                      <td>
-                        <strong>{line.movement_type}</strong>
-                        <small>{line.notes}</small>
-                      </td>
-                      <td>{money.format(Number(line.debit))}</td>
-                      <td>{money.format(Number(line.credit))}</td>
-                      <td>{money.format(Number(line.running_balance))}</td>
-                    </tr>
-                  ),
-                )}
-              </tbody>
-            </table>
-            {isLast ? (
-              <footer className="a4-totals">
-                <span className="a4-due">
-                  الرصيد الختامي{" "}
-                  <b>
-                    {money.format(Number(statement.closing_balance))}{" "}
-                    {data.company.currency_code}
-                  </b>
-                </span>
-              </footer>
-            ) : null}
-            <div className="a4-page-number">
-              صفحة {pageIndex + 1} من {pages.length}
-            </div>
-          </article>
-        );
-      })}
-    </div>
   );
 }
