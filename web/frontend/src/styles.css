@@ -888,19 +888,55 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .availability-dialog {
   width: min(900px, 100%);
   max-height: calc(100dvh - 40px);
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 18px;
-  background: var(--panel);
+  background: var(--surface);
+  color: var(--ink);
   box-shadow: 0 24px 80px rgb(3 15 30 / 34%);
 }
 
-.availability-dialog > .panel__head,
-.availability-dialog > .data-table-wrap,
-.availability-dialog > .alert,
-.availability-result,
-.availability-actions {
-  margin: 16px;
+.availability-dialog > .panel__head {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 20px 22px 17px;
+}
+
+.availability-dialog > .alert {
+  flex: 0 0 auto;
+  margin: 14px 18px 0;
+}
+
+.availability-dialog > .data-table-wrap {
+  min-height: 0;
+  margin: 16px 18px 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.availability-dialog .data-table {
+  min-width: 680px;
+}
+
+.availability-dialog .data-table th {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+}
+
+.availability-dialog .data-table td:first-child strong,
+.availability-dialog .data-table td:first-child small {
+  display: block;
+}
+
+.availability-dialog .data-table td:first-child small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 9px;
 }
 
 .availability-row--blocked td:last-child,
@@ -910,11 +946,57 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 }
 
 .availability-result {
+  flex: 0 0 auto;
+  margin: 14px 18px 0;
+  padding: 13px 15px;
+  border: 1px solid #c7e5de;
+  border-radius: 11px;
+  background: var(--accent-soft);
   font-weight: 800;
 }
 
+.availability-result--blocked {
+  border-color: #efc5c1;
+  background: #fff2f1;
+}
+
 .availability-actions {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 14px 18px 18px;
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+  background: var(--surface);
+}
+
+@media (max-width: 720px) {
+  .availability-backdrop {
+    align-items: end;
+    padding: 8px;
+  }
+
+  .availability-dialog {
+    max-height: calc(100dvh - 16px);
+    border-radius: 16px;
+  }
+
+  .availability-dialog > .panel__head {
+    padding: 17px 16px 14px;
+  }
+
+  .availability-dialog > .data-table-wrap,
+  .availability-dialog > .alert,
+  .availability-result {
+    margin-inline: 12px;
+  }
+
+  .availability-actions {
+    padding: 12px;
+  }
+
+  .availability-actions > button {
+    flex: 1;
+    min-width: 0;
+  }
 }

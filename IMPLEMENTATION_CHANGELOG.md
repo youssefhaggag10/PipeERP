@@ -124,6 +124,7 @@ Web branch: `web-rebuild`
 | UI-02 | “تعديل” overflowed the fixed 31px cash/bank card action | Gave the labelled card action an automatic width and protected it from wrapping | CSS/layout review and production build |
 | UI-03 | Product delete action displayed as an empty pale-red control | Added the explicit `حذف` label while retaining the delete icon and confirmation workflow | Frontend test suite and production build |
 | UI-04 | Purchase quantity `100` failed native browser validation because `min=0.000001` and `step=0.001` form an offset step grid | Aligned quantity and purchase-loss precision to six decimal places, so integer and fractional UOM quantities are valid | Type-check/build; native step arithmetic corrected |
+| UI-05 | Manufacturing availability wizard used the undefined `--panel` CSS variable, leaving its body transparent over the manufacturing screen | Replaced it with the defined surface color and isolated the header, scrollable material table, result and actions inside an opaque responsive dialog | Frontend suite `21/21`; TypeScript and production build passed |
 
 ## Additional deviation found during implementation
 
