@@ -1,0 +1,1072 @@
+import {
+  Check,
+  Clock3,
+  Flame,
+  MessageSquarePlus,
+  PhoneCall,
+  Plus,
+  RefreshCw,
+  UserRoundCheck,
+  UsersRound,
+  X,
+} from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
+import { useLocation } from "react-router-dom";
+
+import { useAuth } from "../auth/AuthContext";
+import { AppShell } from "../components/AppShell";
+import { api, ApiError } from "../lib/api";
+
+type Option = { code: string; name: string };
+type Owner = { id: string; name: string };
+type Options = { sources: Option[]; stages: Option[]; owners: Owner[] };
+type Lead = {
+  id: string;
+  lead_number: string;
+  name: string;
+  phone: string;
+  alternate_phone: string;
+  company: string;
+  address: string;
+  source_code: string;
+  source_name: string;
+  customer_type: string;
+  temperature: "cold" | "warm" | "hot";
+  stage_code: string;
+  stage_name: string;
+  assigned_user_id: string;
+  owner_name: string;
+  interested_products: string;
+  tags: string;
+  opportunity_value: string;
+  general_notes: string;
+  lost_reason: string;
+  customer_partner_id: string | null;
+  last_contact_at: string | null;
+  next_activity_at: string | null;
+  activity_count: number;
+  created_at: string;
+};
+type Activity = {
+  id: string;
+  lead_id: string;
+  lead_number: string;
+  lead_name: string;
+  phone: string;
+  activity_type: string;
+  subject: string;
+  notes: string;
+  due_at: string | null;
+  priority: string;
+  assigned_user_id: string;
+  owner_name: string;
+  status: "scheduled" | "done" | "cancelled";
+  outcome: string;
+  completed_at: string | null;
+  created_at: string;
+};
+type Summary = {
+  total: number;
+  new_count: number;
+  hot_count: number;
+  won_count: number;
+  open_value: string;
+  today_count: number;
+  overdue_count: number;
+};
+type Pipeline = {
+  code: string;
+  name: string;
+  lead_count: number;
+  total_value: string;
+};
+type ReportItem = { label: string; total: number; won: number; value: string };
+type Tab = "dashboard" | "leads" | "activities" | "pipeline" | "reports";
+
+const currency = new Intl.NumberFormat("ar-EG", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+export function CrmPage() {
+  const { user } = useAuth();
+  const location = useLocation();
+  const canManage = user?.permissions.includes("crm.manage") ?? false;
+  const canSchedule = user?.roles.includes("system_admin") ?? false;
+  const [tab, setTab] = useState<Tab>(
+    new URLSearchParams(location.search).get("tab") === "activities"
+      ? "activities"
+      : "dashboard",
+  );
+  const [options, setOptions] = useState<Options>({
+    sources: [],
+    stages: [],
+    owners: [],
+  });
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [pipeline, setPipeline] = useState<Pipeline[]>([]);
+  const [reportRows, setReportRows] = useState<ReportItem[]>([]);
+  const [reportMode, setReportMode] = useState("source");
+  const [activityStatus, setActivityStatus] = useState("all");
+  const [selectedId, setSelectedId] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [editingId, setEditingId] = useState("");
+  const [search, setSearch] = useState("");
+  const [stageFilter, setStageFilter] = useState("");
+  const [ownerFilter, setOwnerFilter] = useState("");
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [company, setCompany] = useState("");
+  const [alternatePhone, setAlternatePhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [customerType, setCustomerType] = useState("potential");
+  const [source, setSource] = useState("other");
+  const [temperature, setTemperature] = useState<Lead["temperature"]>("warm");
+  const [ownerId, setOwnerId] = useState("");
+  const [opportunity, setOpportunity] = useState("0");
+  const [notes, setNotes] = useState("");
+  const [interestedProducts, setInterestedProducts] = useState("");
+  const [tags, setTags] = useState("");
+  const [lostReason, setLostReason] = useState("");
+  const [followupNote, setFollowupNote] = useState("");
+  const [activitySubject, setActivitySubject] = useState("");
+  const [activityDue, setActivityDue] = useState("");
+  const [activityType, setActivityType] = useState("call");
+  const [activityPriority, setActivityPriority] = useState("normal");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const query = new URLSearchParams();
+      if (search) query.set("search", search);
+      if (stageFilter) query.set("stage", stageFilter);
+      if (ownerFilter) query.set("owner_id", ownerFilter);
+      const optionRows = await api<Options>("/crm/options");
+      const [
+        leadRows,
+        activityRows,
+        summaryRow,
+        pipelineRows,
+        crmReportRows,
+      ] = await Promise.all([
+        api<Lead[]>(`/crm/leads?${query}`),
+        api<Activity[]>("/crm/activities"),
+        api<Summary>("/crm/summary"),
+        api<Pipeline[]>("/crm/pipeline"),
+        api<ReportItem[]>(`/crm/reports?mode=${reportMode}`),
+      ]);
+      setOptions(optionRows);
+      setLeads(leadRows);
+      setActivities(activityRows);
+      setSummary(summaryRow);
+      setPipeline(pipelineRows);
+      setReportRows(crmReportRows);
+      setSelectedId((current) =>
+        leadRows.some((item) => item.id === current)
+          ? current
+          : leadRows[0]?.id || "",
+      );
+      setOwnerId((current) => current || optionRows.owners[0]?.id || "");
+    } catch (reason) {
+      setError(
+        reason instanceof ApiError
+          ? reason.message
+          : "تعذر تحميل متابعة العملاء",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [ownerFilter, reportMode, search, stageFilter]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  useEffect(() => {
+    if (new URLSearchParams(location.search).get("tab") === "activities") {
+      setTab("activities");
+    }
+  }, [location.search]);
+  const selected = leads.find((item) => item.id === selectedId) ?? null;
+  const selectedTimeline = useMemo(
+    () => activities.filter((item) => item.lead_id === selectedId),
+    [activities, selectedId],
+  );
+  const visibleActivities =
+    activityStatus === "all"
+      ? activities
+      : activities.filter((item) => item.status === activityStatus);
+
+  function resetLeadForm() {
+    setEditingId("");
+    setShowCreate(false);
+    setName("");
+    setPhone("");
+    setAlternatePhone("");
+    setCompany("");
+    setAddress("");
+    setCustomerType("potential");
+    setSource("other");
+    setTemperature("warm");
+    setOpportunity("0");
+    setNotes("");
+    setInterestedProducts("");
+    setTags("");
+    setLostReason("");
+  }
+  function beginEdit() {
+    if (!selected) return;
+    setEditingId(selected.id);
+    setName(selected.name);
+    setPhone(selected.phone);
+    setAlternatePhone(selected.alternate_phone);
+    setCompany(selected.company);
+    setAddress(selected.address);
+    setCustomerType(selected.customer_type);
+    setSource(selected.source_code);
+    setTemperature(selected.temperature);
+    setOwnerId(selected.assigned_user_id);
+    setOpportunity(selected.opportunity_value);
+    setNotes(selected.general_notes);
+    setInterestedProducts(selected.interested_products);
+    setTags(selected.tags);
+    setLostReason(selected.lost_reason);
+    setShowCreate(true);
+    window.requestAnimationFrame(() =>
+      document
+        .querySelector(".crm-create")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  }
+  async function submitLead(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    const payload = {
+      name,
+      phone,
+      alternate_phone: alternatePhone,
+      company,
+      address,
+      source_code: source,
+      customer_type: customerType,
+      temperature,
+      assigned_user_id: ownerId || null,
+      interested_products: interestedProducts,
+      tags,
+      opportunity_value: opportunity,
+      general_notes: notes,
+      lost_reason: lostReason,
+      stage_code: editingId && selected ? selected.stage_code : "new",
+    };
+    try {
+      const saved = await api<Lead>(
+        editingId ? `/crm/leads/${editingId}` : "/crm/leads",
+        { method: editingId ? "PUT" : "POST", body: JSON.stringify(payload) },
+      );
+      resetLeadForm();
+      setSelectedId(saved.id);
+      setNotice(
+        editingId
+          ? `تم تحديث بيانات ${saved.lead_number}.`
+          : `تم إنشاء العميل المحتمل ${saved.lead_number}.`,
+      );
+      await load();
+    } catch (reason) {
+      setError(
+        reason instanceof ApiError
+          ? reason.message
+          : editingId
+            ? "تعذر تحديث العميل المحتمل"
+            : "تعذر إنشاء العميل المحتمل",
+      );
+    }
+  }
+  async function changeStage(stageCode: string) {
+    if (!selected) return;
+    try {
+      await api(`/crm/leads/${selected.id}/stage`, {
+        method: "POST",
+        body: JSON.stringify({ stage_code: stageCode }),
+      });
+      setNotice("تم تغيير مرحلة العميل وتسجيلها في الخط الزمني.");
+      await load();
+    } catch (reason) {
+      setError(
+        reason instanceof ApiError ? reason.message : "تعذر تغيير المرحلة",
+      );
+    }
+  }
+  async function addNote(event: FormEvent) {
+    event.preventDefault();
+    if (!selected) return;
+    try {
+      await api(`/crm/leads/${selected.id}/notes`, {
+        method: "POST",
+        body: JSON.stringify({ note: followupNote }),
+      });
+      setFollowupNote("");
+      setNotice("تمت إضافة ملاحظة المتابعة.");
+      await load();
+    } catch (reason) {
+      setError(
+        reason instanceof ApiError ? reason.message : "تعذر حفظ الملاحظة",
+      );
+    }
+  }
+  async function schedule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selected) return;
+    const form = new FormData(event.currentTarget);
+    const dueValue = activityDue || String(form.get("due_at") || "");
+    try {
+      await api(`/crm/leads/${selected.id}/activities`, {
+        method: "POST",
+        body: JSON.stringify({
+          activity_type: activityType,
+          subject: activitySubject,
+          due_at: new Date(dueValue).toISOString(),
+          priority: activityPriority,
+          assigned_user_id: ownerId || selected.assigned_user_id,
+        }),
+      });
+      setActivitySubject("");
+      setActivityDue("");
+      setNotice("تمت جدولة نشاط المتابعة.");
+      await load();
+    } catch (reason) {
+      setError(
+        reason instanceof ApiError ? reason.message : "تعذر جدولة النشاط",
+      );
+    }
+  }
+  async function complete(activity: Activity) {
+    const outcome = window.prompt("نتيجة النشاط", "تم التواصل");
+    if (outcome === null) return;
+    try {
+      await api(`/crm/activities/${activity.id}/completion`, {
+        method: "POST",
+        body: JSON.stringify({ outcome }),
+      });
+      await load();
+    } catch (reason) {
+      setError(
+        reason instanceof ApiError ? reason.message : "تعذر إكمال النشاط",
+      );
+    }
+  }
+  async function cancel(activity: Activity) {
+    try {
+      await api(`/crm/activities/${activity.id}/cancellation`, {
+        method: "POST",
+      });
+      await load();
+    } catch (reason) {
+      setError(
+        reason instanceof ApiError ? reason.message : "تعذر إلغاء النشاط",
+      );
+    }
+  }
+  async function reschedule(activity: Activity) {
+    const current = activity.due_at
+      ? new Date(activity.due_at).toISOString().slice(0, 16)
+      : "";
+    const due = window.prompt("الموعد الجديد بصيغة YYYY-MM-DDTHH:MM", current);
+    if (!due) return;
+    const parsed = new Date(due);
+    if (Number.isNaN(parsed.getTime())) {
+      setError("صيغة الموعد الجديد غير صحيحة");
+      return;
+    }
+    try {
+      await api(`/crm/activities/${activity.id}/reschedule`, {
+        method: "POST",
+        body: JSON.stringify({ due_at: parsed.toISOString() }),
+      });
+      setNotice("تمت إعادة جدولة النشاط.");
+      await load();
+    } catch (reason) {
+      setError(
+        reason instanceof ApiError ? reason.message : "تعذر إعادة جدولة النشاط",
+      );
+    }
+  }
+  async function convert() {
+    if (!selected) return;
+    try {
+      await api(`/crm/leads/${selected.id}/conversion`, { method: "POST" });
+      setNotice("تم تحويل العميل المحتمل إلى عميل وربطه بدليل العملاء.");
+      await load();
+    } catch (reason) {
+      setError(
+        reason instanceof ApiError ? reason.message : "تعذر تحويل العميل",
+      );
+    }
+  }
+
+  return (
+    <AppShell>
+      <section className="page-heading">
+        <div>
+          <h2>CRM - متابعة العملاء</h2>
+          <p>العملاء المحتملون، دورة المبيعات، الأنشطة المجدولة والتذكيرات.</p>
+        </div>
+        <div className="page-heading__actions">
+          {canManage ? (
+            <button
+              className="secondary-button"
+              onClick={() => {
+                resetLeadForm();
+                setShowCreate(true);
+              }}
+            >
+              <Plus size={17} /> عميل محتمل جديد
+            </button>
+          ) : null}
+          <button
+            className="secondary-button"
+            onClick={() => void load()}
+            disabled={loading}
+          >
+            <RefreshCw size={17} /> تحديث
+          </button>
+        </div>
+      </section>
+      {error ? <div className="alert alert--error">{error}</div> : null}
+      {notice ? (
+        <div className="alert alert--success">
+          <Check size={17} />
+          {notice}
+        </div>
+      ) : null}
+      <div className="sales-tabs">
+        <button
+          className={tab === "dashboard" ? "active" : ""}
+          onClick={() => setTab("dashboard")}
+        >
+          <UserRoundCheck size={17} /> لوحة المتابعة
+        </button>
+        <button
+          className={tab === "leads" ? "active" : ""}
+          onClick={() => setTab("leads")}
+        >
+          <UsersRound size={17} /> العملاء المحتملون
+        </button>
+        <button
+          className={tab === "activities" ? "active" : ""}
+          onClick={() => setTab("activities")}
+        >
+          <Clock3 size={17} /> الأنشطة
+        </button>
+        <button
+          className={tab === "pipeline" ? "active" : ""}
+          onClick={() => setTab("pipeline")}
+        >
+          <Flame size={17} /> مراحل المبيعات
+        </button>
+        <button
+          className={tab === "reports" ? "active" : ""}
+          onClick={() => setTab("reports")}
+        >
+          <UsersRound size={17} /> تقارير CRM
+        </button>
+      </div>
+      {tab === "dashboard" ? (
+        <>
+          <section className="inventory-stats">
+            <article>
+              <span className="inventory-stat__icon">
+                <UsersRound size={20} />
+              </span>
+              <span>
+                <small>إجمالي العملاء المحتملين</small>
+                <strong>{summary?.total ?? 0}</strong>
+              </span>
+            </article>
+            <article>
+              <span className="inventory-stat__icon inventory-stat__icon--amber">
+                <Flame size={20} />
+              </span>
+              <span>
+                <small>فرص ساخنة</small>
+                <strong>{summary?.hot_count ?? 0}</strong>
+              </span>
+            </article>
+            <article>
+              <span className="inventory-stat__icon inventory-stat__icon--blue">
+                <Clock3 size={20} />
+              </span>
+              <span>
+                <small>متأخرة / اليوم</small>
+                <strong>
+                  {summary?.overdue_count ?? 0} / {summary?.today_count ?? 0}
+                </strong>
+              </span>
+            </article>
+            <article>
+              <span className="inventory-stat__icon inventory-stat__icon--violet">
+                <UserRoundCheck size={20} />
+              </span>
+              <span>
+                <small>قيمة الفرص المفتوحة</small>
+                <strong>
+                  {currency.format(Number(summary?.open_value ?? 0))}
+                </strong>
+              </span>
+            </article>
+          </section>
+          <section className="panel">
+            <header className="panel__head">
+              <div>
+                <h3>المتابعات القريبة والمتأخرة</h3>
+                <p>الأنشطة المجدولة مرتبة حسب الموعد</p>
+              </div>
+            </header>
+            <div className="crm-activities">
+              {activities
+                .filter((item) => item.status === "scheduled")
+                .sort((a, b) =>
+                  String(a.due_at).localeCompare(String(b.due_at)),
+                )
+                .map((item) => (
+                  <article key={item.id}>
+                    <span className="purchase-order-card__icon">
+                      <Clock3 size={17} />
+                    </span>
+                    <span>
+                      <strong>{item.subject}</strong>
+                      <small>
+                        {item.lead_name} · {item.phone} ·{" "}
+                        {item.due_at
+                          ? new Date(item.due_at).toLocaleString("ar-EG")
+                          : "بلا موعد"}
+                      </small>
+                    </span>
+                    <span className="purchase-status purchase-status--approved">
+                      مجدول
+                    </span>
+                  </article>
+                ))}
+            </div>
+          </section>
+        </>
+      ) : null}
+      {showCreate && canManage ? (
+        <section className="panel crm-create">
+          <header className="panel__head">
+            <div>
+              <h3>{editingId ? "تعديل العميل المحتمل" : "عميل محتمل جديد"}</h3>
+              <p>رقم الهاتف لا يتكرر بين العملاء النشطين</p>
+            </div>
+            <button
+              className="mini-action"
+              aria-label="إغلاق نموذج العميل"
+              onClick={resetLeadForm}
+            >
+              <X size={17} />
+            </button>
+          </header>
+          <form className="compact-form crm-lead-form" onSubmit={submitLead}>
+            <div className="form-pair">
+              <label>
+                الاسم
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  minLength={2}
+                />
+              </label>
+              <label>
+                الهاتف
+                <input
+                  dir="ltr"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  required
+                />
+              </label>
+            </div>
+            <div className="form-pair">
+              <label>
+                هاتف بديل
+                <input
+                  dir="ltr"
+                  value={alternatePhone}
+                  onChange={(e) => setAlternatePhone(e.target.value)}
+                />
+              </label>
+              <label>
+                الشركة / النشاط
+                <input
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                />
+              </label>
+            </div>
+            <label>
+              العنوان
+              <input
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+              />
+            </label>
+            <div className="form-pair">
+              <label>
+                المصدر
+                <select
+                  value={source}
+                  onChange={(e) => setSource(e.target.value)}
+                >
+                  {options.sources.map((x) => (
+                    <option key={x.code} value={x.code}>
+                      {x.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                نوع العميل
+                <select
+                  value={customerType}
+                  onChange={(e) => setCustomerType(e.target.value)}
+                >
+                  <option value="potential">عميل محتمل</option>
+                  <option value="new">عميل جديد</option>
+                  <option value="customer">عميل حالي</option>
+                  <option value="vip">VIP</option>
+                  <option value="follow_up">يحتاج متابعة</option>
+                  <option value="not_interested">غير مهتم</option>
+                </select>
+              </label>
+            </div>
+            <div className="form-pair">
+              <label>
+                درجة الاهتمام
+                <select
+                  value={temperature}
+                  onChange={(e) =>
+                    setTemperature(e.target.value as Lead["temperature"])
+                  }
+                >
+                  <option value="cold">بارد</option>
+                  <option value="warm">دافئ</option>
+                  <option value="hot">ساخن</option>
+                </select>
+              </label>
+              <label>
+                المسؤول
+                <select
+                  value={ownerId}
+                  onChange={(e) => setOwnerId(e.target.value)}
+                >
+                  {options.owners.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="form-pair">
+              <label>
+                المنتجات المهتم بها
+                <input
+                  value={interestedProducts}
+                  onChange={(e) => setInterestedProducts(e.target.value)}
+                />
+              </label>
+              <label>
+                Tags
+                <input value={tags} onChange={(e) => setTags(e.target.value)} />
+              </label>
+            </div>
+            <div className="form-pair">
+              <label>
+                قيمة الفرصة
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={opportunity}
+                  onChange={(e) => setOpportunity(e.target.value)}
+                />
+              </label>
+              <label>
+                سبب الخسارة
+                <input
+                  value={lostReason}
+                  onChange={(e) => setLostReason(e.target.value)}
+                />
+              </label>
+            </div>
+            <label>
+              ملاحظات عامة
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </label>
+            <button className="primary-button">
+              <Plus size={17} />{" "}
+              {editingId ? "حفظ التعديل" : "حفظ العميل المحتمل"}
+            </button>
+          </form>
+        </section>
+      ) : null}
+      {tab === "leads" ? (
+        <section className="master-layout crm-layout">
+          <article className="panel">
+            <header className="panel__head">
+              <div>
+                <h3>دليل العملاء المحتملين</h3>
+                <p>{leads.length} نتيجة</p>
+              </div>
+            </header>
+            <div className="crm-filters">
+              <input
+                placeholder="بحث بالاسم أو الهاتف أو الشركة"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              <select
+                value={stageFilter}
+                onChange={(e) => setStageFilter(e.target.value)}
+              >
+                <option value="">كل المراحل</option>
+                {options.stages.map((x) => (
+                  <option key={x.code} value={x.code}>
+                    {x.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label="الموظف المسؤول"
+                value={ownerFilter}
+                onChange={(e) => setOwnerFilter(e.target.value)}
+              >
+                <option value="">كل الموظفين</option>
+                {options.owners.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="purchase-order-list">
+              {leads.map((lead) => (
+                <button
+                  className={`purchase-order-card ${lead.id === selectedId ? "purchase-order-card--selected" : ""}`}
+                  key={lead.id}
+                  onClick={() => setSelectedId(lead.id)}
+                >
+                  <span className="purchase-order-card__icon">
+                    <UsersRound size={17} />
+                  </span>
+                  <span>
+                    <strong>{lead.name}</strong>
+                    <small dir="ltr">
+                      {lead.phone} · {lead.lead_number}
+                    </small>
+                  </span>
+                  <span className="purchase-status purchase-status--approved">
+                    {lead.stage_name}
+                  </span>
+                  <strong className="purchase-order-card__value">
+                    {currency.format(Number(lead.opportunity_value))}
+                  </strong>
+                </button>
+              ))}
+            </div>
+          </article>
+          {selected ? (
+            <article className="panel crm-detail">
+              <header className="panel__head">
+                <div>
+                  <h3>{selected.name}</h3>
+                  <p>
+                    {selected.company || "بدون شركة"} · المسؤول{" "}
+                    {selected.owner_name}
+                  </p>
+                </div>
+                <span className="status-badge status-badge--active">
+                  {selected.temperature === "hot"
+                    ? "ساخن"
+                    : selected.temperature === "warm"
+                      ? "دافئ"
+                      : "بارد"}
+                </span>
+              </header>
+              <div className="crm-contact">
+                <a href={`tel:${selected.phone}`}>
+                  <PhoneCall size={16} /> {selected.phone}
+                </a>
+                <strong>
+                  {currency.format(Number(selected.opportunity_value))} ج.م
+                </strong>
+              </div>
+              {canManage ? (
+                <>
+                  <button
+                    className="secondary-button crm-edit"
+                    onClick={beginEdit}
+                  >
+                    تعديل البيانات
+                  </button>
+                  <label className="stock-card-filter">
+                    مرحلة البيع
+                    <select
+                      value={selected.stage_code}
+                      onChange={(e) => void changeStage(e.target.value)}
+                    >
+                      {options.stages.map((x) => (
+                        <option key={x.code} value={x.code}>
+                          {x.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <form className="crm-inline-form" onSubmit={addNote}>
+                    <MessageSquarePlus size={18} />
+                    <input
+                      value={followupNote}
+                      onChange={(e) => setFollowupNote(e.target.value)}
+                      placeholder="ملاحظة متابعة"
+                      required
+                    />
+                    <button className="secondary-button">إضافة</button>
+                  </form>
+                  {canSchedule ? (
+                    <form
+                      className="compact-form crm-activity-form"
+                      onSubmit={schedule}
+                    >
+                    <h4>جدولة نشاط</h4>
+                    <div className="form-pair">
+                      <label>
+                        النوع
+                        <select
+                          value={activityType}
+                          onChange={(e) => setActivityType(e.target.value)}
+                        >
+                          <option value="call">اتصال</option>
+                          <option value="meeting">اجتماع</option>
+                          <option value="whatsapp">واتساب</option>
+                          <option value="message">رسالة</option>
+                          <option value="visit">زيارة</option>
+                          <option value="email">بريد</option>
+                          <option value="task">مهمة</option>
+                        </select>
+                      </label>
+                      <label>
+                        الأولوية
+                        <select
+                          value={activityPriority}
+                          onChange={(e) => setActivityPriority(e.target.value)}
+                        >
+                          <option value="normal">عادية</option>
+                          <option value="high">عالية</option>
+                          <option value="urgent">عاجلة</option>
+                          <option value="low">منخفضة</option>
+                        </select>
+                      </label>
+                    </div>
+                    <label>
+                      العنوان
+                      <input
+                        value={activitySubject}
+                        onChange={(e) => setActivitySubject(e.target.value)}
+                        required
+                      />
+                    </label>
+                    <label>
+                      الموعد
+                      <input
+                        name="due_at"
+                        type="datetime-local"
+                        value={activityDue}
+                        onChange={(e) => setActivityDue(e.target.value)}
+                        required
+                      />
+                    </label>
+                    <button className="primary-button">
+                      <Clock3 size={16} /> جدولة
+                    </button>
+                    </form>
+                  ) : (
+                    <p className="setup-note">
+                      جدولة الأنشطة متاحة للأدمن فقط.
+                    </p>
+                  )}
+                  {!selected.customer_partner_id ? (
+                    <button
+                      className="secondary-button crm-convert"
+                      onClick={() => void convert()}
+                    >
+                      <UserRoundCheck size={17} /> تحويل إلى عميل
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
+              <div className="crm-timeline">
+                <h4>الخط الزمني</h4>
+                {selectedTimeline.map((item) => (
+                  <article key={item.id}>
+                    <strong>{item.subject}</strong>
+                    <small>
+                      {item.notes || item.outcome || item.status} ·{" "}
+                      {new Date(item.created_at).toLocaleString("ar-EG")}
+                    </small>
+                  </article>
+                ))}
+              </div>
+            </article>
+          ) : null}
+        </section>
+      ) : null}
+      {tab === "activities" ? (
+        <section className="panel">
+          <header className="panel__head">
+            <div>
+              <h3>مركز الأنشطة</h3>
+              <p>المواعيد المجدولة والمكتملة والملغاة</p>
+            </div>
+            <label className="stock-card-filter">
+              الحالة
+              <select
+                value={activityStatus}
+                onChange={(event) => setActivityStatus(event.target.value)}
+              >
+                <option value="all">كل الأنشطة</option>
+                <option value="scheduled">المجدولة</option>
+                <option value="done">المكتملة</option>
+                <option value="cancelled">الملغاة</option>
+              </select>
+            </label>
+          </header>
+          <div className="crm-activities">
+            {visibleActivities.map((item) => (
+              <article key={item.id}>
+                <span className="purchase-order-card__icon">
+                  <Clock3 size={17} />
+                </span>
+                <span>
+                  <strong>{item.subject}</strong>
+                  <small>
+                    {item.lead_name} · {item.owner_name} ·{" "}
+                    {item.due_at
+                      ? new Date(item.due_at).toLocaleString("ar-EG")
+                      : "بلا موعد"}
+                  </small>
+                </span>
+                <span
+                  className={`purchase-status ${item.status === "done" ? "purchase-status--received" : item.status === "cancelled" ? "purchase-status--cancelled" : "purchase-status--approved"}`}
+                >
+                  {item.status === "scheduled"
+                    ? "مجدول"
+                    : item.status === "done"
+                      ? "مكتمل"
+                      : "ملغي"}
+                </span>
+                {canManage && item.status === "scheduled" ? (
+                  <span className="crm-activity-actions">
+                    <button
+                      className="mini-action"
+                      onClick={() => void complete(item)}
+                    >
+                      <Check size={14} /> إكمال
+                    </button>
+                    <button
+                      className="mini-action"
+                      onClick={() => void reschedule(item)}
+                    >
+                      <RefreshCw size={14} /> إعادة جدولة
+                    </button>
+                    <button
+                      className="mini-action"
+                      onClick={() => void cancel(item)}
+                    >
+                      <X size={14} /> إلغاء
+                    </button>
+                  </span>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {tab === "pipeline" ? (
+        <section className="crm-pipeline">
+          {pipeline.map((item) => (
+            <article className="panel" key={item.code}>
+              <small>{item.name}</small>
+              <strong>{item.lead_count}</strong>
+              <span>{currency.format(Number(item.total_value))} ج.م</span>
+            </article>
+          ))}
+        </section>
+      ) : null}
+      {tab === "reports" ? (
+        <section className="panel">
+          <header className="panel__head">
+            <div>
+              <h3>تقارير CRM</h3>
+              <p>
+                نفس تجميعات نسخة الديسكتوب حسب المصدر والمسؤول وأسباب الخسارة
+              </p>
+            </div>
+            <label className="stock-card-filter">
+              نوع التقرير
+              <select
+                value={reportMode}
+                onChange={(event) => setReportMode(event.target.value)}
+              >
+                <option value="source">حسب المصدر</option>
+                <option value="owner">حسب الموظف</option>
+                <option value="lost">أسباب الخسارة</option>
+              </select>
+            </label>
+          </header>
+          <div className="data-table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>البند</th>
+                  <th>الإجمالي</th>
+                  <th>تم البيع</th>
+                  <th>القيمة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reportRows.map((item) => (
+                  <tr key={item.label}>
+                    <td>
+                      <strong>{item.label}</strong>
+                    </td>
+                    <td>{item.total}</td>
+                    <td>{item.won}</td>
+                    <td>{currency.format(Number(item.value))} ج.م</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {reportRows.length === 0 ? (
+            <div className="empty-state">
+              <h4>لا توجد بيانات لهذا التقرير</h4>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+    </AppShell>
+  );
+}

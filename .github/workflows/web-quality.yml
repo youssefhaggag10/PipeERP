@@ -1,0 +1,119 @@
+name: Web quality
+
+on:
+  pull_request:
+    paths:
+      - "web/**"
+      - ".github/workflows/web-quality.yml"
+  push:
+    branches: [web-rebuild]
+    paths:
+      - "web/**"
+      - ".github/workflows/web-quality.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: pipeerp_test
+          POSTGRES_USER: pipeerp_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pipeerp_test -d pipeerp_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://pipeerp_test@localhost:5432/pipeerp_test
+    defaults:
+      run:
+        working-directory: web/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: web/backend/pyproject.toml
+      - run: pip install -e '.[dev]'
+      - run: ruff check app tests migrations
+      - run: mypy app
+      - run: alembic upgrade head
+      - run: pytest --cov=app.domain --cov=app.modules.identity --cov=app.modules.master_data --cov=app.modules.inventory --cov=app.modules.purchasing --cov=app.modules.sales --cov=app.modules.treasury --cov=app.modules.manufacturing --cov=app.modules.returns --cov=app.modules.reports --cov=app.api.routes.master_data --cov=app.api.routes.inventory --cov=app.api.routes.purchasing --cov=app.api.routes.sales --cov=app.api.routes.treasury --cov=app.api.routes.manufacturing --cov=app.api.routes.returns --cov=app.api.routes.reports --cov-report=term-missing --cov-fail-under=80
+      - run: pip-audit
+      - name: Validate production configuration
+        env:
+          POSTGRES_DB: pipeerp
+          POSTGRES_USER: pipeerp_app
+          DOMAIN: erp.example.com
+          ALLOWED_ORIGINS: https://erp.example.com
+          POSTGRES_PASSWORD_FILE_PATH: /dev/null
+          DATABASE_URL_FILE_PATH: /dev/null
+          SECRET_KEY_FILE_PATH: /dev/null
+          BACKUP_ENCRYPTION_KEY_FILE_PATH: /dev/null
+        run: |
+          sh -n ../ops/backup.sh
+          sh -n ../ops/restore.sh
+          sh -n ../ops/healthcheck.sh
+          python ../ops/load_test.py --help >/dev/null
+          docker compose -f ../compose.production.yaml config --quiet
+          docker run --rm -e DOMAIN=erp.example.com \
+            -v "$PWD/../Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
+      - name: Test encrypted backup and isolated restore
+        run: |
+          docker build -t pipeerp-ops-test ../ops
+          backup_dir="$RUNNER_TEMP/pipeerp-backups"
+          secret_dir="$RUNNER_TEMP/pipeerp-secrets"
+          mkdir -p "$backup_dir" "$secret_dir"
+          chmod 0777 "$backup_dir"
+          printf '%s\n' 'postgresql://pipeerp_test@127.0.0.1:5432/pipeerp_test' > "$secret_dir/database_url"
+          openssl rand -base64 48 > "$secret_dir/backup_encryption_key"
+          docker run --rm --network host \
+            -e DATABASE_URL_FILE=/secrets/database_url \
+            -e BACKUP_ENCRYPTION_KEY_FILE=/secrets/backup_encryption_key \
+            -e BACKUP_DIR=/backups \
+            -v "$backup_dir:/backups" \
+            -v "$secret_dir:/secrets:ro" \
+            pipeerp-ops-test /usr/local/bin/pipeerp-backup
+          docker run --rm --network host postgres:17-alpine \
+            createdb -h 127.0.0.1 -U pipeerp_test pipeerp_restore
+          printf '%s\n' 'postgresql://pipeerp_test@127.0.0.1:5432/pipeerp_restore' > "$secret_dir/restore_database_url"
+          backup_file=$(find "$backup_dir" -maxdepth 1 -name 'pipeerp-*.dump.enc' -print -quit)
+          docker run --rm --network host \
+            -e ALLOW_DESTRUCTIVE_RESTORE=YES \
+            -e RESTORE_TARGET_DATABASE=pipeerp_restore \
+            -e RESTORE_DATABASE_URL_FILE=/secrets/restore_database_url \
+            -e BACKUP_ENCRYPTION_KEY_FILE=/secrets/backup_encryption_key \
+            -v "$backup_dir:/backups" \
+            -v "$secret_dir:/secrets:ro" \
+            pipeerp-ops-test /usr/local/bin/pipeerp-restore "/backups/$(basename "$backup_file")"
+          docker run --rm --network host postgres:17-alpine \
+            psql -h 127.0.0.1 -U pipeerp_test -d pipeerp_restore \
+            -v ON_ERROR_STOP=1 -c 'SELECT version_num FROM alembic_version;'
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/frontend/package-lock.json
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build

@@ -40,7 +40,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          pytest -q 2>&1 | tee feature-test.log
+          pytest -q tests 2>&1 | tee feature-test.log
 
       - name: Upload feature test log
         if: always()
