@@ -1,4 +1,4 @@
-import printBackground from "../../../../app/assets/print/a4_invoice_background.png";
+import printBackground from "../assets/a4_invoice_background.png";
 
 export type Company = {
   name_ar: string;
