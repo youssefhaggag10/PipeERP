@@ -24,6 +24,7 @@ from app.modules.returns.schemas import (
     ReverseRequest,
 )
 from app.modules.returns.service import (
+    ReturnsBusinessConflict,
     ReturnsConflict,
     ReturnsNotFound,
     create_refund,
@@ -53,6 +54,11 @@ def _manage(request: Request, db: DatabaseSession, principal: CurrentPrincipal) 
 def _translate(exc: Exception) -> HTTPException:
     if isinstance(exc, ReturnsNotFound):
         return HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    if isinstance(exc, ReturnsBusinessConflict):
+        return HTTPException(
+            status.HTTP_409_CONFLICT,
+            {"code": exc.code, "message": exc.message},
+        )
     if isinstance(exc, (ReturnsConflict, InsufficientStock, InventoryConflict, IntegrityError)):
         return HTTPException(
             status.HTTP_409_CONFLICT,
@@ -105,7 +111,7 @@ def invoice_lines(
     _read(request, db, principal)
     try:
         return get_returnable_lines(db, return_type=return_type, invoice_id=invoice_id)
-    except (ReturnsNotFound, ValueError) as exc:
+    except HandledReturnsError as exc:
         raise _translate(exc) from exc
 
 

@@ -46,6 +46,59 @@ describe("api client", () => {
     );
   });
 
+  it("surfaces stable return business error codes and their Arabic message", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            detail: {
+              code: "PURCHASE_RETURN_ATTRIBUTABLE_STOCK_INSUFFICIENT",
+              message: "المتاح من نفس استلام الشراء أقل من المطلوب",
+            },
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    await expect(api("/returns/documents", { method: "POST" }, false)).rejects.toEqual(
+      new ApiError(
+        "المتاح من نفس استلام الشراء أقل من المطلوب",
+        409,
+        "PURCHASE_RETURN_ATTRIBUTABLE_STOCK_INSUFFICIENT",
+      ),
+    );
+  });
+
+  it("surfaces unresolved historical purchase provenance for administrative correction", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            detail: {
+              code: "PURCHASE_RETURN_PROVENANCE_UNRESOLVED",
+              message:
+                "تعذر إثبات مصدر استلام الشراء التاريخي ويحتاج إلى مراجعة إدارية",
+            },
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    await expect(
+      api("/returns/invoices/purchase/1/lines", {}, false),
+    ).rejects.toEqual(
+      new ApiError(
+        "تعذر إثبات مصدر استلام الشراء التاريخي ويحتاج إلى مراجعة إدارية",
+        409,
+        "PURCHASE_RETURN_PROVENANCE_UNRESOLVED",
+      ),
+    );
+  });
+
   it("accepts successful responses without a JSON body", async () => {
     vi.stubGlobal(
       "fetch",

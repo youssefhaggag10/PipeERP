@@ -27,6 +27,10 @@ class InvoiceReturn(TimestampMixin, Base):
         UniqueConstraint("idempotency_key"),
         UniqueConstraint("reversal_idempotency_key"),
         CheckConstraint("return_type IN ('sales','purchase')", name="return_type_valid"),
+        CheckConstraint(
+            "valuation_method IN ('legacy_aggregate','source_layer')",
+            name="valuation_method_valid",
+        ),
         CheckConstraint("status IN ('posted','reversed')", name="status_valid"),
         CheckConstraint("total > 0", name="total_positive"),
         CheckConstraint("version > 0", name="version_positive"),
@@ -45,6 +49,9 @@ class InvoiceReturn(TimestampMixin, Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     return_number: Mapped[str] = mapped_column(String(40), nullable=False)
     return_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    valuation_method: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="source_layer"
+    )
     customer_invoice_id: Mapped[UUID | None] = mapped_column(
         Uuid, ForeignKey("customer_invoices.id", ondelete="RESTRICT")
     )
@@ -120,8 +127,8 @@ class InvoiceReturnLine(TimestampMixin, Base):
     product_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
     )
-    inventory_transaction_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("inventory_transactions.id", ondelete="RESTRICT"), nullable=False
+    inventory_transaction_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("inventory_transactions.id", ondelete="RESTRICT")
     )
     reversal_inventory_transaction_id: Mapped[UUID | None] = mapped_column(
         Uuid, ForeignKey("inventory_transactions.id", ondelete="RESTRICT")
@@ -133,6 +140,101 @@ class InvoiceReturnLine(TimestampMixin, Base):
     unit_price: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     line_total: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False)
     inventory_cost: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
+
+
+class InvoiceReturnSource(TimestampMixin, Base):
+    __tablename__ = "invoice_return_sources"
+    __table_args__ = (
+        UniqueConstraint("return_inventory_transaction_id"),
+        UniqueConstraint("return_inventory_allocation_id"),
+        UniqueConstraint("return_inventory_layer_id"),
+        UniqueConstraint("reversal_inventory_transaction_id"),
+        UniqueConstraint("reversal_inventory_layer_id"),
+        UniqueConstraint(
+            "invoice_return_line_id",
+            "original_inventory_allocation_id",
+            name="uq_invoice_return_sources_sales_allocation",
+        ),
+        UniqueConstraint(
+            "invoice_return_line_id",
+            "consumed_inventory_layer_id",
+            name="uq_invoice_return_sources_purchase_layer",
+        ),
+        CheckConstraint(
+            "source_kind IN ('sales_delivery_allocation','purchase_receipt_layer')",
+            name="source_kind_valid",
+        ),
+        CheckConstraint("quantity >= 0", name="quantity_nonnegative"),
+        CheckConstraint("weight_kg >= 0", name="weight_nonnegative"),
+        CheckConstraint("quantity > 0 OR weight_kg > 0", name="amount_positive"),
+        CheckConstraint("cost_basis IN ('quantity','weight')", name="cost_basis_valid"),
+        CheckConstraint("unit_cost >= 0", name="unit_cost_nonnegative"),
+        CheckConstraint("total_cost >= 0", name="total_cost_nonnegative"),
+        CheckConstraint(
+            "(source_kind = 'sales_delivery_allocation' "
+            "AND original_inventory_allocation_id IS NOT NULL "
+            "AND purchase_receipt_line_id IS NULL "
+            "AND consumed_inventory_layer_id IS NULL "
+            "AND return_inventory_allocation_id IS NULL "
+            "AND return_inventory_layer_id IS NOT NULL) OR "
+            "(source_kind = 'purchase_receipt_layer' "
+            "AND original_inventory_allocation_id IS NULL "
+            "AND purchase_receipt_line_id IS NOT NULL "
+            "AND consumed_inventory_layer_id IS NOT NULL "
+            "AND return_inventory_allocation_id IS NOT NULL "
+            "AND return_inventory_layer_id IS NULL)",
+            name="source_references_match_kind",
+        ),
+        Index("ix_invoice_return_sources_line", "invoice_return_line_id", "id"),
+        Index(
+            "ix_invoice_return_sources_original_allocation",
+            "original_inventory_allocation_id",
+        ),
+        Index(
+            "ix_invoice_return_sources_purchase_receipt_line",
+            "purchase_receipt_line_id",
+        ),
+        Index("ix_invoice_return_sources_root_layer", "root_inventory_layer_id"),
+        Index("ix_invoice_return_sources_consumed_layer", "consumed_inventory_layer_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    invoice_return_line_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("invoice_return_lines.id", ondelete="CASCADE"), nullable=False
+    )
+    source_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    original_inventory_allocation_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("inventory_allocations.id", ondelete="RESTRICT")
+    )
+    purchase_receipt_line_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("purchase_receipt_lines.id", ondelete="RESTRICT")
+    )
+    root_inventory_layer_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("inventory_layers.id", ondelete="RESTRICT"), nullable=False
+    )
+    consumed_inventory_layer_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("inventory_layers.id", ondelete="RESTRICT")
+    )
+    return_inventory_transaction_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("inventory_transactions.id", ondelete="RESTRICT"), nullable=False
+    )
+    return_inventory_allocation_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("inventory_allocations.id", ondelete="RESTRICT")
+    )
+    return_inventory_layer_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("inventory_layers.id", ondelete="RESTRICT")
+    )
+    reversal_inventory_transaction_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("inventory_transactions.id", ondelete="RESTRICT")
+    )
+    reversal_inventory_layer_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("inventory_layers.id", ondelete="RESTRICT")
+    )
+    quantity: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
+    weight_kg: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False, default=0)
+    cost_basis: Mapped[str] = mapped_column(String(16), nullable=False)
+    unit_cost: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
+    total_cost: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
 
 
 class ReturnRefund(TimestampMixin, Base):

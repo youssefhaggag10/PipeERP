@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 ReturnType = Literal["sales", "purchase"]
+ReturnLineMode = Literal["full_remaining", "selected_sources"]
 RefundType = Literal["customer_refund", "supplier_refund"]
 PaymentMethod = Literal["cash", "bank_transfer", "cheque", "wallet"]
 
@@ -14,13 +15,38 @@ class ReturnView(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ReturnLineRequest(BaseModel):
-    source_line_id: UUID
+class ReturnSourceRequest(BaseModel):
+    source_id: UUID
     quantity: Decimal = Field(default=Decimal("0"), ge=0, max_digits=20, decimal_places=6)
     weight_kg: Decimal = Field(default=Decimal("0"), ge=0, max_digits=20, decimal_places=6)
 
     @model_validator(mode="after")
+    def positive_amount(self) -> "ReturnSourceRequest":
+        if self.quantity <= 0 and self.weight_kg <= 0:
+            raise ValueError("أدخل كمية أو وزنًا موجبًا من مصدر المرتجع")
+        return self
+
+
+class ReturnLineRequest(BaseModel):
+    source_line_id: UUID
+    mode: ReturnLineMode = "selected_sources"
+    quantity: Decimal = Field(default=Decimal("0"), ge=0, max_digits=20, decimal_places=6)
+    weight_kg: Decimal = Field(default=Decimal("0"), ge=0, max_digits=20, decimal_places=6)
+    sources: list[ReturnSourceRequest] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
     def positive_amount(self) -> "ReturnLineRequest":
+        if self.mode == "full_remaining":
+            if self.sources or self.quantity > 0 or self.weight_kg > 0:
+                raise ValueError("المرتجع الكامل لا يحتاج إدخال مصادر أو كمية يدويًا")
+            return self
+        if self.sources:
+            ids = [item.source_id for item in self.sources]
+            if len(ids) != len(set(ids)):
+                raise ValueError("لا يمكن تكرار مصدر المخزون في بند المرتجع")
+            if self.quantity > 0 or self.weight_kg > 0:
+                raise ValueError("استخدم المصادر أو الكمية المجمعة، وليس الاثنين معًا")
+            return self
         if self.quantity <= 0 and self.weight_kg <= 0:
             raise ValueError("أدخل كمية أو وزنًا موجبًا للمرتجع")
         return self
@@ -54,6 +80,23 @@ class CreateRefundRequest(BaseModel):
     notes: str = Field(default="", max_length=1000)
 
 
+class ReturnableSourceView(ReturnView):
+    source_id: UUID
+    source_kind: Literal["sales_delivery_allocation", "purchase_receipt_layer"]
+    lot_number: str
+    source_reference: str
+    source_date: datetime
+    warehouse_id: UUID
+    warehouse_name_ar: str
+    stable_label: str
+    original_quantity: Decimal
+    already_returned_quantity: Decimal
+    remaining_returnable_quantity: Decimal
+    original_weight_kg: Decimal
+    already_returned_weight_kg: Decimal
+    remaining_returnable_weight_kg: Decimal
+
+
 class ReturnableLineView(ReturnView):
     source_line_id: UUID
     product_id: UUID
@@ -68,6 +111,7 @@ class ReturnableLineView(ReturnView):
     original_weight_kg: Decimal
     returned_weight_kg: Decimal
     remaining_weight_kg: Decimal
+    sources: list[ReturnableSourceView]
 
 
 class InvoiceReturnLineView(ReturnView):
@@ -89,6 +133,7 @@ class InvoiceReturnView(ReturnView):
     id: UUID
     return_number: str
     return_type: ReturnType
+    valuation_method: Literal["legacy_aggregate", "source_layer"]
     invoice_id: UUID
     invoice_number: str
     partner_id: UUID

@@ -20,6 +20,12 @@ import { useAuth } from "../auth/AuthContext";
 import { AppShell } from "../components/AppShell";
 import { api, ApiError } from "../lib/api";
 import { clientId } from "../lib/clientId";
+import {
+  buildReturnLinePayloads,
+  sourceOperationalSummary,
+  type ReturnLine,
+  type ReturnLineMode,
+} from "./returnsPayload";
 
 type ReturnType = "sales" | "purchase";
 type RefundType = "customer_refund" | "supplier_refund";
@@ -32,15 +38,6 @@ type Invoice = {
   returned_total: string;
   net_total: string;
   refundable: string;
-};
-type ReturnLine = {
-  source_line_id: string;
-  product_code: string;
-  product_name_ar: string;
-  unit: string;
-  cost_basis: "quantity" | "weight";
-  remaining_quantity: string;
-  remaining_weight_kg: string;
 };
 type ReturnDocument = {
   id: string;
@@ -110,7 +107,10 @@ export function ReturnsWorkspace({
   const [refunds, setRefunds] = useState<Refund[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [invoiceId, setInvoiceId] = useState("");
-  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [lineModes, setLineModes] = useState<
+    Record<string, ReturnLineMode | undefined>
+  >({});
+  const [sourceAmounts, setSourceAmounts] = useState<Record<string, string>>({});
   const [reason, setReason] = useState("");
   const [refundInvoiceId, setRefundInvoiceId] = useState("");
   const [financialAccountId, setFinancialAccountId] = useState("");
@@ -190,7 +190,8 @@ export function ReturnsWorkspace({
     api<ReturnLine[]>(`/returns/invoices/${returnType}/${invoiceId}/lines`)
       .then((rows) => {
         setLines(rows);
-        setAmounts({});
+        setLineModes({});
+        setSourceAmounts({});
       })
       .catch((cause) =>
         setError(
@@ -224,18 +225,11 @@ export function ReturnsWorkspace({
 
   async function createReturn(event: FormEvent) {
     event.preventDefault();
-    const selectedLines = lines.flatMap((line) => {
-      const value = amounts[line.source_line_id] || "0";
-      return Number(value) > 0
-        ? [
-            {
-              source_line_id: line.source_line_id,
-              quantity: line.cost_basis === "quantity" ? value : "0",
-              weight_kg: line.cost_basis === "weight" ? value : "0",
-            },
-          ]
-        : [];
-    });
+    const selectedLines = buildReturnLinePayloads(
+      lines,
+      lineModes,
+      sourceAmounts,
+    );
     await perform(
       () =>
         api("/returns/documents", {
@@ -251,7 +245,8 @@ export function ReturnsWorkspace({
       "تم اعتماد المرتجع وتحديث المخزون والحسابات.",
     );
     setReason("");
-    setAmounts({});
+    setLineModes({});
+    setSourceAmounts({});
   }
 
   async function createRefund(event: FormEvent) {
@@ -484,37 +479,121 @@ export function ReturnsWorkspace({
                             : line.remaining_quantity,
                         ) > 0,
                     )
-                    .map((line) => (
-                      <label key={line.source_line_id}>
-                        <span>
-                          <strong>{line.product_name_ar}</strong>
-                          <small>
-                            {line.product_code} · متاح{" "}
-                            {line.cost_basis === "weight"
-                              ? `${line.remaining_weight_kg} كجم`
-                              : `${line.remaining_quantity} ${line.unit}`}
-                          </small>
-                        </span>
-                        <input
-                          type="number"
-                          min="0"
-                          max={
-                            line.cost_basis === "weight"
-                              ? line.remaining_weight_kg
-                              : line.remaining_quantity
-                          }
-                          step="0.001"
-                          value={amounts[line.source_line_id] || ""}
-                          onChange={(event) =>
-                            setAmounts((current) => ({
-                              ...current,
-                              [line.source_line_id]: event.target.value,
-                            }))
-                          }
-                          placeholder="0"
-                        />
-                      </label>
-                    ))}
+                    .map((line) => {
+                      const mode = lineModes[line.source_line_id];
+                      return (
+                        <article
+                          className="return-line-source-card"
+                          key={line.source_line_id}
+                        >
+                          <header>
+                            <span>
+                              <strong>{line.product_name_ar}</strong>
+                              <small>
+                                {line.product_code} · متاح{" "}
+                                {line.cost_basis === "weight"
+                                  ? `${line.remaining_weight_kg} كجم`
+                                  : `${line.remaining_quantity} ${line.unit}`}
+                              </small>
+                            </span>
+                            <div
+                              className="return-line-mode"
+                              role="group"
+                              aria-label={`طريقة مرتجع ${line.product_name_ar}`}
+                            >
+                              <button
+                                type="button"
+                                className={
+                                  mode === "selected_sources" ? "active" : ""
+                                }
+                                onClick={() =>
+                                  setLineModes((current) => ({
+                                    ...current,
+                                    [line.source_line_id]: "selected_sources",
+                                  }))
+                                }
+                              >
+                                جزئي من مصدر
+                              </button>
+                              <button
+                                type="button"
+                                className={
+                                  mode === "full_remaining" ? "active" : ""
+                                }
+                                onClick={() =>
+                                  setLineModes((current) => ({
+                                    ...current,
+                                    [line.source_line_id]: "full_remaining",
+                                  }))
+                                }
+                              >
+                                كل المتبقي
+                              </button>
+                            </div>
+                          </header>
+                          {mode === "full_remaining" ? (
+                            <p className="return-full-note">
+                              سيُرجع النظام كل الكمية المتبقية من مصادرها الأصلية
+                              كل مصدر على حدة.
+                            </p>
+                          ) : null}
+                          {mode === "selected_sources" ? (
+                            <div className="return-source-list">
+                              {line.sources.map((source) => {
+                                const remaining =
+                                  line.cost_basis === "weight"
+                                    ? source.remaining_returnable_weight_kg
+                                    : source.remaining_returnable_quantity;
+                                return (
+                                  <label
+                                    className="return-source"
+                                    key={source.source_id}
+                                  >
+                                    <span className="return-source__identity">
+                                      <strong>
+                                        {source.lot_number
+                                          ? `دفعة ${source.lot_number}`
+                                          : source.stable_label}
+                                      </strong>
+                                      <small>
+                                        {source.source_reference} ·{" "}
+                                        {new Date(
+                                          source.source_date,
+                                        ).toLocaleDateString("ar-EG")} ·{" "}
+                                        {source.warehouse_name_ar}
+                                      </small>
+                                      <small>
+                                        {sourceOperationalSummary(line, source)}
+                                      </small>
+                                    </span>
+                                    <input
+                                      aria-label={`كمية المصدر ${source.lot_number || source.stable_label}`}
+                                      type="number"
+                                      min="0"
+                                      max={remaining}
+                                      step="0.001"
+                                      value={sourceAmounts[source.source_id] || ""}
+                                      onChange={(event) =>
+                                        setSourceAmounts((current) => ({
+                                          ...current,
+                                          [source.source_id]: event.target.value,
+                                        }))
+                                      }
+                                      placeholder="0"
+                                    />
+                                  </label>
+                                );
+                              })}
+                              {!line.sources.length ? (
+                                <p className="return-source-empty">
+                                  لا يوجد مصدر مخزون موثّق ومتاح لهذا البند.
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </article>
+                      );
+                    })}
                 </div>
                 <label>
                   سبب المرتجع
@@ -530,7 +609,8 @@ export function ReturnsWorkspace({
                     submitting ||
                     !invoiceId ||
                     !reason ||
-                    !Object.values(amounts).some((value) => Number(value) > 0)
+                    buildReturnLinePayloads(lines, lineModes, sourceAmounts)
+                      .length === 0
                   }
                 >
                   <Check size={17} /> اعتماد المرتجع

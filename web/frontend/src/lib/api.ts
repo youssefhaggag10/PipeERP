@@ -2,6 +2,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
+    public readonly code?: string,
   ) {
     super(message);
   }
@@ -16,12 +17,21 @@ function cookie(name: string): string | undefined {
     ?.slice(prefix.length);
 }
 
-async function errorMessage(response: Response): Promise<string> {
+async function errorPayload(
+  response: Response,
+): Promise<{ message: string; code?: string }> {
   try {
-    const payload = (await response.json()) as { detail?: string };
-    return payload.detail ?? "تعذر تنفيذ العملية";
+    const payload = (await response.json()) as {
+      detail?: string | { code?: string; message?: string };
+    };
+    if (typeof payload.detail === "object" && payload.detail)
+      return {
+        message: payload.detail.message ?? "تعذر تنفيذ العملية",
+        code: payload.detail.code,
+      };
+    return { message: payload.detail ?? "تعذر تنفيذ العملية" };
   } catch {
-    return "تعذر الاتصال بالخادم";
+    return { message: "تعذر الاتصال بالخادم" };
   }
 }
 
@@ -56,8 +66,10 @@ export async function api<T>(
       throw new ApiError("انتهت الجلسة؛ سجّل الدخول مرة أخرى", 401);
     }
   }
-  if (!response.ok)
-    throw new ApiError(await errorMessage(response), response.status);
+  if (!response.ok) {
+    const error = await errorPayload(response);
+    throw new ApiError(error.message, response.status, error.code);
+  }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }

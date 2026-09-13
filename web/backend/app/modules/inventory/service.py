@@ -104,6 +104,15 @@ def _locked_balance(db: Session, product_id: UUID, warehouse_id: UUID) -> Invent
     return balance
 
 
+def lock_inventory_contexts(
+    db: Session, contexts: set[tuple[UUID, UUID]]
+) -> None:
+    """Lock product and balance rows in deterministic order before multi-source posting."""
+    for product_id, warehouse_id in sorted(contexts, key=lambda item: (str(item[0]), str(item[1]))):
+        _lock_context(db, product_id, warehouse_id)
+        _locked_balance(db, product_id, warehouse_id)
+
+
 def _unit_cost_for_basis(layer: InventoryLayer, requested_basis: str) -> Decimal:
     if layer.cost_basis == requested_basis:
         return layer.unit_cost
@@ -156,6 +165,7 @@ def post_receipt(
     client: ClientContext,
     transaction_type: str = "receipt",
     reversal_of_id: UUID | None = None,
+    provenance_root_layer_id: UUID | None = None,
 ) -> InventoryTransaction:
     if transaction_type not in {
         "receipt",
@@ -219,6 +229,8 @@ def post_receipt(
             product_id=payload.product_id,
             warehouse_id=payload.warehouse_id,
             lot_id=lot.id if lot else None,
+            source_transaction_id=transaction.id,
+            provenance_root_layer_id=provenance_root_layer_id,
             source_type=payload.reference_type,
             source_id=payload.reference_id,
             source_line_id=payload.reference_line_id,
@@ -253,6 +265,142 @@ def post_receipt(
     )
     db.flush()
     return transaction
+
+
+def receipt_layer_for_transaction(
+    db: Session, transaction_id: UUID, *, lock: bool = False
+) -> InventoryLayer:
+    statement = select(InventoryLayer).where(
+        InventoryLayer.source_transaction_id == transaction_id
+    )
+    if lock:
+        statement = statement.with_for_update()
+    layer = db.scalar(statement)
+    if layer is None:
+        raise InventoryConflict("تعذر العثور على طبقة المخزون المنشأة من الحركة")
+    return layer
+
+
+def post_exact_layer_issue(
+    db: Session,
+    *,
+    source_layer_id: UUID,
+    product_id: UUID,
+    warehouse_id: UUID,
+    requested_quantity: Decimal,
+    requested_weight_kg: Decimal,
+    cost_basis: str,
+    idempotency_key: str,
+    reference_type: str,
+    reference_id: str,
+    reference_line_id: str,
+    notes: str,
+    actor_user_id: UUID,
+    client: ClientContext,
+    transaction_type: str = "return_out",
+    reversal_of_id: UUID | None = None,
+) -> tuple[InventoryTransaction, InventoryAllocation]:
+    """Issue exact amounts from one proven source layer without generic FIFO."""
+    if transaction_type not in {"return_out", "reversal_out"}:
+        raise ValueError("نوع حركة الإخراج المحددة غير صالح")
+    requested_quantity = quantity(requested_quantity)
+    requested_weight_kg = quantity(requested_weight_kg)
+    if requested_quantity <= 0 and requested_weight_kg <= 0:
+        raise ValueError("كمية حركة المخزون المحددة يجب أن تكون أكبر من صفر")
+    existing = _existing_transaction(db, idempotency_key)
+    if existing is not None:
+        transaction = _validate_idempotent_request(
+            existing,
+            transaction_type=transaction_type,
+            product_id=product_id,
+            warehouse_id=warehouse_id,
+        )
+        allocation = db.scalar(
+            select(InventoryAllocation).where(
+                InventoryAllocation.outbound_transaction_id == transaction.id,
+                InventoryAllocation.source_layer_id == source_layer_id,
+            )
+        )
+        if allocation is None:
+            raise InventoryConflict("حركة منع التكرار لا تطابق طبقة المصدر المطلوبة")
+        return transaction, allocation
+
+    _lock_context(db, product_id, warehouse_id)
+    layer = db.scalar(
+        select(InventoryLayer)
+        .where(InventoryLayer.id == source_layer_id)
+        .with_for_update()
+    )
+    if layer is None:
+        raise InventoryNotFound("طبقة المخزون المحددة غير موجودة")
+    if layer.product_id != product_id or layer.warehouse_id != warehouse_id:
+        raise InventoryConflict("طبقة المخزون المحددة لا تخص الصنف أو المخزن")
+    if requested_quantity > layer.quantity_remaining:
+        raise InsufficientStock("الكمية المتاحة في طبقة المصدر المحددة غير كافية")
+    if requested_weight_kg > layer.weight_remaining_kg:
+        raise InsufficientStock("الوزن المتاح في طبقة المصدر المحددة غير كافٍ")
+
+    balance = _locked_balance(db, product_id, warehouse_id)
+    if (
+        balance.quantity_on_hand < requested_quantity
+        or balance.weight_on_hand_kg < requested_weight_kg
+    ):
+        raise InsufficientStock("الرصيد الحالي لا يسمح بحركة المخزون المحددة")
+    unit_cost = _unit_cost_for_basis(layer, cost_basis)
+    basis_amount = requested_quantity if cost_basis == "quantity" else requested_weight_kg
+    total_cost = quantity(basis_amount * unit_cost)
+    transaction = InventoryTransaction(
+        idempotency_key=idempotency_key,
+        transaction_type=transaction_type,
+        product_id=product_id,
+        warehouse_id=warehouse_id,
+        lot_id=layer.lot_id,
+        quantity_delta=-requested_quantity,
+        weight_delta_kg=-requested_weight_kg,
+        unit_cost=unit_cost,
+        total_cost=total_cost,
+        cost_basis=cost_basis,
+        reference_type=reference_type,
+        reference_id=reference_id,
+        reference_line_id=reference_line_id,
+        reversal_of_id=reversal_of_id,
+        notes=notes.strip(),
+        posted_by_id=actor_user_id,
+    )
+    db.add(transaction)
+    db.flush()
+    allocation = InventoryAllocation(
+        outbound_transaction_id=transaction.id,
+        source_layer_id=layer.id,
+        quantity=requested_quantity,
+        weight_kg=requested_weight_kg,
+        unit_cost=unit_cost,
+        total_cost=total_cost,
+    )
+    db.add(allocation)
+    layer.quantity_remaining = quantity(layer.quantity_remaining - requested_quantity)
+    layer.weight_remaining_kg = quantity(layer.weight_remaining_kg - requested_weight_kg)
+    layer.version += 1
+    balance.quantity_on_hand = quantity(balance.quantity_on_hand - requested_quantity)
+    balance.weight_on_hand_kg = quantity(balance.weight_on_hand_kg - requested_weight_kg)
+    balance.version += 1
+    add_audit(
+        db,
+        actor_user_id=actor_user_id,
+        event_type=f"inventory.{transaction_type}.post",
+        entity_type="inventory_transaction",
+        entity_id=str(transaction.id),
+        outcome="success",
+        client=client,
+        after_state={
+            "source_layer_id": str(layer.id),
+            "quantity": str(requested_quantity),
+            "weight_kg": str(requested_weight_kg),
+            "total_cost": str(total_cost),
+        },
+    )
+    db.flush()
+    return transaction, allocation
 
 
 def post_issue(

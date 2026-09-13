@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from hashlib import sha256
@@ -5,15 +6,23 @@ from typing import Literal, cast
 from uuid import UUID
 
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.domain.common.decimal import money, quantity
 from app.modules.identity.service import ClientContext, Principal, add_audit
-from app.modules.inventory.schemas import IssueRequest, ReceiptRequest
+from app.modules.inventory.models import (
+    InventoryAllocation,
+    InventoryLayer,
+    InventoryLot,
+    InventoryTransaction,
+)
+from app.modules.inventory.schemas import ReceiptRequest
 from app.modules.inventory.service import (
-    post_issue,
+    lock_inventory_contexts,
+    post_exact_layer_issue,
     post_receipt,
+    receipt_layer_for_transaction,
     reverse_purchase_return_inventory,
     reverse_sales_return_inventory,
 )
@@ -26,7 +35,12 @@ from app.modules.purchasing.models import (
     PurchaseReceiptLine,
     SupplierInvoice,
 )
-from app.modules.returns.models import InvoiceReturn, InvoiceReturnLine, ReturnRefund
+from app.modules.returns.models import (
+    InvoiceReturn,
+    InvoiceReturnLine,
+    InvoiceReturnSource,
+    ReturnRefund,
+)
 from app.modules.returns.schemas import (
     CreateInvoiceReturnRequest,
     CreateRefundRequest,
@@ -35,7 +49,10 @@ from app.modules.returns.schemas import (
     RefundView,
     ReturnableInvoiceView,
     ReturnableLineView,
+    ReturnableSourceView,
+    ReturnLineRequest,
     ReturnOptionsView,
+    ReturnSourceRequest,
     ReverseRequest,
 )
 from app.modules.sales.models import (
@@ -66,6 +83,46 @@ class ReturnsNotFound(ReturnsError):
 
 class ReturnsConflict(ReturnsError):
     pass
+
+
+class ReturnsBusinessConflict(ReturnsConflict):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+@dataclass(frozen=True)
+class SourceCandidate:
+    source_id: UUID
+    source_kind: Literal["sales_delivery_allocation", "purchase_receipt_layer"]
+    product_id: UUID
+    warehouse_id: UUID
+    warehouse_name_ar: str
+    lot_number: str
+    source_reference: str
+    source_date: datetime
+    stable_label: str
+    cost_basis: Literal["quantity", "weight"]
+    original_quantity: Decimal
+    original_weight_kg: Decimal
+    already_returned_quantity: Decimal
+    already_returned_weight_kg: Decimal
+    remaining_quantity: Decimal
+    remaining_weight_kg: Decimal
+    unit_cost: Decimal
+    root_layer_id: UUID
+    original_allocation_id: UUID | None = None
+    purchase_receipt_line_id: UUID | None = None
+    consumed_layer_id: UUID | None = None
+
+
+@dataclass(frozen=True)
+class PreparedSource:
+    candidate: SourceCandidate
+    quantity: Decimal
+    weight_kg: Decimal
+    total_cost: Decimal
 
 
 def _hash(payload: BaseModel) -> str:
@@ -248,6 +305,278 @@ def _returned_line_amounts(
     return quantity(Decimal(str(row[0] or 0))), quantity(Decimal(str(row[1] or 0)))
 
 
+def _returned_source_amounts(
+    db: Session,
+    *,
+    original_allocation_id: UUID | None = None,
+    consumed_layer_id: UUID | None = None,
+) -> tuple[Decimal, Decimal]:
+    statement = (
+        select(
+            func.coalesce(func.sum(InvoiceReturnSource.quantity), 0),
+            func.coalesce(func.sum(InvoiceReturnSource.weight_kg), 0),
+        )
+        .join(
+            InvoiceReturnLine,
+            InvoiceReturnLine.id == InvoiceReturnSource.invoice_return_line_id,
+        )
+        .join(InvoiceReturn, InvoiceReturn.id == InvoiceReturnLine.invoice_return_id)
+        .where(InvoiceReturn.status == "posted")
+    )
+    if original_allocation_id is not None:
+        statement = statement.where(
+            InvoiceReturnSource.original_inventory_allocation_id
+            == original_allocation_id
+        )
+    elif consumed_layer_id is not None:
+        statement = statement.where(
+            InvoiceReturnSource.consumed_inventory_layer_id == consumed_layer_id
+        )
+    else:
+        raise ValueError("يجب تحديد مصدر لحساب الكمية المرتجعة")
+    row = db.execute(statement).one()
+    return quantity(Decimal(str(row[0] or 0))), quantity(Decimal(str(row[1] or 0)))
+
+
+def _source_view(candidate: SourceCandidate) -> ReturnableSourceView:
+    return ReturnableSourceView(
+        source_id=candidate.source_id,
+        source_kind=candidate.source_kind,
+        lot_number=candidate.lot_number,
+        source_reference=candidate.source_reference,
+        source_date=candidate.source_date,
+        warehouse_id=candidate.warehouse_id,
+        warehouse_name_ar=candidate.warehouse_name_ar,
+        stable_label=candidate.stable_label,
+        original_quantity=candidate.original_quantity,
+        already_returned_quantity=candidate.already_returned_quantity,
+        remaining_returnable_quantity=candidate.remaining_quantity,
+        original_weight_kg=candidate.original_weight_kg,
+        already_returned_weight_kg=candidate.already_returned_weight_kg,
+        remaining_returnable_weight_kg=candidate.remaining_weight_kg,
+    )
+
+
+def _sales_source_candidates(
+    db: Session, *, sales_order_line_id: UUID, lock: bool = False
+) -> list[SourceCandidate]:
+    delivery_rows = list(
+        db.execute(
+            select(SalesDeliveryLine, SalesDelivery)
+            .join(SalesDelivery, SalesDelivery.id == SalesDeliveryLine.sales_delivery_id)
+            .where(
+                SalesDeliveryLine.sales_order_line_id == sales_order_line_id,
+                SalesDelivery.status == "posted",
+            )
+            .order_by(SalesDelivery.posted_at, SalesDelivery.id)
+        )
+    )
+    delivery_by_transaction = {
+        delivery_line.inventory_transaction_id: delivery
+        for delivery_line, delivery in delivery_rows
+    }
+    if not delivery_by_transaction:
+        return []
+    allocation_statement = (
+        select(InventoryAllocation)
+        .where(
+            InventoryAllocation.outbound_transaction_id.in_(
+                list(delivery_by_transaction)
+            )
+        )
+        .order_by(InventoryAllocation.id)
+    )
+    if lock:
+        allocation_statement = allocation_statement.with_for_update()
+    allocations = list(db.scalars(allocation_statement))
+    result: list[SourceCandidate] = []
+    for index, allocation in enumerate(allocations, start=1):
+        layer_statement = select(InventoryLayer).where(
+            InventoryLayer.id == allocation.source_layer_id
+        )
+        if lock:
+            layer_statement = layer_statement.with_for_update()
+        layer = db.scalar(layer_statement)
+        transaction = db.get(InventoryTransaction, allocation.outbound_transaction_id)
+        if layer is None or transaction is None:
+            raise ReturnsConflict("تعذر تحميل مصدر طبقة تسليم المبيعات")
+        warehouse = db.get(Warehouse, layer.warehouse_id)
+        if warehouse is None:
+            raise ReturnsConflict("تعذر تحميل مخزن مصدر التسليم")
+        lot = db.get(InventoryLot, layer.lot_id) if layer.lot_id else None
+        returned_quantity, returned_weight = _returned_source_amounts(
+            db, original_allocation_id=allocation.id
+        )
+        remaining_quantity = quantity(allocation.quantity - returned_quantity)
+        remaining_weight = quantity(allocation.weight_kg - returned_weight)
+        if remaining_quantity < 0 or remaining_weight < 0:
+            raise ReturnsConflict("سجل مرتجع المبيعات تجاوز توزيع التسليم الأصلي")
+        delivery = delivery_by_transaction[allocation.outbound_transaction_id]
+        result.append(
+            SourceCandidate(
+                source_id=allocation.id,
+                source_kind="sales_delivery_allocation",
+                product_id=transaction.product_id,
+                warehouse_id=transaction.warehouse_id,
+                warehouse_name_ar=warehouse.name_ar,
+                lot_number=lot.lot_number if lot else "",
+                source_reference=delivery.delivery_number,
+                source_date=transaction.posted_at,
+                stable_label=f"مصدر التسليم {index}",
+                cost_basis=cast(Literal["quantity", "weight"], transaction.cost_basis),
+                original_quantity=allocation.quantity,
+                original_weight_kg=allocation.weight_kg,
+                already_returned_quantity=returned_quantity,
+                already_returned_weight_kg=returned_weight,
+                remaining_quantity=remaining_quantity,
+                remaining_weight_kg=remaining_weight,
+                unit_cost=allocation.unit_cost,
+                root_layer_id=layer.provenance_root_layer_id or layer.id,
+                original_allocation_id=allocation.id,
+            )
+        )
+    return result
+
+
+def _purchase_receipt_root_layer(
+    db: Session,
+    *,
+    receipt: PurchaseReceipt,
+    receipt_line: PurchaseReceiptLine,
+    lock: bool,
+) -> InventoryLayer:
+    transaction = db.get(InventoryTransaction, receipt_line.inventory_transaction_id)
+    purchase_order_line = db.get(PurchaseOrderLine, receipt_line.purchase_order_line_id)
+    if transaction is None or purchase_order_line is None:
+        raise ReturnsBusinessConflict(
+            "PURCHASE_RETURN_PROVENANCE_UNRESOLVED",
+            "تعذر ربط استلام الشراء التاريخي بحركة المخزون. يحتاج السجل إلى مراجعة إدارية.",
+        )
+    transaction_was_reversed = db.scalar(
+        select(InventoryTransaction.id).where(
+            InventoryTransaction.reversal_of_id == transaction.id
+        )
+    )
+    if (
+        transaction.transaction_type != "receipt"
+        or transaction.reference_type != "purchase_receipt"
+        or transaction.product_id != purchase_order_line.product_id
+        or transaction_was_reversed is not None
+    ):
+        raise ReturnsBusinessConflict(
+            "PURCHASE_RETURN_PROVENANCE_UNRESOLVED",
+            f"حركة المخزون المرتبطة بسند الاستلام {receipt.receipt_number} "
+            "ليست حركة استلام شراء فعالة يمكن إثبات مصدرها. يحتاج السجل إلى مراجعة إدارية.",
+        )
+    statement = select(InventoryLayer).where(
+        InventoryLayer.source_transaction_id == transaction.id
+    )
+    if lock:
+        statement = statement.with_for_update()
+    linked = db.scalar(statement)
+    if linked is not None:
+        return linked
+
+    candidate_statement = select(InventoryLayer).where(
+        InventoryLayer.product_id == transaction.product_id,
+        InventoryLayer.warehouse_id == transaction.warehouse_id,
+        InventoryLayer.source_type == "purchase_receipt",
+        InventoryLayer.source_id == str(receipt.id),
+        InventoryLayer.source_line_id == str(receipt_line.purchase_order_line_id),
+        InventoryLayer.provenance_root_layer_id.is_(None),
+    )
+    if lock:
+        candidate_statement = candidate_statement.with_for_update()
+    candidates = list(db.scalars(candidate_statement))
+    if len(candidates) != 1:
+        raise ReturnsBusinessConflict(
+            "PURCHASE_RETURN_PROVENANCE_UNRESOLVED",
+            f"تعذر إثبات طبقة المخزون الخاصة بسند الاستلام {receipt.receipt_number}. "
+            "يحتاج السجل إلى مراجعة إدارية قبل تنفيذ مرتجع الشراء.",
+        )
+    if lock:
+        candidates[0].source_transaction_id = transaction.id
+        db.flush()
+    return candidates[0]
+
+
+def _purchase_source_candidates(
+    db: Session, *, purchase_order_line_id: UUID, lock: bool = False
+) -> list[SourceCandidate]:
+    receipt_rows = list(
+        db.execute(
+            select(PurchaseReceiptLine, PurchaseReceipt)
+            .join(
+                PurchaseReceipt,
+                PurchaseReceipt.id == PurchaseReceiptLine.purchase_receipt_id,
+            )
+            .where(
+                PurchaseReceiptLine.purchase_order_line_id == purchase_order_line_id,
+                PurchaseReceipt.status == "posted",
+            )
+            .order_by(PurchaseReceipt.posted_at, PurchaseReceipt.id)
+        )
+    )
+    result: list[SourceCandidate] = []
+    sequence = 0
+    for receipt_line, receipt in receipt_rows:
+        root = _purchase_receipt_root_layer(
+            db, receipt=receipt, receipt_line=receipt_line, lock=lock
+        )
+        layer_statement = (
+            select(InventoryLayer)
+            .where(
+                InventoryLayer.product_id == root.product_id,
+                InventoryLayer.warehouse_id == root.warehouse_id,
+                or_(
+                    InventoryLayer.id == root.id,
+                    InventoryLayer.provenance_root_layer_id == root.id,
+                ),
+                or_(
+                    InventoryLayer.quantity_remaining > 0,
+                    InventoryLayer.weight_remaining_kg > 0,
+                ),
+            )
+            .order_by(InventoryLayer.received_at, InventoryLayer.id)
+        )
+        if lock:
+            layer_statement = layer_statement.with_for_update()
+        for layer in db.scalars(layer_statement):
+            sequence += 1
+            warehouse = db.get(Warehouse, layer.warehouse_id)
+            if warehouse is None:
+                raise ReturnsConflict("تعذر تحميل مخزن استلام المشتريات")
+            lot = db.get(InventoryLot, layer.lot_id) if layer.lot_id else None
+            returned_quantity, returned_weight = _returned_source_amounts(
+                db, consumed_layer_id=layer.id
+            )
+            result.append(
+                SourceCandidate(
+                    source_id=layer.id,
+                    source_kind="purchase_receipt_layer",
+                    product_id=layer.product_id,
+                    warehouse_id=layer.warehouse_id,
+                    warehouse_name_ar=warehouse.name_ar,
+                    lot_number=(lot.lot_number if lot else receipt_line.lot_number),
+                    source_reference=receipt.receipt_number,
+                    source_date=layer.received_at,
+                    stable_label=f"{receipt.receipt_number} · مصدر {sequence}",
+                    cost_basis=cast(Literal["quantity", "weight"], layer.cost_basis),
+                    original_quantity=layer.quantity_received,
+                    original_weight_kg=layer.weight_received_kg,
+                    already_returned_quantity=returned_quantity,
+                    already_returned_weight_kg=returned_weight,
+                    remaining_quantity=layer.quantity_remaining,
+                    remaining_weight_kg=layer.weight_remaining_kg,
+                    unit_cost=layer.unit_cost,
+                    root_layer_id=root.id,
+                    purchase_receipt_line_id=receipt_line.id,
+                    consumed_layer_id=layer.id,
+                )
+            )
+    return result
+
+
 def get_returnable_lines(
     db: Session, *, return_type: str, invoice_id: UUID
 ) -> list[ReturnableLineView]:
@@ -257,23 +586,41 @@ def get_returnable_lines(
         if invoice is None or invoice.status != "posted":
             raise ReturnsNotFound("فاتورة المبيعات غير موجودة أو غير معتمدة")
         rows = db.execute(
-            select(SalesOrderLine, SalesDeliveryLine, Product)
+            select(SalesOrderLine, Product)
             .join(Product, Product.id == SalesOrderLine.product_id)
-            .join(
-                SalesDeliveryLine,
-                SalesDeliveryLine.sales_order_line_id == SalesOrderLine.id,
-            )
-            .join(
-                SalesDelivery,
-                (SalesDelivery.id == SalesDeliveryLine.sales_delivery_id)
-                & (SalesDelivery.status == "posted"),
-            )
             .where(SalesOrderLine.sales_order_id == invoice.sales_order_id)
             .order_by(SalesOrderLine.created_at, SalesOrderLine.id)
         )
-        for line, delivery_line, product in rows:
+        for line, product in rows:
+            delivery_totals = db.execute(
+                select(
+                    func.coalesce(func.sum(SalesDeliveryLine.quantity), 0),
+                    func.coalesce(func.sum(SalesDeliveryLine.weight_kg), 0),
+                )
+                .join(
+                    SalesDelivery,
+                    SalesDelivery.id == SalesDeliveryLine.sales_delivery_id,
+                )
+                .where(
+                    SalesDeliveryLine.sales_order_line_id == line.id,
+                    SalesDelivery.status == "posted",
+                )
+            ).one()
+            original_quantity = quantity(Decimal(str(delivery_totals[0] or 0)))
+            original_weight = quantity(Decimal(str(delivery_totals[1] or 0)))
+            if original_quantity <= 0 and original_weight <= 0:
+                continue
             returned_quantity, returned_weight = _returned_line_amounts(
                 db, return_type="sales", source_line_id=line.id
+            )
+            sources = _sales_source_candidates(
+                db, sales_order_line_id=line.id, lock=False
+            )
+            cost_basis: Literal["quantity", "weight"] = (
+                sources[0].cost_basis if sources else "quantity"
+            )
+            commercial_unit_price = (
+                line.price_per_kg if cost_basis == "weight" else line.unit_price
             )
             result.append(
                 ReturnableLineView(
@@ -282,14 +629,15 @@ def get_returnable_lines(
                     product_code=product.code,
                     product_name_ar=product.name_ar,
                     unit=line.unit,
-                    unit_price=line.unit_price,
-                    cost_basis="weight" if delivery_line.weight_kg > 0 else "quantity",
-                    original_quantity=delivery_line.quantity,
+                    unit_price=commercial_unit_price,
+                    cost_basis=cost_basis,
+                    original_quantity=original_quantity,
                     returned_quantity=returned_quantity,
-                    remaining_quantity=quantity(delivery_line.quantity - returned_quantity),
-                    original_weight_kg=delivery_line.weight_kg,
+                    remaining_quantity=quantity(original_quantity - returned_quantity),
+                    original_weight_kg=original_weight,
                     returned_weight_kg=returned_weight,
-                    remaining_weight_kg=quantity(delivery_line.weight_kg - returned_weight),
+                    remaining_weight_kg=quantity(original_weight - returned_weight),
+                    sources=[_source_view(item) for item in sources],
                 )
             )
     elif return_type == "purchase":
@@ -330,6 +678,9 @@ def get_returnable_lines(
                 db, return_type="purchase", source_line_id=line.id
             )
             product = products[line.product_id]
+            sources = _purchase_source_candidates(
+                db, purchase_order_line_id=line.id, lock=False
+            )
             result.append(
                 ReturnableLineView(
                     source_line_id=line.id,
@@ -345,6 +696,7 @@ def get_returnable_lines(
                     original_weight_kg=original_weight,
                     returned_weight_kg=returned_weight,
                     remaining_weight_kg=quantity(original_weight - returned_weight),
+                    sources=[_source_view(item) for item in sources],
                 )
             )
     else:
@@ -379,6 +731,9 @@ def _return_view(db: Session, item: InvoiceReturn) -> InvoiceReturnView:
         id=item.id,
         return_number=item.return_number,
         return_type=cast(Literal["sales", "purchase"], item.return_type),
+        valuation_method=cast(
+            Literal["legacy_aggregate", "source_layer"], item.valuation_method
+        ),
         invoice_id=invoice.id,
         invoice_number=invoice.invoice_number,
         partner_id=partner.id,
@@ -420,6 +775,206 @@ def list_returns(db: Session, *, limit: int = 250) -> list[InvoiceReturnView]:
     return [_return_view(db, item) for item in rows]
 
 
+def _candidate_basis_amount(candidate: SourceCandidate) -> Decimal:
+    return (
+        candidate.remaining_weight_kg
+        if candidate.cost_basis == "weight"
+        else candidate.remaining_quantity
+    )
+
+
+def _requested_source_amounts(
+    candidate: SourceCandidate, *, requested_quantity: Decimal, requested_weight: Decimal
+) -> tuple[Decimal, Decimal]:
+    if candidate.cost_basis == "weight":
+        weight = quantity(requested_weight)
+        if weight <= 0:
+            raise ReturnsConflict("أدخل الوزن المرتجع من مصدر المخزون المحدد")
+        if weight > candidate.remaining_weight_kg:
+            raise ReturnsConflict("الوزن المطلوب يتجاوز المتاح من مصدر المخزون المحدد")
+        if weight == candidate.remaining_weight_kg:
+            return candidate.remaining_quantity, candidate.remaining_weight_kg
+        paired_quantity = (
+            quantity(candidate.remaining_quantity * weight / candidate.remaining_weight_kg)
+            if candidate.remaining_weight_kg > 0
+            else ZERO
+        )
+        return paired_quantity, weight
+
+    returned_quantity = quantity(requested_quantity)
+    if returned_quantity <= 0:
+        raise ReturnsConflict("أدخل الكمية المرتجعة من مصدر المخزون المحدد")
+    if returned_quantity > candidate.remaining_quantity:
+        raise ReturnsConflict("الكمية المطلوبة تتجاوز المتاح من مصدر المخزون المحدد")
+    if returned_quantity == candidate.remaining_quantity:
+        return candidate.remaining_quantity, candidate.remaining_weight_kg
+    paired_weight = (
+        quantity(
+            candidate.remaining_weight_kg
+            * returned_quantity
+            / candidate.remaining_quantity
+        )
+        if candidate.remaining_quantity > 0
+        else ZERO
+    )
+    return returned_quantity, paired_weight
+
+
+def _purchase_attributable_error(
+    *,
+    source: ReturnableLineView,
+    requested: Decimal,
+    available: Decimal,
+    candidates: list[SourceCandidate],
+) -> ReturnsBusinessConflict:
+    unit_label = "كجم" if source.cost_basis == "weight" else source.unit
+    references = "، ".join(
+        dict.fromkeys(item.source_reference for item in candidates if item.source_reference)
+    )
+    reference_text = f" من استلام الشراء {references}" if references else " من نفس استلام الشراء"
+    return ReturnsBusinessConflict(
+        "PURCHASE_RETURN_ATTRIBUTABLE_STOCK_INSUFFICIENT",
+        f"لا يمكن إتمام مرتجع الشراء بهذه الكمية. المطلوب إرجاعه: {requested} {unit_label}، "
+        f"والمتاح فعليًا{reference_text}: {available} {unit_label}. "
+        f"برجاء تقليل المرتجع إلى {available} {unit_label} أو أقل؛ "
+        "ولا يمكن استخدام مخزون غير مرتبط بهذا الاستلام.",
+    )
+
+
+def _prepare_sources_for_line(
+    *,
+    return_type: str,
+    request_line: ReturnLineRequest,
+    source: ReturnableLineView,
+    candidates: list[SourceCandidate],
+) -> list[PreparedSource]:
+    request = request_line
+    available_candidates = [
+        item for item in candidates if _candidate_basis_amount(item) > 0
+    ]
+    target_remaining = (
+        source.remaining_weight_kg
+        if source.cost_basis == "weight"
+        else source.remaining_quantity
+    )
+    available_total = quantity(
+        sum((_candidate_basis_amount(item) for item in available_candidates), ZERO)
+    )
+
+    if request.mode == "full_remaining":
+        requested_total = target_remaining
+        if return_type == "purchase" and requested_total > available_total:
+            raise _purchase_attributable_error(
+                source=source,
+                requested=requested_total,
+                available=available_total,
+                candidates=candidates,
+            )
+        prepared: list[PreparedSource] = []
+        remaining_target = requested_total
+        for candidate in available_candidates:
+            if remaining_target <= 0:
+                break
+            available = _candidate_basis_amount(candidate)
+            take = min(available, remaining_target)
+            returned_quantity, returned_weight = _requested_source_amounts(
+                candidate,
+                requested_quantity=take if candidate.cost_basis == "quantity" else ZERO,
+                requested_weight=take if candidate.cost_basis == "weight" else ZERO,
+            )
+            basis_amount = (
+                returned_weight
+                if candidate.cost_basis == "weight"
+                else returned_quantity
+            )
+            prepared.append(
+                PreparedSource(
+                    candidate=candidate,
+                    quantity=returned_quantity,
+                    weight_kg=returned_weight,
+                    total_cost=quantity(basis_amount * candidate.unit_cost),
+                )
+            )
+            remaining_target = quantity(remaining_target - take)
+        if remaining_target != 0:
+            if return_type == "purchase":
+                raise _purchase_attributable_error(
+                    source=source,
+                    requested=requested_total,
+                    available=available_total,
+                    candidates=candidates,
+                )
+            raise ReturnsConflict("مصادر تسليم المبيعات لا تغطي كامل الكمية المتبقية")
+        return prepared
+
+    candidate_by_id = {item.source_id: item for item in available_candidates}
+    requested_sources = request.sources
+    if not requested_sources:
+        if len(available_candidates) != 1:
+            raise ReturnsConflict(
+                "اختر الدفعة أو مصدر التسليم المطلوب إرجاعه؛ "
+                "لا يمكن اختيار مصدر تلقائيًا عند تعدد المصادر"
+            )
+        requested_sources = [
+            ReturnSourceRequest(
+                source_id=available_candidates[0].source_id,
+                quantity=request.quantity,
+                weight_kg=request.weight_kg,
+            )
+        ]
+
+    requested_total = quantity(
+        sum(
+            (
+                item.weight_kg if source.cost_basis == "weight" else item.quantity
+                for item in requested_sources
+            ),
+            ZERO,
+        )
+    )
+    if return_type == "purchase" and requested_total > available_total:
+        raise _purchase_attributable_error(
+            source=source,
+            requested=requested_total,
+            available=available_total,
+            candidates=candidates,
+    )
+    prepared = []
+    for requested_source in requested_sources:
+        selected_candidate = candidate_by_id.get(requested_source.source_id)
+        if selected_candidate is None:
+            raise ReturnsConflict("مصدر المخزون المحدد لا يخص بند الفاتورة أو لم يعد متاحًا")
+        try:
+            returned_quantity, returned_weight = _requested_source_amounts(
+                selected_candidate,
+                requested_quantity=requested_source.quantity,
+                requested_weight=requested_source.weight_kg,
+            )
+        except ReturnsConflict as exc:
+            if return_type == "purchase":
+                raise _purchase_attributable_error(
+                    source=source,
+                    requested=requested_total,
+                    available=available_total,
+                    candidates=candidates,
+                ) from exc
+            raise
+        basis_amount = (
+            returned_weight
+            if selected_candidate.cost_basis == "weight"
+            else returned_quantity
+        )
+        prepared.append(
+            PreparedSource(
+                candidate=selected_candidate,
+                quantity=returned_quantity,
+                weight_kg=returned_weight,
+                total_cost=quantity(basis_amount * selected_candidate.unit_cost),
+            )
+        )
+    return prepared
+
+
 def create_return(
     db: Session,
     *,
@@ -436,6 +991,7 @@ def create_return(
         if previous.request_hash != digest:
             raise ReturnsConflict("مفتاح منع التكرار مستخدم لمرتجع مختلف")
         return _return_view(db, previous)
+
     order: SalesOrder | PurchaseOrder | None
     if payload.return_type == "sales":
         sales_invoice = db.scalar(
@@ -463,51 +1019,83 @@ def create_return(
         prefix = "purchase_return"
     if order is None:
         raise ReturnsNotFound("أمر الفاتورة غير موجود")
+
+    previous = db.scalar(
+        select(InvoiceReturn).where(InvoiceReturn.idempotency_key == idempotency_key)
+    )
+    if previous is not None:
+        if previous.request_hash != digest:
+            raise ReturnsConflict("مفتاح منع التكرار مستخدم لمرتجع مختلف")
+        return _return_view(db, previous)
+
     available = {
         line.source_line_id: line
         for line in get_returnable_lines(
             db, return_type=payload.return_type, invoice_id=payload.invoice_id
         )
     }
-    prepared: list[tuple[ReturnableLineView, Decimal, Decimal, Decimal]] = []
+    requested_sources = [
+        available.get(request_line.source_line_id) for request_line in payload.lines
+    ]
+    lock_inventory_contexts(
+        db,
+        {
+            (source.product_id, order.warehouse_id)
+            for source in requested_sources
+            if source is not None
+        },
+    )
+    prepared_lines: list[
+        tuple[ReturnableLineView, Decimal, Decimal, Decimal, list[PreparedSource]]
+    ] = []
     total = ZERO
     for request_line in payload.lines:
         source = available.get(request_line.source_line_id)
         if source is None:
             raise ReturnsConflict("أحد بنود المرتجع لا يخص الفاتورة")
-        if payload.return_type == "sales":
-            if request_line.quantity > source.remaining_quantity:
-                raise ReturnsConflict(f"كمية مرتجع {source.product_name_ar} تتجاوز المتاح")
-            returned_quantity = quantity(request_line.quantity)
-            returned_weight = quantity(
-                source.original_weight_kg * returned_quantity / source.original_quantity
-            ) if source.original_weight_kg > 0 else ZERO
-            basis_amount = returned_quantity
-        elif source.cost_basis == "weight":
-            if request_line.weight_kg > source.remaining_weight_kg:
-                raise ReturnsConflict(f"وزن مرتجع {source.product_name_ar} يتجاوز المتاح")
-            returned_weight = quantity(request_line.weight_kg)
-            returned_quantity = quantity(
-                source.original_quantity * returned_weight / source.original_weight_kg
-            ) if source.original_weight_kg > 0 else ZERO
-            basis_amount = returned_weight
-        else:
-            if request_line.quantity > source.remaining_quantity:
-                raise ReturnsConflict(f"كمية مرتجع {source.product_name_ar} تتجاوز المتاح")
-            returned_quantity = quantity(request_line.quantity)
-            returned_weight = quantity(
-                source.original_weight_kg * returned_quantity / source.original_quantity
-            ) if source.original_weight_kg > 0 else ZERO
-            basis_amount = returned_quantity
+        candidates = (
+            _sales_source_candidates(
+                db, sales_order_line_id=source.source_line_id, lock=True
+            )
+            if payload.return_type == "sales"
+            else _purchase_source_candidates(
+                db, purchase_order_line_id=source.source_line_id, lock=True
+            )
+        )
+        prepared_sources = _prepare_sources_for_line(
+            return_type=payload.return_type,
+            request_line=request_line,
+            source=source,
+            candidates=candidates,
+        )
+        returned_quantity = quantity(
+            sum((item.quantity for item in prepared_sources), ZERO)
+        )
+        returned_weight = quantity(
+            sum((item.weight_kg for item in prepared_sources), ZERO)
+        )
+        if returned_quantity > source.remaining_quantity:
+            raise ReturnsConflict(f"كمية مرتجع {source.product_name_ar} تتجاوز المتاح")
+        if returned_weight > source.remaining_weight_kg:
+            raise ReturnsConflict(f"وزن مرتجع {source.product_name_ar} يتجاوز المتاح")
+        basis_amount = (
+            returned_weight if source.cost_basis == "weight" else returned_quantity
+        )
         line_total = money(basis_amount * source.unit_price)
+        if line_total <= 0:
+            raise ReturnsConflict("قيمة بند المرتجع يجب أن تكون أكبر من صفر")
         total += line_total
-        prepared.append((source, returned_quantity, returned_weight, line_total))
+        prepared_lines.append(
+            (source, returned_quantity, returned_weight, line_total, prepared_sources)
+        )
+
     total = money(total)
     if total <= 0:
         raise ReturnsConflict("إجمالي المرتجع يجب أن يكون أكبر من صفر")
     document = InvoiceReturn(
         return_number=allocate_document_number(db, prefix),
         return_type=payload.return_type,
+        valuation_method="source_layer",
         customer_invoice_id=customer_invoice_id,
         supplier_invoice_id=supplier_invoice_id,
         partner_id=partner_id,
@@ -523,82 +1111,117 @@ def create_return(
     )
     db.add(document)
     db.flush()
-    for source, returned_quantity, returned_weight, line_total in prepared:
-        if payload.return_type == "sales":
-            delivery_line = db.scalar(
-                select(SalesDeliveryLine).where(
-                    SalesDeliveryLine.sales_order_line_id == source.source_line_id
+
+    for source, returned_quantity, returned_weight, line_total, prepared_sources in prepared_lines:
+        line = InvoiceReturnLine(
+            invoice_return_id=document.id,
+            sales_order_line_id=(
+                source.source_line_id if payload.return_type == "sales" else None
+            ),
+            purchase_order_line_id=(
+                source.source_line_id if payload.return_type == "purchase" else None
+            ),
+            product_id=source.product_id,
+            inventory_transaction_id=None,
+            quantity=returned_quantity,
+            weight_kg=returned_weight,
+            cost_basis=source.cost_basis,
+            unit=source.unit,
+            unit_price=source.unit_price,
+            line_total=line_total,
+            inventory_cost=quantity(
+                sum((item.total_cost for item in prepared_sources), ZERO)
+            ),
+        )
+        db.add(line)
+        db.flush()
+        for prepared_source in prepared_sources:
+            candidate = prepared_source.candidate
+            child_key = _derived_key(
+                idempotency_key,
+                candidate.source_id,
+                "source-in" if payload.return_type == "sales" else "source-out",
+            )
+            if payload.return_type == "sales":
+                transaction = post_receipt(
+                    db,
+                    payload=ReceiptRequest(
+                        product_id=source.product_id,
+                        warehouse_id=order.warehouse_id,
+                        quantity=prepared_source.quantity,
+                        weight_kg=prepared_source.weight_kg,
+                        cost_basis=candidate.cost_basis,
+                        unit_cost=candidate.unit_cost,
+                        lot_number=candidate.lot_number,
+                        reference_type="sales_return",
+                        reference_id=str(document.id),
+                        reference_line_id=str(line.id),
+                        notes=f"{document.return_number} — {document.reason}",
+                    ),
+                    idempotency_key=child_key,
+                    actor_user_id=actor.user.id,
+                    client=client,
+                    transaction_type="return_in",
+                    provenance_root_layer_id=candidate.root_layer_id,
                 )
-            )
-            if delivery_line is None:
-                raise ReturnsNotFound("حركة تسليم بند المبيعات غير موجودة")
-            basis: Literal["quantity", "weight"] = (
-                "weight" if delivery_line.weight_kg > 0 else "quantity"
-            )
-            original_basis = (
-                delivery_line.weight_kg if basis == "weight" else delivery_line.quantity
-            )
-            unit_cost = quantity(delivery_line.cost_amount / original_basis)
-            transaction = post_receipt(
-                db,
-                payload=ReceiptRequest(
+                return_layer = receipt_layer_for_transaction(db, transaction.id)
+                inventory_allocation_id = None
+                consumed_layer_id = None
+            else:
+                if candidate.consumed_layer_id is None:
+                    raise ReturnsConflict("مصدر طبقة مرتجع الشراء غير مكتمل")
+                transaction, inventory_allocation = post_exact_layer_issue(
+                    db,
+                    source_layer_id=candidate.consumed_layer_id,
                     product_id=source.product_id,
                     warehouse_id=order.warehouse_id,
-                    quantity=returned_quantity,
-                    weight_kg=returned_weight,
-                    cost_basis=basis,
-                    unit_cost=unit_cost,
-                    lot_number=f"RET-{document.return_number}-{source.product_code}",
-                    reference_type="sales_return",
-                    reference_id=str(document.id),
-                    reference_line_id=str(source.source_line_id),
-                    notes=f"{document.return_number} — {document.reason}",
-                ),
-                idempotency_key=_derived_key(idempotency_key, source.source_line_id, "in"),
-                actor_user_id=actor.user.id,
-                client=client,
-                transaction_type="return_in",
-            )
-        else:
-            basis = source.cost_basis
-            amount = returned_weight if basis == "weight" else returned_quantity
-            transaction = post_issue(
-                db,
-                payload=IssueRequest(
-                    product_id=source.product_id,
-                    warehouse_id=order.warehouse_id,
-                    amount=amount,
-                    cost_basis=basis,
+                    requested_quantity=prepared_source.quantity,
+                    requested_weight_kg=prepared_source.weight_kg,
+                    cost_basis=candidate.cost_basis,
+                    idempotency_key=child_key,
                     reference_type="purchase_return",
                     reference_id=str(document.id),
-                    reference_line_id=str(source.source_line_id),
+                    reference_line_id=str(line.id),
                     notes=f"{document.return_number} — {document.reason}",
-                ),
-                idempotency_key=_derived_key(idempotency_key, source.source_line_id, "out"),
-                actor_user_id=actor.user.id,
-                client=client,
-                transaction_type="return_out",
+                    actor_user_id=actor.user.id,
+                    client=client,
+                )
+                return_layer = None
+                inventory_allocation_id = inventory_allocation.id
+                consumed_layer_id = candidate.consumed_layer_id
+            db.add(
+                InvoiceReturnSource(
+                    invoice_return_line_id=line.id,
+                    source_kind=candidate.source_kind,
+                    original_inventory_allocation_id=candidate.original_allocation_id,
+                    purchase_receipt_line_id=candidate.purchase_receipt_line_id,
+                    root_inventory_layer_id=candidate.root_layer_id,
+                    consumed_inventory_layer_id=consumed_layer_id,
+                    return_inventory_transaction_id=transaction.id,
+                    return_inventory_allocation_id=inventory_allocation_id,
+                    return_inventory_layer_id=return_layer.id if return_layer else None,
+                    quantity=prepared_source.quantity,
+                    weight_kg=prepared_source.weight_kg,
+                    cost_basis=candidate.cost_basis,
+                    unit_cost=candidate.unit_cost,
+                    total_cost=prepared_source.total_cost,
+                )
             )
-        db.add(
-            InvoiceReturnLine(
-                invoice_return_id=document.id,
-                sales_order_line_id=(
-                    source.source_line_id if payload.return_type == "sales" else None
-                ),
-                purchase_order_line_id=(
-                    source.source_line_id if payload.return_type == "purchase" else None
-                ),
-                product_id=source.product_id,
-                inventory_transaction_id=transaction.id,
-                quantity=returned_quantity,
-                weight_kg=returned_weight,
-                cost_basis=basis,
-                unit=source.unit,
-                unit_price=source.unit_price,
-                line_total=line_total,
-                inventory_cost=transaction.total_cost,
+        db.flush()
+        source_totals = db.execute(
+            select(
+                func.coalesce(func.sum(InvoiceReturnSource.quantity), 0),
+                func.coalesce(func.sum(InvoiceReturnSource.weight_kg), 0),
+            ).where(InvoiceReturnSource.invoice_return_line_id == line.id)
+        ).one()
+        if (
+            quantity(Decimal(str(source_totals[0] or 0))) != line.quantity
+            or quantity(Decimal(str(source_totals[1] or 0))) != line.weight_kg
+        ):
+            raise ReturnsConflict(
+                "تعذر تسجيل المرتجع: الكمية التجارية لا تطابق مصادر المخزون"
             )
-        )
+
     add_audit(
         db,
         actor_user_id=actor.user.id,
@@ -647,30 +1270,158 @@ def reverse_return(
             .with_for_update()
         )
     )
-    for line in lines:
+    if document.valuation_method == "legacy_aggregate":
+        for line in lines:
+            if line.inventory_transaction_id is None:
+                raise ReturnsConflict("مستند المرتجع التاريخي يفتقد حركة المخزون")
+            if document.return_type == "sales":
+                reversed_transaction = reverse_sales_return_inventory(
+                    db,
+                    transaction_id=line.inventory_transaction_id,
+                    sales_return_id=document.id,
+                    sales_order_line_id=cast(UUID, line.sales_order_line_id),
+                    idempotency_key=_derived_key(idempotency_key, line.id, "reverse"),
+                    actor_user_id=actor.user.id,
+                    client=client,
+                    reason=payload.reason,
+                )
+            else:
+                reversed_transaction = reverse_purchase_return_inventory(
+                    db,
+                    transaction_id=line.inventory_transaction_id,
+                    purchase_return_id=document.id,
+                    purchase_order_line_id=cast(UUID, line.purchase_order_line_id),
+                    idempotency_key=_derived_key(idempotency_key, line.id, "reverse"),
+                    actor_user_id=actor.user.id,
+                    client=client,
+                    reason=payload.reason,
+                )
+            line.reversal_inventory_transaction_id = reversed_transaction.id
+    else:
+        sources_by_line: dict[UUID, list[InvoiceReturnSource]] = {}
+        for line in lines:
+            sources = list(
+                db.scalars(
+                    select(InvoiceReturnSource)
+                    .where(InvoiceReturnSource.invoice_return_line_id == line.id)
+                    .order_by(InvoiceReturnSource.id)
+                    .with_for_update()
+                )
+            )
+            source_quantity = quantity(sum((item.quantity for item in sources), ZERO))
+            source_weight = quantity(sum((item.weight_kg for item in sources), ZERO))
+            if source_quantity != line.quantity or source_weight != line.weight_kg:
+                raise ReturnsConflict(
+                    "تعذر عكس المرتجع: الكمية التجارية لا تطابق مصادر المخزون"
+                )
+            sources_by_line[line.id] = sources
+
+        lock_inventory_contexts(
+            db,
+            {(line.product_id, document.warehouse_id) for line in lines},
+        )
+
         if document.return_type == "sales":
-            reversed_transaction = reverse_sales_return_inventory(
-                db,
-                transaction_id=line.inventory_transaction_id,
-                sales_return_id=document.id,
-                sales_order_line_id=cast(UUID, line.sales_order_line_id),
-                idempotency_key=_derived_key(idempotency_key, line.id, "reverse"),
-                actor_user_id=actor.user.id,
-                client=client,
-                reason=payload.reason,
+            return_layer_ids = sorted(
+                [
+                    source.return_inventory_layer_id
+                    for sources in sources_by_line.values()
+                    for source in sources
+                    if source.return_inventory_layer_id is not None
+                ],
+                key=str,
             )
-        else:
-            reversed_transaction = reverse_purchase_return_inventory(
-                db,
-                transaction_id=line.inventory_transaction_id,
-                purchase_return_id=document.id,
-                purchase_order_line_id=cast(UUID, line.purchase_order_line_id),
-                idempotency_key=_derived_key(idempotency_key, line.id, "reverse"),
-                actor_user_id=actor.user.id,
-                client=client,
-                reason=payload.reason,
-            )
-        line.reversal_inventory_transaction_id = reversed_transaction.id
+            locked_layers = {
+                layer.id: layer
+                for layer in db.scalars(
+                    select(InventoryLayer)
+                    .where(InventoryLayer.id.in_(return_layer_ids))
+                    .order_by(InventoryLayer.id)
+                    .with_for_update()
+                )
+            }
+            for sources in sources_by_line.values():
+                for source in sources:
+                    layer = locked_layers.get(cast(UUID, source.return_inventory_layer_id))
+                    if layer is None:
+                        raise ReturnsConflict("تعذر العثور على طبقة مرتجع المبيعات")
+                    if (
+                        layer.quantity_remaining != source.quantity
+                        or layer.weight_remaining_kg != source.weight_kg
+                    ):
+                        raise ReturnsConflict(
+                            "لا يمكن عكس مرتجع المبيعات بعد استهلاك جزء من مخزونه"
+                        )
+
+        for line in lines:
+            first_reversal_id: UUID | None = None
+            for source in sources_by_line[line.id]:
+                child_key = _derived_key(
+                    idempotency_key, source.id, "source-reverse"
+                )
+                if document.return_type == "sales":
+                    return_layer_id = cast(UUID, source.return_inventory_layer_id)
+                    return_layer = db.get(InventoryLayer, return_layer_id)
+                    if return_layer is None:
+                        raise ReturnsConflict("تعذر العثور على طبقة مرتجع المبيعات")
+                    reversal, _ = post_exact_layer_issue(
+                        db,
+                        source_layer_id=return_layer_id,
+                        product_id=line.product_id,
+                        warehouse_id=document.warehouse_id,
+                        requested_quantity=source.quantity,
+                        requested_weight_kg=source.weight_kg,
+                        cost_basis=source.cost_basis,
+                        idempotency_key=child_key,
+                        reference_type="sales_return_reversal",
+                        reference_id=str(document.id),
+                        reference_line_id=str(line.id),
+                        notes=payload.reason,
+                        actor_user_id=actor.user.id,
+                        client=client,
+                        transaction_type="reversal_out",
+                        reversal_of_id=source.return_inventory_transaction_id,
+                    )
+                    source.reversal_inventory_layer_id = None
+                else:
+                    consumed_layer = db.get(
+                        InventoryLayer, cast(UUID, source.consumed_inventory_layer_id)
+                    )
+                    if consumed_layer is None:
+                        raise ReturnsConflict("تعذر تحميل مصدر مرتجع المشتريات")
+                    lot = (
+                        db.get(InventoryLot, consumed_layer.lot_id)
+                        if consumed_layer.lot_id
+                        else None
+                    )
+                    reversal = post_receipt(
+                        db,
+                        payload=ReceiptRequest(
+                            product_id=line.product_id,
+                            warehouse_id=document.warehouse_id,
+                            quantity=source.quantity,
+                            weight_kg=source.weight_kg,
+                            cost_basis=cast(Literal["quantity", "weight"], source.cost_basis),
+                            unit_cost=source.unit_cost,
+                            lot_number=lot.lot_number if lot else "",
+                            reference_type="purchase_return_reversal",
+                            reference_id=str(document.id),
+                            reference_line_id=str(line.id),
+                            notes=payload.reason,
+                        ),
+                        idempotency_key=child_key,
+                        actor_user_id=actor.user.id,
+                        client=client,
+                        transaction_type="reversal_in",
+                        reversal_of_id=source.return_inventory_transaction_id,
+                        provenance_root_layer_id=source.root_inventory_layer_id,
+                    )
+                    reversal_layer = receipt_layer_for_transaction(db, reversal.id)
+                    source.reversal_inventory_layer_id = reversal_layer.id
+                source.reversal_inventory_transaction_id = reversal.id
+                if first_reversal_id is None:
+                    first_reversal_id = reversal.id
+            line.reversal_inventory_transaction_id = first_reversal_id
     document.status = "reversed"
     document.reversed_by_id = actor.user.id
     document.reversed_at = datetime.now(UTC)

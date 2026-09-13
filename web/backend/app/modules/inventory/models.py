@@ -63,6 +63,12 @@ class InventoryLayer(TimestampMixin, Base):
             "received_at",
             "id",
         ),
+        Index(
+            "ix_inventory_layers_provenance",
+            "provenance_root_layer_id",
+            "product_id",
+            "warehouse_id",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
@@ -74,6 +80,15 @@ class InventoryLayer(TimestampMixin, Base):
     )
     lot_id: Mapped[UUID | None] = mapped_column(
         Uuid, ForeignKey("inventory_lots.id", ondelete="RESTRICT")
+    )
+    source_transaction_id: Mapped[UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("inventory_transactions.id", ondelete="RESTRICT"),
+        unique=True,
+    )
+    provenance_root_layer_id: Mapped[UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("inventory_layers.id", ondelete="RESTRICT"),
     )
     source_type: Mapped[str] = mapped_column(String(60), nullable=False)
     source_id: Mapped[str | None] = mapped_column(String(80))
