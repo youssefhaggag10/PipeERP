@@ -60,9 +60,7 @@ def _translate_error(exc: Exception) -> HTTPException:
         (ManufacturingConflict, InventoryConflict, InsufficientStock, IntegrityError),
     ):
         detail = (
-            str(exc)
-            if not isinstance(exc, IntegrityError)
-            else "تعارضت العملية مع بيانات مسجلة"
+            str(exc) if not isinstance(exc, IntegrityError) else "تعارضت العملية مع بيانات مسجلة"
         )
         return HTTPException(status.HTTP_409_CONFLICT, detail)
     return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
@@ -96,7 +94,7 @@ def recipes(
     return list_recipes(db, include_inactive=include_inactive)
 
 
-@router.get("/recipes/{recipe_id}", response_model=RecipeView)
+@router.get("/recipes/{recipe_id}")
 def recipe(
     recipe_id: UUID,
     request: Request,
@@ -119,9 +117,7 @@ def add_recipe(
 ) -> RecipeView:
     _manage(request, db, principal)
     try:
-        result = create_recipe(
-            db, payload=payload, actor=principal, client=client_context(request)
-        )
+        result = create_recipe(db, payload=payload, actor=principal, client=client_context(request))
         db.commit()
         return result
     except (ManufacturingNotFound, ManufacturingConflict, IntegrityError, ValueError) as exc:
@@ -178,9 +174,7 @@ def order(
         raise _translate_error(exc) from exc
 
 
-@router.post(
-    "/orders", response_model=ManufacturingOrderView, status_code=status.HTTP_201_CREATED
-)
+@router.post("/orders", response_model=ManufacturingOrderView, status_code=status.HTTP_201_CREATED)
 def add_order(
     payload: CreateManufacturingOrderRequest,
     request: Request,
@@ -268,7 +262,6 @@ def replan_preview(
 
 @router.get(
     "/orders/{order_id}/material-availability",
-    response_model=MaterialAvailabilityView,
 )
 def material_availability_preview(
     order_id: UUID,

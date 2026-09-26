@@ -278,6 +278,7 @@ export function ProductsPage() {
             <form className="compact-form" onSubmit={saveProduct}>
               <label>
                 الكود
+                {" "}
                 <input
                   dir="ltr"
                   value={code}
@@ -288,6 +289,7 @@ export function ProductsPage() {
               </label>
               <label>
                 الاسم
+                {" "}
                 <input
                   value={name}
                   onChange={(event) => setName(event.target.value)}
@@ -297,6 +299,7 @@ export function ProductsPage() {
               </label>
               <label>
                 النوع
+                {" "}
                 <select
                   value={productType}
                   onChange={(event) => {
@@ -314,6 +317,7 @@ export function ProductsPage() {
               </label>
               <label>
                 الوحدة
+                {" "}
                 <select
                   value={unitId}
                   onChange={(event) => setUnitId(event.target.value)}
@@ -328,6 +332,7 @@ export function ProductsPage() {
               </label>
               <label>
                 حد التنبيه
+                {" "}
                 <input
                   type="number"
                   min="0"
@@ -339,6 +344,7 @@ export function ProductsPage() {
               </label>
               <label>
                 وزن القطعة القياسي (كجم)
+                {" "}
                 <input
                   type="number"
                   min="0"

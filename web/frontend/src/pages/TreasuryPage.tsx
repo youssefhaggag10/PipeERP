@@ -908,6 +908,7 @@ export function TreasuryPage() {
                 <div className="form-pair">
                   <label>
                     نوع الحركة
+                    {" "}
                     <select
                       value={transactionType}
                       onChange={(event) => {
@@ -941,6 +942,7 @@ export function TreasuryPage() {
                 <div className="form-pair">
                   <label>
                     طريقة الدفع
+                    {" "}
                     <select
                       value={paymentMethod}
                       onChange={(event) =>
@@ -955,6 +957,7 @@ export function TreasuryPage() {
                   </label>
                   <label>
                     حساب الخزينة أو البنك
+                    {" "}
                     <select
                       value={financialAccountId}
                       onChange={(event) =>
@@ -973,6 +976,7 @@ export function TreasuryPage() {
                 </div>
                 <label>
                   المبلغ
+                  {" "}
                   <input
                     type="number"
                     min="0.01"
@@ -1014,6 +1018,7 @@ export function TreasuryPage() {
                 {linkMode === "order" ? (
                   <label>
                     المستند المفتوح
+                    {" "}
                     <select
                       value={orderId}
                       onChange={(event) => setOrderId(event.target.value)}
@@ -1058,6 +1063,7 @@ export function TreasuryPage() {
                 ) : null}
                 <label>
                   ملاحظات
+                  {" "}
                   <input
                     value={paymentNotes}
                     onChange={(event) => setPaymentNotes(event.target.value)}
@@ -1132,6 +1138,7 @@ export function TreasuryPage() {
                   <div className="form-pair">
                     <label>
                       الكود
+                      {" "}
                       <input
                         dir="ltr"
                         value={accountForm.code}
@@ -1146,6 +1153,7 @@ export function TreasuryPage() {
                     </label>
                     <label>
                       الاسم
+                      {" "}
                       <input
                         value={accountForm.name_ar}
                         onChange={(e) =>
@@ -1161,6 +1169,7 @@ export function TreasuryPage() {
                   <div className="form-pair">
                     <label>
                       النوع
+                      {" "}
                       <select
                         value={accountForm.account_type}
                         onChange={(e) =>
@@ -1179,6 +1188,7 @@ export function TreasuryPage() {
                     {!editingAccount ? (
                       <label>
                         الرصيد الافتتاحي
+                        {" "}
                         <input
                           type="number"
                           step="0.01"
@@ -1223,6 +1233,7 @@ export function TreasuryPage() {
                   ) : null}
                   <label>
                     ملاحظات
+                    {" "}
                     <input
                       value={accountForm.notes}
                       onChange={(e) =>
@@ -1264,6 +1275,7 @@ export function TreasuryPage() {
                 <form className="compact-form" onSubmit={postAdjustment}>
                   <label>
                     الحساب
+                    {" "}
                     <select
                       value={adjustmentForm.financial_account_id}
                       onChange={(e) =>
@@ -1284,6 +1296,7 @@ export function TreasuryPage() {
                   </label>
                   <label>
                     الرصيد الفعلي المستهدف
+                    {" "}
                     <input
                       type="number"
                       step="0.01"
@@ -1299,6 +1312,7 @@ export function TreasuryPage() {
                   </label>
                   <label>
                     سبب التسوية
+                    {" "}
                     <input
                       value={adjustmentForm.notes}
                       onChange={(e) =>
@@ -1416,6 +1430,7 @@ export function TreasuryPage() {
               >
                 <label>
                   الطرف
+                  {" "}
                   <select
                     value={statementPartnerId}
                     onChange={(e) => setStatementPartnerId(e.target.value)}
@@ -1429,6 +1444,7 @@ export function TreasuryPage() {
                 </label>
                 <label>
                   نوع كشف الحساب
+                  {" "}
                   <select
                     value={statementDetailed ? "detailed" : "summary"}
                     onChange={(event) => {
@@ -1443,6 +1459,7 @@ export function TreasuryPage() {
                 <div className="form-pair">
                   <label>
                     من
+                    {" "}
                     <input
                       type="date"
                       value={statementFrom}
@@ -1451,6 +1468,7 @@ export function TreasuryPage() {
                   </label>
                   <label>
                     إلى
+                    {" "}
                     <input
                       type="date"
                       value={statementTo}
@@ -1541,6 +1559,7 @@ export function TreasuryPage() {
                   <form className="compact-form" onSubmit={postOpening}>
                     <label>
                       الطرف
+                      {" "}
                       <select
                         value={openingForm.partner_id}
                         onChange={(e) =>
@@ -1560,6 +1579,7 @@ export function TreasuryPage() {
                     <div className="form-pair">
                       <label>
                         الطبيعة
+                        {" "}
                         <select
                           value={openingForm.nature}
                           onChange={(e) =>
@@ -1575,6 +1595,7 @@ export function TreasuryPage() {
                       </label>
                       <label>
                         المبلغ
+                        {" "}
                         <input
                           type="number"
                           min="0.01"
@@ -1592,6 +1613,7 @@ export function TreasuryPage() {
                     </div>
                     <label>
                       التاريخ
+                      {" "}
                       <input
                         type="date"
                         value={openingForm.entry_date}
@@ -1605,6 +1627,7 @@ export function TreasuryPage() {
                     </label>
                     <label>
                       ملاحظات
+                      {" "}
                       <input
                         value={openingForm.notes}
                         onChange={(e) =>

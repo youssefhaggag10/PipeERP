@@ -57,6 +57,7 @@ WeightCardStatus = Literal["draft", "posted", "cancelled"]
 DeliveryStatus = Literal["posted", "reversed"]
 OrderStatus = Literal["draft", "delivered", "reversed", "cancelled"]
 QuotationStatus = Literal["draft", "sent", "accepted", "rejected", "cancelled"]
+SALES_ORDER_NOT_FOUND = "أمر البيع غير موجود"
 
 
 class SalesError(Exception):
@@ -292,7 +293,7 @@ def list_sales_orders(db: Session, *, limit: int = 100) -> list[SalesOrderView]:
 def get_sales_order(db: Session, order_id: UUID) -> SalesOrderView:
     order = db.get(SalesOrder, order_id)
     if order is None:
-        raise SalesNotFound("أمر البيع غير موجود")
+        raise SalesNotFound(SALES_ORDER_NOT_FOUND)
     return _order_view(db, order)
 
 
@@ -518,7 +519,7 @@ def deliver_sales_order(
 ) -> SalesOrderView:
     order = db.scalar(select(SalesOrder).where(SalesOrder.id == order_id).with_for_update())
     if order is None:
-        raise SalesNotFound("أمر البيع غير موجود")
+        raise SalesNotFound(SALES_ORDER_NOT_FOUND)
     request_hash = _delivery_hash(order_id, version)
     previous = db.scalar(
         select(SalesDelivery).where(SalesDelivery.idempotency_key == idempotency_key)
@@ -681,7 +682,7 @@ def cancel_sales_order(
 ) -> SalesOrderView:
     order = db.scalar(select(SalesOrder).where(SalesOrder.id == order_id).with_for_update())
     if order is None:
-        raise SalesNotFound("أمر البيع غير موجود")
+        raise SalesNotFound(SALES_ORDER_NOT_FOUND)
     if order.status != "draft":
         raise SalesConflict("يمكن إلغاء أمر بيع مسودة فقط")
     if order.version != version:

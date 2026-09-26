@@ -85,7 +85,7 @@ def options(
     return return_options(db)
 
 
-@router.get("/invoices", response_model=list[ReturnableInvoiceView])
+@router.get("/invoices")
 def invoices(
     return_type: Annotated[str, Query(pattern="^(sales|purchase)$")],
     request: Request,
@@ -115,7 +115,7 @@ def invoice_lines(
         raise _translate(exc) from exc
 
 
-@router.get("/documents", response_model=list[InvoiceReturnView])
+@router.get("/documents")
 def documents(
     request: Request,
     principal: CurrentPrincipal,

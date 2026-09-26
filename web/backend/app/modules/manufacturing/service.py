@@ -2,7 +2,7 @@ import unicodedata
 from datetime import UTC, datetime
 from decimal import Decimal
 from hashlib import sha256
-from typing import cast
+from typing import Literal, cast
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -68,6 +68,8 @@ from app.modules.manufacturing.schemas import (
 )
 from app.modules.master_data.models import Product, Warehouse
 from app.modules.master_data.service import allocate_document_number, normalize_code
+
+MANUFACTURING_ORDER_NOT_FOUND = "أمر التصنيع غير موجود"
 
 
 class ManufacturingError(Exception):
@@ -176,20 +178,24 @@ def _completion_view(db: Session, completion: ManufacturingCompletion) -> Comple
             .order_by(ManufacturingMixAdjustment.created_at, ManufacturingMixAdjustment.id)
         )
     )
-    quantities = list(
-        db.scalars(
-            select(ManufacturingMixAdjustmentMaterial)
-            .where(
-                ManufacturingMixAdjustmentMaterial.adjustment_id.in_(
-                    {item.id for item in adjustments}
+    quantities = (
+        list(
+            db.scalars(
+                select(ManufacturingMixAdjustmentMaterial)
+                .where(
+                    ManufacturingMixAdjustmentMaterial.adjustment_id.in_(
+                        {item.id for item in adjustments}
+                    )
+                )
+                .order_by(
+                    ManufacturingMixAdjustmentMaterial.created_at,
+                    ManufacturingMixAdjustmentMaterial.id,
                 )
             )
-            .order_by(
-                ManufacturingMixAdjustmentMaterial.created_at,
-                ManufacturingMixAdjustmentMaterial.id,
-            )
         )
-    ) if adjustments else []
+        if adjustments
+        else []
+    )
     quantities_by_adjustment: dict[UUID, list[ManufacturingMixAdjustmentMaterial]] = {}
     for item in quantities:
         quantities_by_adjustment.setdefault(item.adjustment_id, []).append(item)
@@ -855,7 +861,7 @@ def update_order(
         select(ManufacturingOrder).where(ManufacturingOrder.id == order_id).with_for_update()
     )
     if order is None:
-        raise ManufacturingNotFound("أمر التصنيع غير موجود")
+        raise ManufacturingNotFound(MANUFACTURING_ORDER_NOT_FOUND)
     if order.status != "draft":
         raise ManufacturingConflict("يمكن تعديل أمر تصنيع في حالة المسودة فقط")
     if order.version != payload.version:
@@ -892,7 +898,7 @@ def delete_draft_order(
         select(ManufacturingOrder).where(ManufacturingOrder.id == order_id).with_for_update()
     )
     if order is None:
-        raise ManufacturingNotFound("أمر التصنيع غير موجود")
+        raise ManufacturingNotFound(MANUFACTURING_ORDER_NOT_FOUND)
     if order.status != "draft":
         raise ManufacturingConflict("يمكن حذف أمر تصنيع في حالة المسودة فقط")
     if order.version != version:
@@ -927,17 +933,12 @@ def _stock_aware_plan(
         material_statement = material_statement.with_for_update()
     materials = list(db.scalars(material_statement))
     base_weight = sum(
-        (
-            item.quantity_per_batch
-            for item in materials
-            if item.component_kind == "material"
-        ),
+        (item.quantity_per_batch for item in materials if item.component_kind == "material"),
         Decimal("0"),
     )
     scraps = [item for item in materials if item.component_kind == "scrap"]
     available = [
-        _available_quantity(db, item.product_id, order.warehouse_id, lock=lock)
-        for item in scraps
+        _available_quantity(db, item.product_id, order.warehouse_id, lock=lock) for item in scraps
     ]
     plan = replan_for_available_scrap(
         target_weight_kg=order.target_weight_kg,
@@ -961,7 +962,7 @@ def _stock_aware_plan(
 def preview_replan(db: Session, order_id: UUID) -> ReplanView:
     order = db.get(ManufacturingOrder, order_id)
     if order is None:
-        raise ManufacturingNotFound("أمر التصنيع غير موجود")
+        raise ManufacturingNotFound(MANUFACTURING_ORDER_NOT_FOUND)
     if order.status != "draft":
         raise ManufacturingConflict("يمكن إعادة تخطيط أمر التصنيع وهو مسودة فقط")
     return _stock_aware_plan(db, order=order, lock=False)
@@ -995,7 +996,7 @@ def _material_availability(
                 product_id=material.product_id,
                 product_code=product.code,
                 product_name_ar=product.name_ar,
-                component_kind=material.component_kind,
+                component_kind=cast(Literal["material", "scrap"], material.component_kind),
                 required_quantity=required,
                 available_quantity=available,
                 issue_quantity=min(required, available) if is_scrap else required,
@@ -1009,7 +1010,7 @@ def _material_availability(
 def preview_material_availability(db: Session, order_id: UUID) -> MaterialAvailabilityView:
     order = db.get(ManufacturingOrder, order_id)
     if order is None:
-        raise ManufacturingNotFound("أمر التصنيع غير موجود")
+        raise ManufacturingNotFound(MANUFACTURING_ORDER_NOT_FOUND)
     if order.status != "draft":
         raise ManufacturingConflict("يمكن فحص خامات أمر تصنيع في حالة المسودة فقط")
     plan = _stock_aware_plan(db, order=order, lock=False)
@@ -1037,12 +1038,10 @@ def apply_replan(
     client: ClientContext,
 ) -> ManufacturingOrderView:
     order = db.scalar(
-        select(ManufacturingOrder)
-        .where(ManufacturingOrder.id == order_id)
-        .with_for_update()
+        select(ManufacturingOrder).where(ManufacturingOrder.id == order_id).with_for_update()
     )
     if order is None:
-        raise ManufacturingNotFound("أمر التصنيع غير موجود")
+        raise ManufacturingNotFound(MANUFACTURING_ORDER_NOT_FOUND)
     if order.status != "draft":
         raise ManufacturingConflict("يمكن إعادة تخطيط أمر التصنيع وهو مسودة فقط")
     if order.version != payload.version:
@@ -1056,9 +1055,7 @@ def apply_replan(
         )
     )
     for item in materials:
-        item.planned_quantity = quantity(
-            item.quantity_per_batch * Decimal(result.new_batches)
-        )
+        item.planned_quantity = quantity(item.quantity_per_batch * Decimal(result.new_batches))
     old_batches = order.planned_batches
     order.planned_batches = result.new_batches
     order.planned_input_weight_kg = result.planned_input_weight_kg
@@ -1164,7 +1161,7 @@ def start_order(
         select(ManufacturingOrder).where(ManufacturingOrder.id == order_id).with_for_update()
     )
     if order is None:
-        raise ManufacturingNotFound("أمر التصنيع غير موجود")
+        raise ManufacturingNotFound(MANUFACTURING_ORDER_NOT_FOUND)
     if order.start_idempotency_key == idempotency_key:
         if order.start_request_hash != digest:
             raise ManufacturingConflict("مفتاح منع التكرار مستخدم لطلب بدء مختلف")
@@ -1297,7 +1294,7 @@ def complete_order(
         select(ManufacturingOrder).where(ManufacturingOrder.id == order_id).with_for_update()
     )
     if order is None:
-        raise ManufacturingNotFound("أمر التصنيع غير موجود")
+        raise ManufacturingNotFound(MANUFACTURING_ORDER_NOT_FOUND)
     if order.completion_idempotency_key == idempotency_key:
         if order.completion_request_hash != digest:
             raise ManufacturingConflict("مفتاح منع التكرار مستخدم لإكمال مختلف")
@@ -1537,7 +1534,7 @@ def cancel_order(
         select(ManufacturingOrder).where(ManufacturingOrder.id == order_id).with_for_update()
     )
     if order is None:
-        raise ManufacturingNotFound("أمر التصنيع غير موجود")
+        raise ManufacturingNotFound(MANUFACTURING_ORDER_NOT_FOUND)
     if order.cancellation_idempotency_key == idempotency_key:
         return _order_view(db, order)
     if order.status != "in_progress":
@@ -1617,7 +1614,7 @@ def list_orders(db: Session, *, limit: int = 200) -> list[ManufacturingOrderView
 def get_order(db: Session, order_id: UUID) -> ManufacturingOrderView:
     order = db.get(ManufacturingOrder, order_id)
     if order is None:
-        raise ManufacturingNotFound("أمر التصنيع غير موجود")
+        raise ManufacturingNotFound(MANUFACTURING_ORDER_NOT_FOUND)
     return _order_view(db, order)
 
 

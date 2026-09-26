@@ -440,12 +440,8 @@ def list_open_invoices(
         )
         for invoice in invoices:
             paid = _allocated_to_customer_invoice(db, invoice.id)
-            returned = _invoice_returned_total(
-                db, invoice_kind="sales", invoice_id=invoice.id
-            )
-            refunded = _invoice_refunded_total(
-                db, invoice_kind="sales", invoice_id=invoice.id
-            )
+            returned = _invoice_returned_total(db, invoice_kind="sales", invoice_id=invoice.id)
+            refunded = _invoice_refunded_total(db, invoice_kind="sales", invoice_id=invoice.id)
             net_total = money(max(ZERO, invoice.total - returned))
             effective_paid = money(max(ZERO, paid - refunded))
             remaining = money(net_total - effective_paid)
@@ -471,12 +467,8 @@ def list_open_invoices(
         )
         for invoice in invoices:
             paid = _allocated_to_supplier_invoice(db, invoice.id)
-            returned = _invoice_returned_total(
-                db, invoice_kind="purchase", invoice_id=invoice.id
-            )
-            refunded = _invoice_refunded_total(
-                db, invoice_kind="purchase", invoice_id=invoice.id
-            )
+            returned = _invoice_returned_total(db, invoice_kind="purchase", invoice_id=invoice.id)
+            refunded = _invoice_refunded_total(db, invoice_kind="purchase", invoice_id=invoice.id)
             net_total = money(max(ZERO, invoice.total - returned))
             effective_paid = money(max(ZERO, paid - refunded))
             remaining = money(net_total - effective_paid)
@@ -550,18 +542,14 @@ def list_open_orders(
                     max(
                         ZERO,
                         order.total
-                        - _invoice_returned_total(
-                            db, invoice_kind="sales", invoice_id=invoice.id
-                        ),
+                        - _invoice_returned_total(db, invoice_kind="sales", invoice_id=invoice.id),
                     )
                 )
                 paid = money(
                     max(
                         ZERO,
                         paid
-                        - _invoice_refunded_total(
-                            db, invoice_kind="sales", invoice_id=invoice.id
-                        ),
+                        - _invoice_refunded_total(db, invoice_kind="sales", invoice_id=invoice.id),
                     )
                 )
         else:
@@ -660,12 +648,8 @@ def _lock_payment_invoices(
             else _allocated_to_supplier_invoice(db, invoice.id)
         )
         invoice_kind = "sales" if isinstance(invoice, CustomerInvoice) else "purchase"
-        returned = _invoice_returned_total(
-            db, invoice_kind=invoice_kind, invoice_id=invoice.id
-        )
-        refunded = _invoice_refunded_total(
-            db, invoice_kind=invoice_kind, invoice_id=invoice.id
-        )
+        returned = _invoice_returned_total(db, invoice_kind=invoice_kind, invoice_id=invoice.id)
+        refunded = _invoice_refunded_total(db, invoice_kind=invoice_kind, invoice_id=invoice.id)
         net_total = money(max(ZERO, invoice.total - returned))
         effective_paid = money(max(ZERO, paid - refunded))
         if money(allocation.amount) > money(net_total - effective_paid):
@@ -830,6 +814,30 @@ def post_payment(
     )
     only_invoice = invoice_map[payload.allocations[0].invoice_id] if len(invoice_map) == 1 else None
     fully_linked = only_invoice is not None and allocated_total == amount
+
+    reference_type = payload.reference_type if payload.reference_id is not None else None
+    if payload.reference_id is None and fully_linked:
+        reference_type = "sale" if is_customer else "purchase"
+
+    reference_id = payload.reference_id
+    if reference_id is None:
+        if isinstance(only_invoice, CustomerInvoice):
+            reference_id = only_invoice.sales_order_id
+        elif isinstance(only_invoice, SupplierInvoice):
+            reference_id = only_invoice.purchase_order_id
+
+    customer_invoice_id = None
+    if isinstance(order_invoice, CustomerInvoice):
+        customer_invoice_id = order_invoice.id
+    elif isinstance(only_invoice, CustomerInvoice) and fully_linked:
+        customer_invoice_id = only_invoice.id
+
+    supplier_invoice_id = None
+    if isinstance(order_invoice, SupplierInvoice):
+        supplier_invoice_id = order_invoice.id
+    elif isinstance(only_invoice, SupplierInvoice) and fully_linked:
+        supplier_invoice_id = only_invoice.id
+
     payment = PaymentTransaction(
         transaction_number=allocate_document_number(
             db, "customer_receipt" if is_customer else "supplier_payment"
@@ -839,36 +847,10 @@ def post_payment(
         financial_account_id=account.id,
         amount=amount,
         payment_method=payload.payment_method,
-        reference_type=(
-            payload.reference_type
-            if payload.reference_id is not None
-            else ("sale" if is_customer else "purchase")
-            if fully_linked
-            else None
-        ),
-        reference_id=(
-            payload.reference_id
-            if payload.reference_id is not None
-            else only_invoice.sales_order_id
-            if isinstance(only_invoice, CustomerInvoice)
-            else only_invoice.purchase_order_id
-            if isinstance(only_invoice, SupplierInvoice)
-            else None
-        ),
-        customer_invoice_id=(
-            order_invoice.id
-            if isinstance(order_invoice, CustomerInvoice)
-            else only_invoice.id
-            if isinstance(only_invoice, CustomerInvoice) and fully_linked
-            else None
-        ),
-        supplier_invoice_id=(
-            order_invoice.id
-            if isinstance(order_invoice, SupplierInvoice)
-            else only_invoice.id
-            if isinstance(only_invoice, SupplierInvoice) and fully_linked
-            else None
-        ),
+        reference_type=reference_type,
+        reference_id=reference_id,
+        customer_invoice_id=customer_invoice_id,
+        supplier_invoice_id=supplier_invoice_id,
         idempotency_key=idempotency_key,
         request_hash=request_hash,
         status="posted",
@@ -1558,8 +1540,7 @@ def list_partner_balances(db: Session, *, partner_type: str) -> list[PartnerBala
                 advances=advances,
                 adjustments_total=adjustments,
                 balance=money(
-                    opening + invoices_total + adjustments - paid_total - advances
-                    + refunds_total
+                    opening + invoices_total + adjustments - paid_total - advances + refunds_total
                 ),
             )
         )

@@ -555,6 +555,8 @@ def update_warehouse(
     warehouse = db.get(Warehouse, warehouse_id)
     if warehouse is None:
         raise MasterDataNotFound("المخزن غير موجود")
+    if warehouse.version != payload.version:
+        raise MasterDataConflict("تم تعديل المخزن بواسطة مستخدم آخر؛ حدّث الصفحة")
     raise MasterDataConflict("مخزن المصنع ثابت ولا يقبل التعديل")
 
 

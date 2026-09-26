@@ -34,6 +34,7 @@ from app.modules.purchasing.schemas import (
     PurchaseOptionsView,
     PurchaseOrderLineView,
     PurchaseOrderView,
+    PurchaseReceiptLineRequest,
     PurchaseReceiptLineView,
     PurchaseReceiptView,
     ReceivePurchaseOrderRequest,
@@ -374,6 +375,97 @@ def list_purchase_receipts(db: Session, *, order_id: UUID) -> list[PurchaseRecei
     return [_receipt_view(db, receipt) for receipt in receipts]
 
 
+def _post_purchase_receipt_line(
+    db: Session,
+    *,
+    order: PurchaseOrder,
+    receipt: PurchaseReceipt,
+    order_line: PurchaseOrderLine,
+    received: PurchaseReceiptLineRequest,
+    notes: str,
+    idempotency_key: str,
+    actor: Principal,
+    client: ClientContext,
+) -> None:
+    product = db.get(Product, order_line.product_id)
+    if product is None:
+        raise PurchasingNotFound("الصنف المرتبط ببند الشراء غير موجود")
+
+    gross_quantity = quantity(received.gross_quantity)
+    gross_weight = quantity(received.gross_weight_kg)
+    loss_quantity = quantity(received.loss_quantity)
+    loss_weight = quantity(received.loss_weight_kg)
+    uses_quantity = order_line.cost_basis == "quantity"
+    gross_basis = gross_quantity if uses_quantity else gross_weight
+    loss_basis = loss_quantity if uses_quantity else loss_weight
+    ordered_basis = order_line.ordered_quantity if uses_quantity else order_line.ordered_weight_kg
+    previous_basis = (
+        order_line.received_quantity if uses_quantity else order_line.received_weight_kg
+    )
+    validate_partial_receipt(
+        ordered_amount=ordered_basis,
+        previously_received_amount=previous_basis,
+        current_received_amount=gross_basis,
+    )
+    if gross_quantity + order_line.received_quantity > order_line.ordered_quantity:
+        raise PurchasingConflict("العدد المستلم يتجاوز العدد المتبقي في أمر الشراء")
+    if gross_weight + order_line.received_weight_kg > order_line.ordered_weight_kg:
+        raise PurchasingConflict("الوزن المستلم يتجاوز الوزن المتبقي في أمر الشراء")
+
+    costing = calculate_receipt_cost(
+        gross_amount=gross_basis,
+        loss_amount=loss_basis,
+        unit_price=order_line.unit_price,
+        additional_unit_cost=order_line.additional_unit_cost,
+    )
+    net_quantity = quantity(gross_quantity - loss_quantity)
+    net_weight = quantity(gross_weight - loss_weight)
+    net_basis = net_quantity if uses_quantity else net_weight
+    if net_basis <= 0:
+        raise PurchasingConflict("صافي الاستلام يجب أن يكون أكبر من صفر")
+
+    lot_number = received.lot_number.strip() or f"{receipt.receipt_number}-{product.code}"
+    child_key = sha256(f"purchase:{idempotency_key}:{order_line.id}".encode()).hexdigest()
+    transaction = post_receipt(
+        db,
+        payload=ReceiptRequest(
+            product_id=order_line.product_id,
+            warehouse_id=order.warehouse_id,
+            quantity=net_quantity,
+            weight_kg=net_weight,
+            cost_basis=order_line.cost_basis,  # type: ignore[arg-type]
+            unit_cost=costing.inventory_unit_cost,
+            lot_number=lot_number,
+            reference_type="purchase_receipt",
+            reference_id=str(receipt.id),
+            reference_line_id=str(order_line.id),
+            notes=notes,
+        ),
+        idempotency_key=child_key,
+        actor_user_id=actor.user.id,
+        client=client,
+    )
+    db.add(
+        PurchaseReceiptLine(
+            purchase_receipt_id=receipt.id,
+            purchase_order_line_id=order_line.id,
+            inventory_transaction_id=transaction.id,
+            lot_number=lot_number,
+            gross_quantity=gross_quantity,
+            gross_weight_kg=gross_weight,
+            loss_quantity=loss_quantity,
+            loss_weight_kg=loss_weight,
+            net_quantity=net_quantity,
+            net_weight_kg=net_weight,
+            capitalized_cost=costing.capitalized_cost,
+            inventory_unit_cost=costing.inventory_unit_cost,
+        )
+    )
+    order_line.received_quantity = quantity(order_line.received_quantity + gross_quantity)
+    order_line.received_weight_kg = quantity(order_line.received_weight_kg + gross_weight)
+    order_line.version += 1
+
+
 def post_purchase_receipt(
     db: Session,
     *,
@@ -421,83 +513,17 @@ def post_purchase_receipt(
     db.flush()
 
     for received in payload.lines:
-        line = order_lines[received.purchase_order_line_id]
-        product = db.get(Product, line.product_id)
-        if product is None:
-            raise PurchasingNotFound("الصنف المرتبط ببند الشراء غير موجود")
-        gross_quantity = quantity(received.gross_quantity)
-        gross_weight = quantity(received.gross_weight_kg)
-        loss_quantity = quantity(received.loss_quantity)
-        loss_weight = quantity(received.loss_weight_kg)
-        gross_basis = gross_quantity if line.cost_basis == "quantity" else gross_weight
-        loss_basis = loss_quantity if line.cost_basis == "quantity" else loss_weight
-        ordered_basis = (
-            line.ordered_quantity if line.cost_basis == "quantity" else line.ordered_weight_kg
-        )
-        previous_basis = (
-            line.received_quantity if line.cost_basis == "quantity" else line.received_weight_kg
-        )
-        validate_partial_receipt(
-            ordered_amount=ordered_basis,
-            previously_received_amount=previous_basis,
-            current_received_amount=gross_basis,
-        )
-        if gross_quantity + line.received_quantity > line.ordered_quantity:
-            raise PurchasingConflict("العدد المستلم يتجاوز العدد المتبقي في أمر الشراء")
-        if gross_weight + line.received_weight_kg > line.ordered_weight_kg:
-            raise PurchasingConflict("الوزن المستلم يتجاوز الوزن المتبقي في أمر الشراء")
-        costing = calculate_receipt_cost(
-            gross_amount=gross_basis,
-            loss_amount=loss_basis,
-            unit_price=line.unit_price,
-            additional_unit_cost=line.additional_unit_cost,
-        )
-        net_quantity = quantity(gross_quantity - loss_quantity)
-        net_weight = quantity(gross_weight - loss_weight)
-        if (line.cost_basis == "quantity" and net_quantity <= 0) or (
-            line.cost_basis == "weight" and net_weight <= 0
-        ):
-            raise PurchasingConflict("صافي الاستلام يجب أن يكون أكبر من صفر")
-        lot_number = received.lot_number.strip() or f"{receipt.receipt_number}-{product.code}"
-        child_key = sha256(f"purchase:{idempotency_key}:{line.id}".encode()).hexdigest()
-        transaction = post_receipt(
+        _post_purchase_receipt_line(
             db,
-            payload=ReceiptRequest(
-                product_id=line.product_id,
-                warehouse_id=order.warehouse_id,
-                quantity=net_quantity,
-                weight_kg=net_weight,
-                cost_basis=line.cost_basis,  # type: ignore[arg-type]
-                unit_cost=costing.inventory_unit_cost,
-                lot_number=lot_number,
-                reference_type="purchase_receipt",
-                reference_id=str(receipt.id),
-                reference_line_id=str(line.id),
-                notes=payload.notes,
-            ),
-            idempotency_key=child_key,
-            actor_user_id=actor.user.id,
+            order=order,
+            receipt=receipt,
+            order_line=order_lines[received.purchase_order_line_id],
+            received=received,
+            notes=payload.notes,
+            idempotency_key=idempotency_key,
+            actor=actor,
             client=client,
         )
-        db.add(
-            PurchaseReceiptLine(
-                purchase_receipt_id=receipt.id,
-                purchase_order_line_id=line.id,
-                inventory_transaction_id=transaction.id,
-                lot_number=lot_number,
-                gross_quantity=gross_quantity,
-                gross_weight_kg=gross_weight,
-                loss_quantity=loss_quantity,
-                loss_weight_kg=loss_weight,
-                net_quantity=net_quantity,
-                net_weight_kg=net_weight,
-                capitalized_cost=costing.capitalized_cost,
-                inventory_unit_cost=costing.inventory_unit_cost,
-            )
-        )
-        line.received_quantity = quantity(line.received_quantity + gross_quantity)
-        line.received_weight_kg = quantity(line.received_weight_kg + gross_weight)
-        line.version += 1
 
     all_received = all(
         (line.received_quantity >= line.ordered_quantity)
@@ -622,9 +648,7 @@ def receive_purchase_order(
                 "gross_quantity": remaining_quantity,
                 "gross_weight_kg": remaining_weight,
                 "loss_quantity": (
-                    line.purchase_loss_quantity
-                    if line.received_quantity == 0
-                    else Decimal("0")
+                    line.purchase_loss_quantity if line.received_quantity == 0 else Decimal("0")
                 ),
                 "loss_weight_kg": Decimal("0"),
                 "lot_number": line.lot_number,
@@ -696,13 +720,17 @@ def reverse_supplier_invoice(
         )
     )
     payment_ids = {allocation.payment_transaction_id for allocation in allocations}
-    payments = list(
-        db.scalars(
-            select(PaymentTransaction)
-            .where(PaymentTransaction.id.in_(payment_ids))
-            .with_for_update()
+    payments = (
+        list(
+            db.scalars(
+                select(PaymentTransaction)
+                .where(PaymentTransaction.id.in_(payment_ids))
+                .with_for_update()
+            )
         )
-    ) if payment_ids else []
+        if payment_ids
+        else []
+    )
     for allocation in allocations:
         db.delete(allocation)
     for payment in payments:

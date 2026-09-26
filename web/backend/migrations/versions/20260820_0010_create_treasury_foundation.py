@@ -16,6 +16,8 @@ down_revision: str | None = "20260820_0009"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+PARTNERS_ID = "partners.id"
+
 
 def _timestamps() -> list[sa.Column]:
     return [
@@ -121,7 +123,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["financial_account_id"], ["financial_accounts.id"], ondelete="RESTRICT"
         ),
-        sa.ForeignKeyConstraint(["partner_id"], ["partners.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["partner_id"], [PARTNERS_ID], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["posted_by_id"], ["users.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["reversed_by_id"], ["users.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
@@ -312,7 +314,7 @@ def upgrade() -> None:
             name=op.f("ck_partner_opening_balance_entries_source_valid"),
         ),
         sa.ForeignKeyConstraint(["created_by_id"], ["users.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["partner_id"], ["partners.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["partner_id"], [PARTNERS_ID], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
             ["reversal_of_id"], ["partner_opening_balance_entries.id"], ondelete="RESTRICT"
         ),
@@ -357,7 +359,7 @@ def upgrade() -> None:
             name=op.f("ck_customer_account_adjustments_status_valid"),
         ),
         sa.ForeignKeyConstraint(["created_by_id"], ["users.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["customer_id"], ["partners.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["customer_id"], [PARTNERS_ID], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["reversed_by_id"], ["users.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("adjustment_number"),

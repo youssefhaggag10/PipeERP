@@ -246,7 +246,7 @@ def activity_completion(
         raise _error(exc) from exc
 
 
-@router.post("/activities/{activity_id}/reschedule", response_model=ActivityView)
+@router.post("/activities/{activity_id}/reschedule")
 def activity_reschedule(
     activity_id: UUID,
     payload: RescheduleActivityRequest,

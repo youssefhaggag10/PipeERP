@@ -431,6 +431,7 @@ export function ReturnsWorkspace({
               <form className="compact-form" onSubmit={createReturn}>
                 <label>
                   الفاتورة
+                  {" "}
                   <select
                     value={invoiceId}
                     onChange={(event) => setInvoiceId(event.target.value)}
@@ -597,6 +598,7 @@ export function ReturnsWorkspace({
                 </div>
                 <label>
                   سبب المرتجع
+                  {" "}
                   <textarea
                     value={reason}
                     onChange={(event) => setReason(event.target.value)}
@@ -700,6 +702,7 @@ export function ReturnsWorkspace({
               <form className="compact-form" onSubmit={createRefund}>
                 <label>
                   الفاتورة
+                  {" "}
                   <select
                     value={refundInvoiceId}
                     onChange={(event) => setRefundInvoiceId(event.target.value)}
@@ -716,6 +719,7 @@ export function ReturnsWorkspace({
                 <div className="form-pair">
                   <label>
                     الطريقة
+                    {" "}
                     <select
                       value={paymentMethod}
                       onChange={(event) =>
@@ -730,6 +734,7 @@ export function ReturnsWorkspace({
                   </label>
                   <label>
                     الحساب
+                    {" "}
                     <select
                       value={financialAccountId}
                       onChange={(event) =>
@@ -747,6 +752,7 @@ export function ReturnsWorkspace({
                 </div>
                 <label>
                   المبلغ
+                  {" "}
                   <input
                     type="number"
                     min="0.01"
@@ -763,6 +769,7 @@ export function ReturnsWorkspace({
                 </label>
                 <label>
                   ملاحظات
+                  {" "}
                   <textarea
                     value={notes}
                     onChange={(event) => setNotes(event.target.value)}

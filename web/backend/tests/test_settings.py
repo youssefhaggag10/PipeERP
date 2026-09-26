@@ -1,7 +1,7 @@
 from pathlib import Path
 
+import pytest
 from pydantic import ValidationError
-from pytest import MonkeyPatch, raises
 
 from app.core.settings import Settings
 
@@ -31,7 +31,7 @@ def test_allowed_origins_accepts_comma_separated_environment_value(monkeypatch) 
 
 
 def test_secrets_can_be_loaded_from_compose_secret_files(
-    monkeypatch: MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     database_file = tmp_path / "database_url"
     secret_file = tmp_path / "secret_key"
@@ -49,12 +49,12 @@ def test_secrets_can_be_loaded_from_compose_secret_files(
 
 
 def test_production_rejects_http_origins_and_placeholder_secrets(
-    monkeypatch: MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://pipeerp@database/pipeerp")
     monkeypatch.setenv("SECRET_KEY", "replace-with-a-production-secret-key-value")
     monkeypatch.setenv("ALLOWED_ORIGINS", "http://erp.example.com")
 
-    with raises(ValidationError):
+    with pytest.raises(ValidationError):
         Settings(_env_file=None)  # type: ignore[call-arg]

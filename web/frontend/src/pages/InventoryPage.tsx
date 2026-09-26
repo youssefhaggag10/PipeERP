@@ -63,6 +63,22 @@ type StockCardLine = {
 };
 type InventoryView = "balances" | "lots" | "stock-card";
 
+const VIEW_COPY: Record<InventoryView, { heading: string; subtitle: string }> = {
+  balances: {
+    heading: "رصيد المخزون",
+    subtitle:
+      "الرصيد ناتج من حركات المخزون فقط. استخدم التسوية للرصيد الافتتاحي أو الجرد.",
+  },
+  lots: {
+    heading: "أرصدة الدفعات",
+    subtitle: "الرصيد والقيمة المتبقية لكل دفعة وفق الصرف بنظام FIFO.",
+  },
+  "stock-card": {
+    heading: "كارت الصنف",
+    subtitle: "كل حركات الصنف داخل وخارج بالمخزن والتشغيلة والمرجع.",
+  },
+};
+
 const productTypeLabels: Record<string, string> = {
   raw_material: "خامة",
   finished_good: "منتج نهائي",
@@ -211,18 +227,7 @@ export function InventoryPage() {
     }
   }
 
-  const heading =
-    view === "balances"
-      ? "رصيد المخزون"
-      : view === "lots"
-        ? "أرصدة الدفعات"
-        : "كارت الصنف";
-  const subtitle =
-    view === "balances"
-      ? "الرصيد ناتج من حركات المخزون فقط. استخدم التسوية للرصيد الافتتاحي أو الجرد."
-      : view === "lots"
-        ? "الرصيد والقيمة المتبقية لكل دفعة وفق الصرف بنظام FIFO."
-        : "كل حركات الصنف داخل وخارج بالمخزن والتشغيلة والمرجع.";
+  const { heading, subtitle } = VIEW_COPY[view];
 
   return (
     <AppShell>
@@ -260,6 +265,7 @@ export function InventoryPage() {
             >
               <label>
                 الصنف
+                {" "}
                 <select
                   value={productId}
                   onChange={(event) => setProductId(event.target.value)}
@@ -274,6 +280,7 @@ export function InventoryPage() {
               </label>
               <label>
                 كمية التسوية
+                {" "}
                 <input
                   type="number"
                   step="0.001"
@@ -285,6 +292,7 @@ export function InventoryPage() {
               </label>
               <label>
                 تكلفة الوحدة للإضافة
+                {" "}
                 <input
                   type="number"
                   min="0"
@@ -295,6 +303,7 @@ export function InventoryPage() {
               </label>
               <label>
                 رقم الدفعة
+                {" "}
                 <input
                   readOnly
                   value=""
@@ -303,6 +312,7 @@ export function InventoryPage() {
               </label>
               <label>
                 ملاحظات
+                {" "}
                 <input
                   value={notes}
                   onChange={(event) => setNotes(event.target.value)}

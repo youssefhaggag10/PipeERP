@@ -452,9 +452,7 @@ def test_sales_single_layer_full_return_has_no_lot_fallback_and_exact_sources() 
     ids = _seed_sales(factory)
     with _client(factory) as client:
         _login(client)
-        rows = client.get(
-            f"/api/v1/returns/invoices/sales/{ids['invoice']}/lines"
-        )
+        rows = client.get(f"/api/v1/returns/invoices/sales/{ids['invoice']}/lines")
         assert rows.status_code == 200, rows.text
         source = rows.json()[0]["sources"][0]
         assert source["lot_number"] == ""
@@ -469,9 +467,7 @@ def test_sales_single_layer_full_return_has_no_lot_fallback_and_exact_sources() 
                 "return_type": "sales",
                 "invoice_id": ids["invoice"],
                 "reason": "مرتجع كامل من مصدر واحد",
-                "lines": [
-                    {"source_line_id": ids["line"], "mode": "full_remaining"}
-                ],
+                "lines": [{"source_line_id": ids["line"], "mode": "full_remaining"}],
             },
         )
         assert returned.status_code == 201, returned.text
@@ -797,9 +793,7 @@ def test_purchase_repeated_partial_returns_track_commercial_and_source_totals() 
             )
             assert returned.status_code == 201, returned.text
 
-        lines = client.get(
-            f"/api/v1/returns/invoices/purchase/{ids['invoice']}/lines"
-        )
+        lines = client.get(f"/api/v1/returns/invoices/purchase/{ids['invoice']}/lines")
         assert lines.status_code == 200, lines.text
         assert lines.json()[0]["returned_quantity"] == "3.000000"
         assert lines.json()[0]["remaining_quantity"] == "2.000000"
@@ -815,8 +809,7 @@ def test_purchase_repeated_partial_returns_track_commercial_and_source_totals() 
         )
         assert exceeded.status_code == 409
         assert (
-            exceeded.json()["detail"]["code"]
-            == "PURCHASE_RETURN_ATTRIBUTABLE_STOCK_INSUFFICIENT"
+            exceeded.json()["detail"]["code"] == "PURCHASE_RETURN_ATTRIBUTABLE_STOCK_INSUFFICIENT"
         )
 
     with factory() as db:
@@ -904,9 +897,7 @@ def _configure_purchase_stock(
                 PurchaseReceiptLine.purchase_order_line_id == order_line.id
             )
         )
-        transaction = db.get(
-            InventoryTransaction, UUID(ids["receipt_transaction"])
-        )
+        transaction = db.get(InventoryTransaction, UUID(ids["receipt_transaction"]))
         target_layer = db.scalar(
             select(InventoryLayer).where(
                 InventoryLayer.source_type == "purchase_receipt",
@@ -917,8 +908,11 @@ def _configure_purchase_stock(
             InventoryBalance,
             (UUID(ids["product"]), UUID(ids["warehouse"])),
         )
-        assert order_line is not None and receipt_line is not None
-        assert transaction is not None and target_layer is not None and balance is not None
+        assert order_line is not None
+        assert receipt_line is not None
+        assert transaction is not None
+        assert target_layer is not None
+        assert balance is not None
         net = gross - loss
         order_line.ordered_quantity = gross
         order_line.received_quantity = gross
@@ -974,9 +968,7 @@ def test_sales_full_return_preserves_two_original_allocation_costs() -> None:
                 "return_type": "sales",
                 "invoice_id": ids["invoice"],
                 "reason": "مرتجع كامل متعدد الطبقات",
-                "lines": [
-                    {"source_line_id": ids["line"], "mode": "full_remaining"}
-                ],
+                "lines": [{"source_line_id": ids["line"], "mode": "full_remaining"}],
             },
         )
         assert result.status_code == 201, result.text
@@ -994,9 +986,7 @@ def test_sales_full_return_preserves_two_original_allocation_costs() -> None:
             (Decimal("1.000000"), Decimal("100.000000")),
             (Decimal("1.000000"), Decimal("200.000000")),
         ]
-        return_layers = [
-            db.get(InventoryLayer, item.return_inventory_layer_id) for item in sources
-        ]
+        return_layers = [db.get(InventoryLayer, item.return_inventory_layer_id) for item in sources]
         assert [(item.quantity_received, item.unit_cost) for item in return_layers if item] == [
             (Decimal("1.000000"), Decimal("100.000000")),
             (Decimal("1.000000"), Decimal("200.000000")),
@@ -1009,9 +999,7 @@ def test_sales_partial_multi_source_requires_and_respects_selection() -> None:
     _make_sales_delivery_use_two_cost_layers(factory, ids)
     with _client(factory) as client:
         _login(client)
-        rows = client.get(
-            f"/api/v1/returns/invoices/sales/{ids['invoice']}/lines"
-        ).json()
+        rows = client.get(f"/api/v1/returns/invoices/sales/{ids['invoice']}/lines").json()
         assert len(rows[0]["sources"]) == 2
         missing = client.post(
             "/api/v1/returns/documents",
@@ -1069,18 +1057,14 @@ def test_sales_repeated_partial_returns_cannot_exceed_original_allocation() -> N
                         {
                             "source_line_id": ids["line"],
                             "mode": "selected_sources",
-                            "sources": [
-                                {"source_id": selected_source_id, "quantity": amount}
-                            ],
+                            "sources": [{"source_id": selected_source_id, "quantity": amount}],
                         }
                     ],
                 },
             )
             assert result.status_code == 201, result.text
 
-        rows = client.get(
-            f"/api/v1/returns/invoices/sales/{ids['invoice']}/lines"
-        )
+        rows = client.get(f"/api/v1/returns/invoices/sales/{ids['invoice']}/lines")
         assert rows.status_code == 200, rows.text
         selected = next(
             source
@@ -1101,9 +1085,7 @@ def test_sales_repeated_partial_returns_cannot_exceed_original_allocation() -> N
                     {
                         "source_line_id": ids["line"],
                         "mode": "selected_sources",
-                        "sources": [
-                            {"source_id": selected_source_id, "quantity": "0.1"}
-                        ],
+                        "sources": [{"source_id": selected_source_id, "quantity": "0.1"}],
                     }
                 ],
             },
@@ -1113,8 +1095,7 @@ def test_sales_repeated_partial_returns_cannot_exceed_original_allocation() -> N
     with factory() as db:
         returned = db.scalar(
             select(func.sum(InvoiceReturnSource.quantity)).where(
-                InvoiceReturnSource.original_inventory_allocation_id
-                == UUID(selected_source_id)
+                InvoiceReturnSource.original_inventory_allocation_id == UUID(selected_source_id)
             )
         )
         assert returned == Decimal("1.000000")
@@ -1168,9 +1149,7 @@ def test_weight_sales_return_uses_document_price_per_kg_and_source_cost() -> Non
 
     with _client(factory) as client:
         _login(client)
-        lines = client.get(
-            f"/api/v1/returns/invoices/sales/{ids['invoice']}/lines"
-        )
+        lines = client.get(f"/api/v1/returns/invoices/sales/{ids['invoice']}/lines")
         assert lines.status_code == 200, lines.text
         assert lines.json()[0]["cost_basis"] == "weight"
         assert lines.json()[0]["unit_price"] == "50.000000"
@@ -1302,9 +1281,7 @@ def test_purchase_full_return_rejects_attributable_shortage_atomically() -> None
                 "return_type": "purchase",
                 "invoice_id": ids["invoice"],
                 "reason": "اختبار رفض ذري",
-                "lines": [
-                    {"source_line_id": ids["line"], "mode": "full_remaining"}
-                ],
+                "lines": [{"source_line_id": ids["line"], "mode": "full_remaining"}],
             },
         )
         assert result.status_code == 409, result.text
@@ -1338,9 +1315,7 @@ def test_purchase_loss_uses_net_received_amount_as_returnable_stock() -> None:
     )
     with _client(factory) as client:
         _login(client)
-        lines = client.get(
-            f"/api/v1/returns/invoices/purchase/{ids['invoice']}/lines"
-        )
+        lines = client.get(f"/api/v1/returns/invoices/purchase/{ids['invoice']}/lines")
         assert lines.status_code == 200, lines.text
         assert lines.json()[0]["remaining_quantity"] == "8.000000"
         result = client.post(
@@ -1350,9 +1325,7 @@ def test_purchase_loss_uses_net_received_amount_as_returnable_stock() -> None:
                 "return_type": "purchase",
                 "invoice_id": ids["invoice"],
                 "reason": "إرجاع صافي الاستلام",
-                "lines": [
-                    {"source_line_id": ids["line"], "mode": "full_remaining"}
-                ],
+                "lines": [{"source_line_id": ids["line"], "mode": "full_remaining"}],
             },
         )
         assert result.status_code == 201, result.text
@@ -1419,8 +1392,9 @@ def test_purchase_return_reversal_layer_keeps_root_for_later_return() -> None:
         assert second.status_code == 201, second.text
     with factory() as db:
         latest_source = db.scalar(
-            select(InvoiceReturnSource)
-            .where(InvoiceReturnSource.consumed_inventory_layer_id == derivative_id)
+            select(InvoiceReturnSource).where(
+                InvoiceReturnSource.consumed_inventory_layer_id == derivative_id
+            )
         )
         assert latest_source is not None
         assert latest_source.root_inventory_layer_id == root_id
@@ -1453,9 +1427,7 @@ def test_multiple_purchase_return_reversal_layers_keep_one_immutable_root() -> N
                         {
                             "source_line_id": ids["line"],
                             "mode": "selected_sources",
-                            "sources": [
-                                {"source_id": str(root_id), "quantity": "1"}
-                            ],
+                            "sources": [{"source_id": str(root_id), "quantity": "1"}],
                         }
                     ],
                 },
@@ -1478,9 +1450,7 @@ def test_multiple_purchase_return_reversal_layers_keep_one_immutable_root() -> N
                 "return_type": "purchase",
                 "invoice_id": ids["invoice"],
                 "reason": "مرتجع كامل من الأصل وطبقات العكس",
-                "lines": [
-                    {"source_line_id": ids["line"], "mode": "full_remaining"}
-                ],
+                "lines": [{"source_line_id": ids["line"], "mode": "full_remaining"}],
             },
         )
         assert final_return.status_code == 201, final_return.text
@@ -1490,15 +1460,11 @@ def test_multiple_purchase_return_reversal_layers_keep_one_immutable_root() -> N
     with factory() as db:
         derivative_layers = list(
             db.scalars(
-                select(InventoryLayer).where(
-                    InventoryLayer.provenance_root_layer_id == root_id
-                )
+                select(InventoryLayer).where(InventoryLayer.provenance_root_layer_id == root_id)
             )
         )
         assert len(derivative_layers) == 2
-        assert {layer.unit_cost for layer in derivative_layers} == {
-            Decimal("15.000000")
-        }
+        assert {layer.unit_cost for layer in derivative_layers} == {Decimal("15.000000")}
         final_sources = list(
             db.scalars(
                 select(InvoiceReturnSource)
@@ -1510,9 +1476,7 @@ def test_multiple_purchase_return_reversal_layers_keep_one_immutable_root() -> N
             )
         )
         assert len(final_sources) == 3
-        assert {source.root_inventory_layer_id for source in final_sources} == {
-            root_id
-        }
+        assert {source.root_inventory_layer_id for source in final_sources} == {root_id}
         assert sum((source.quantity for source in final_sources), Decimal("0")) == Decimal(
             "5.000000"
         )
@@ -1613,9 +1577,7 @@ def test_purchase_full_return_preserves_multiple_receipt_layer_costs() -> None:
                 "return_type": "purchase",
                 "invoice_id": ids["invoice"],
                 "reason": "مرتجع كامل من استلامات متعددة",
-                "lines": [
-                    {"source_line_id": ids["line"], "mode": "full_remaining"}
-                ],
+                "lines": [{"source_line_id": ids["line"], "mode": "full_remaining"}],
             },
         )
         assert returned.status_code == 201, returned.text
@@ -1625,9 +1587,7 @@ def test_purchase_full_return_preserves_multiple_receipt_layer_costs() -> None:
 
     with factory() as db:
         sources = list(
-            db.scalars(
-                select(InvoiceReturnSource).order_by(InvoiceReturnSource.unit_cost)
-            )
+            db.scalars(select(InvoiceReturnSource).order_by(InvoiceReturnSource.unit_cost))
         )
         assert [(source.quantity, source.unit_cost) for source in sources] == [
             (Decimal("5.000000"), Decimal("15.000000")),
@@ -1665,14 +1625,9 @@ def test_reversed_purchase_receipt_is_not_eligible_for_source_layer_return() -> 
         )
     with _client(factory) as client:
         _login(client)
-        response = client.get(
-            f"/api/v1/returns/invoices/purchase/{ids['invoice']}/lines"
-        )
+        response = client.get(f"/api/v1/returns/invoices/purchase/{ids['invoice']}/lines")
         assert response.status_code == 409
-        assert (
-            response.json()["detail"]["code"]
-            == "PURCHASE_RETURN_PROVENANCE_UNRESOLVED"
-        )
+        assert response.json()["detail"]["code"] == "PURCHASE_RETURN_PROVENANCE_UNRESOLVED"
 
 
 def test_purchase_unresolved_and_ambiguous_provenance_are_blocked() -> None:
@@ -1690,14 +1645,9 @@ def test_purchase_unresolved_and_ambiguous_provenance_are_blocked() -> None:
         layer.source_id = "unresolved"
     with _client(factory) as client:
         _login(client)
-        unresolved = client.get(
-            f"/api/v1/returns/invoices/purchase/{ids['invoice']}/lines"
-        )
+        unresolved = client.get(f"/api/v1/returns/invoices/purchase/{ids['invoice']}/lines")
         assert unresolved.status_code == 409
-        assert (
-            unresolved.json()["detail"]["code"]
-            == "PURCHASE_RETURN_PROVENANCE_UNRESOLVED"
-        )
+        assert unresolved.json()["detail"]["code"] == "PURCHASE_RETURN_PROVENANCE_UNRESOLVED"
 
     second_factory = _database()
     _seed_sales(second_factory)
@@ -1729,11 +1679,6 @@ def test_purchase_unresolved_and_ambiguous_provenance_are_blocked() -> None:
         )
     with _client(second_factory) as client:
         _login(client)
-        ambiguous = client.get(
-            f"/api/v1/returns/invoices/purchase/{second_ids['invoice']}/lines"
-        )
+        ambiguous = client.get(f"/api/v1/returns/invoices/purchase/{second_ids['invoice']}/lines")
         assert ambiguous.status_code == 409
-        assert (
-            ambiguous.json()["detail"]["code"]
-            == "PURCHASE_RETURN_PROVENANCE_UNRESOLVED"
-        )
+        assert ambiguous.json()["detail"]["code"] == "PURCHASE_RETURN_PROVENANCE_UNRESOLVED"

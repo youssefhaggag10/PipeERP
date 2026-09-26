@@ -349,9 +349,9 @@ def customer_statement_print_data(
         )
         running = statement.opening_balance
         recalculated: list[StatementLineView] = []
-        for line in merged:
-            running = money(running + line.debit - line.credit)
-            recalculated.append(line.model_copy(update={"running_balance": running}))
+        for statement_line in merged:
+            running = money(running + statement_line.debit - statement_line.credit)
+            recalculated.append(statement_line.model_copy(update={"running_balance": running}))
         statement = statement.model_copy(update={"lines": recalculated, "closing_balance": running})
     invoice_details: dict[str, list[PrintDocumentLineView]] = {}
     if detailed:
@@ -368,16 +368,16 @@ def customer_statement_print_data(
             )
             .order_by(CustomerInvoice.invoice_date, SalesOrderLine.created_at)
         )
-        for invoice, line, product in invoice_rows:
+        for invoice, sales_line, product in invoice_rows:
             invoice_details.setdefault(invoice.invoice_number, []).append(
                 PrintDocumentLineView(
                     code=product.code,
                     name=product.name_ar,
-                    quantity=line.quantity,
-                    unit=line.unit,
-                    unit_price=line.unit_price,
-                    line_total=line.line_total,
-                    notes=line.notes,
+                    quantity=sales_line.quantity,
+                    unit=sales_line.unit,
+                    unit_price=sales_line.unit_price,
+                    line_total=sales_line.line_total,
+                    notes=sales_line.notes,
                 )
             )
     invoice_totals: dict[str, Decimal] = {}
@@ -417,9 +417,7 @@ def customer_statement_print_data(
         receipts_total=money(receipts_total),
         customer_refunds_total=money(refunds_total),
         adjustments_total=money(adjustments_total),
-        net_movement=money(
-            sum((line.debit - line.credit for line in statement.lines), ZERO)
-        ),
+        net_movement=money(sum((line.debit - line.credit for line in statement.lines), ZERO)),
         closing_balance=statement.closing_balance,
     )
     return CustomerStatementPrintView(
@@ -656,42 +654,42 @@ def _payments_report(
         payment_statement = payment_statement.where(PaymentTransaction.partner_id == partner_id)
         refund_statement = refund_statement.where(ReturnRefund.partner_id == partner_id)
     values: list[tuple[datetime, dict[str, str], Decimal]] = []
-    for item, partner, account in db.execute(payment_statement):
-        label = "تحصيل عميل" if item.transaction_type == "customer_receipt" else "سداد مورد"
+    for payment, partner, account in db.execute(payment_statement):
+        label = "تحصيل عميل" if payment.transaction_type == "customer_receipt" else "سداد مورد"
         values.append(
             (
-                item.transaction_date,
+                payment.transaction_date,
                 {
-                    "رقم الحركة": item.transaction_number,
-                    "التاريخ": item.transaction_date.isoformat(),
+                    "رقم الحركة": payment.transaction_number,
+                    "التاريخ": payment.transaction_date.isoformat(),
                     "النوع": label,
                     "الطرف": partner.name_ar,
                     "الحساب": account.name_ar,
-                    "المبلغ": _money(item.amount),
-                    "الطريقة": item.payment_method,
-                    "الحالة": item.status,
-                    "ملاحظات": item.notes,
+                    "المبلغ": _money(payment.amount),
+                    "الطريقة": payment.payment_method,
+                    "الحالة": payment.status,
+                    "ملاحظات": payment.notes,
                 },
-                money(item.amount),
+                money(payment.amount),
             )
         )
-    for item, partner, account in db.execute(refund_statement):
-        label = "رد مبلغ لعميل" if item.refund_type == "customer_refund" else "استرداد من مورد"
+    for refund, partner, account in db.execute(refund_statement):
+        label = "رد مبلغ لعميل" if refund.refund_type == "customer_refund" else "استرداد من مورد"
         values.append(
             (
-                item.refund_date,
+                refund.refund_date,
                 {
-                    "رقم الحركة": item.refund_number,
-                    "التاريخ": item.refund_date.isoformat(),
+                    "رقم الحركة": refund.refund_number,
+                    "التاريخ": refund.refund_date.isoformat(),
                     "النوع": label,
                     "الطرف": partner.name_ar,
                     "الحساب": account.name_ar,
-                    "المبلغ": _money(item.amount),
-                    "الطريقة": item.payment_method,
-                    "الحالة": item.status,
-                    "ملاحظات": item.notes,
+                    "المبلغ": _money(refund.amount),
+                    "الطريقة": refund.payment_method,
+                    "الحالة": refund.status,
+                    "ملاحظات": refund.notes,
                 },
-                money(item.amount),
+                money(refund.amount),
             )
         )
     values.sort(key=lambda value: value[0], reverse=True)

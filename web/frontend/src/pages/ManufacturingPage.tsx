@@ -741,6 +741,7 @@ export function ManufacturingPage() {
               >
                 <label>
                   كود الخلطة
+                  {" "}
                   <input
                     required
                     value={recipeForm.code}
@@ -751,6 +752,7 @@ export function ManufacturingPage() {
                 </label>
                 <label>
                   اسم الخلطة
+                  {" "}
                   <input
                     required
                     value={recipeForm.name_ar}
@@ -854,6 +856,7 @@ export function ManufacturingPage() {
                 </fieldset>
                 <label>
                   الكسر المقترح لكل خلطة
+                  {" "}
                   <input
                     inputMode="decimal"
                     value={recipeForm.suggested_scrap_per_batch}
@@ -867,6 +870,7 @@ export function ManufacturingPage() {
                 </label>
                 <label>
                   ملاحظات
+                  {" "}
                   <textarea
                     value={recipeForm.notes}
                     onChange={(event) =>
@@ -946,6 +950,7 @@ export function ManufacturingPage() {
                 >
                   <label>
                     الخلطة
+                    {" "}
                     <select
                       required
                       value={orderForm.recipe_id}
@@ -965,6 +970,7 @@ export function ManufacturingPage() {
                   </label>
                   <label>
                     المخزن
+                    {" "}
                     <select
                       required
                       value={orderForm.warehouse_id}
@@ -1122,6 +1128,7 @@ export function ManufacturingPage() {
                   </fieldset>
                   <label>
                     ملاحظات
+                    {" "}
                     <textarea
                       value={orderForm.notes}
                       onChange={(event) =>
@@ -1270,6 +1277,7 @@ export function ManufacturingPage() {
                   <div className="manufacturing-completion__base">
                     <label>
                       الخلطات الفعلية
+                      {" "}
                       <input
                         required
                         type="number"
@@ -1285,6 +1293,7 @@ export function ManufacturingPage() {
                     </label>
                     <label>
                       وزن الهالك كجم
+                      {" "}
                       <input
                         inputMode="decimal"
                         value={completion.scrap_weight_kg}
@@ -1298,6 +1307,7 @@ export function ManufacturingPage() {
                     </label>
                     <label>
                       ملاحظات
+                      {" "}
                       <input
                         value={completion.notes}
                         onChange={(event) =>
@@ -1322,6 +1332,7 @@ export function ManufacturingPage() {
                           <small>المخطط {item.planned_quantity} قطعة</small>
                           <label>
                             السليم
+                            {" "}
                             <input
                               inputMode="decimal"
                               value={values.good}
@@ -1338,6 +1349,7 @@ export function ManufacturingPage() {
                           </label>
                           <label>
                             المعيب
+                            {" "}
                             <input
                               inputMode="decimal"
                               value={values.defective}
@@ -1354,6 +1366,7 @@ export function ManufacturingPage() {
                           </label>
                           <label>
                             الوزن الفعلي
+                            {" "}
                             <input
                               inputMode="decimal"
                               value={values.weight}
@@ -1391,6 +1404,7 @@ export function ManufacturingPage() {
                         </button>
                         <label>
                           الخامة المستبعدة
+                          {" "}
                           <select
                             value={item.excluded_product_id}
                             onChange={(event) =>
@@ -1418,6 +1432,7 @@ export function ManufacturingPage() {
                         </label>
                         <label>
                           عدد الخلطات
+                          {" "}
                           <input
                             type="number"
                             min="1"
@@ -1438,6 +1453,7 @@ export function ManufacturingPage() {
                         </label>
                         <label>
                           السبب
+                          {" "}
                           <input
                             required
                             value={item.reason}
@@ -1462,6 +1478,7 @@ export function ManufacturingPage() {
                             .map((material) => (
                               <label key={material.product_id}>
                                 {material.product_name_ar}
+                                {" "}
                                 <input
                                   inputMode="decimal"
                                   placeholder="الافتراضي"

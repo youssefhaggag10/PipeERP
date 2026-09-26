@@ -41,7 +41,7 @@ def options(
     return report_options(db)
 
 
-@router.get("/generate", response_model=ReportView)
+@router.get("/generate")
 def generate(
     report_key: Annotated[
         str,

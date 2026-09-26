@@ -735,6 +735,7 @@ export function SalesPage() {
                 <div className="form-pair">
                   <label>
                     العميل
+                    {" "}
                     <select
                       value={customerId}
                       onChange={(e) => setCustomerId(e.target.value)}
@@ -748,6 +749,7 @@ export function SalesPage() {
                   </label>
                   <label>
                     المخزن
+                    {" "}
                     <select value={warehouseId} disabled>
                       {options.warehouses.map((x) => (
                         <option key={x.id} value={x.id}>
@@ -762,6 +764,7 @@ export function SalesPage() {
                     <div className="form-pair">
                       <label>
                         طريقة الوزن
+                        {" "}
                         <select
                           value={weightMode}
                           onChange={(e) =>
@@ -774,6 +777,7 @@ export function SalesPage() {
                       </label>
                       <label>
                         طريقة التسعير
+                        {" "}
                         <select
                           value={pricingMode}
                           onChange={(e) =>
@@ -797,6 +801,7 @@ export function SalesPage() {
                       <div className="form-pair">
                         <label>
                           الوزن القائم
+                          {" "}
                           <input
                             type="number"
                             min="0"
@@ -808,6 +813,7 @@ export function SalesPage() {
                         </label>
                         <label>
                           وزن السيارة الفارغ
+                          {" "}
                           <input
                             type="number"
                             min="0"
@@ -821,6 +827,7 @@ export function SalesPage() {
                     ) : weightMode === "total_card" ? (
                       <label>
                         الوزن الصافي الفعلي
+                        {" "}
                         <input
                           type="number"
                           min="0.001"
@@ -834,6 +841,7 @@ export function SalesPage() {
                     {pricingMode === "uniform" ? (
                       <label>
                         سعر الكيلو الموحد
+                        {" "}
                         <input
                           type="number"
                           min="0"
@@ -846,6 +854,7 @@ export function SalesPage() {
                     ) : null}
                     <label>
                       رقم السيارة
+                      {" "}
                       <input
                         value={vehicleNumber}
                         onChange={(e) => setVehicleNumber(e.target.value)}
@@ -889,6 +898,7 @@ export function SalesPage() {
                         </span>
                         <label>
                           الصنف
+                          {" "}
                           <select
                             value={line.product_id}
                             onChange={(e) =>
@@ -912,6 +922,7 @@ export function SalesPage() {
                         </label>
                         <label>
                           العدد
+                          {" "}
                           <input
                             type="number"
                             min="0.001"
@@ -931,6 +942,7 @@ export function SalesPage() {
                         </label>
                         <label>
                           الوحدة
+                          {" "}
                           <input
                             value={line.unit}
                             maxLength={40}
@@ -949,6 +961,7 @@ export function SalesPage() {
                         {tab === "piece" ? (
                           <label>
                             سعر الوحدة
+                            {" "}
                             <input
                               type="number"
                               min="0"
@@ -967,6 +980,7 @@ export function SalesPage() {
                             {weightMode === "per_line" ? (
                               <label>
                                 الوزن الفعلي
+                                {" "}
                                 <input
                                   type="number"
                                   min="0.001"
@@ -984,6 +998,7 @@ export function SalesPage() {
                             {pricingMode === "per_line" ? (
                               <label>
                                 سعر الكيلو
+                                {" "}
                                 <input
                                   type="number"
                                   min="0"
@@ -1028,6 +1043,7 @@ export function SalesPage() {
                   <div className="sales-adjustments">
                     <label>
                       خصم
+                      {" "}
                       <input
                         type="number"
                         min="0"
@@ -1038,6 +1054,7 @@ export function SalesPage() {
                     </label>
                     <label>
                       نقل
+                      {" "}
                       <input
                         type="number"
                         min="0"
@@ -1048,6 +1065,7 @@ export function SalesPage() {
                     </label>
                     <label>
                       ضريبة
+                      {" "}
                       <input
                         type="number"
                         min="0"
@@ -1060,12 +1078,13 @@ export function SalesPage() {
                 ) : null}
                 <label>
                   ملاحظات
+                  {" "}
                   <textarea
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                   />
                 </label>
-                <button className="primary-button" disabled={submitting}>
+                <button type="submit" className="primary-button" disabled={submitting}>
                   {tab === "weight" ? (
                     <Scale size={17} />
                   ) : (
@@ -1120,6 +1139,7 @@ export function SalesPage() {
               >
                 <label>
                   العميل
+                  {" "}
                   <select
                     value={customerId}
                     onChange={(e) => setCustomerId(e.target.value)}
@@ -1133,6 +1153,7 @@ export function SalesPage() {
                 </label>
                 <label>
                   صالح حتى
+                  {" "}
                   <input
                     type="date"
                     value={validUntil}
@@ -1158,6 +1179,7 @@ export function SalesPage() {
                   <div className="quote-draft-line" key={line.key}>
                     <label>
                       منتج اختياري
+                      {" "}
                       <select
                         value={line.product_id}
                         onChange={(e) =>
@@ -1177,6 +1199,7 @@ export function SalesPage() {
                     </label>
                     <label>
                       اسم البند
+                      {" "}
                       <input
                         value={line.item_name || productName(line.product_id)}
                         onChange={(e) =>
@@ -1188,6 +1211,7 @@ export function SalesPage() {
                     <div className="form-pair">
                       <label>
                         الكمية
+                        {" "}
                         <input
                           type="number"
                           min="0.001"
@@ -1201,6 +1225,7 @@ export function SalesPage() {
                       </label>
                       <label>
                         السعر
+                        {" "}
                         <input
                           type="number"
                           min="0"
@@ -1219,6 +1244,7 @@ export function SalesPage() {
                 ))}
                 <label>
                   ملاحظات
+                  {" "}
                   <textarea
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}

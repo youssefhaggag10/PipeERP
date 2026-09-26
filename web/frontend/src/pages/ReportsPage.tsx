@@ -264,6 +264,7 @@ export function ReportsPage() {
           <section className="panel report-filters">
             <label>
               التقرير
+              {" "}
               <select
                 value={reportKey}
                 onChange={(event) =>
@@ -279,6 +280,7 @@ export function ReportsPage() {
             </label>
             <label>
               من
+              {" "}
               <input
                 type="date"
                 value={dateFrom}
@@ -287,6 +289,7 @@ export function ReportsPage() {
             </label>
             <label>
               إلى
+              {" "}
               <input
                 type="date"
                 value={dateTo}
@@ -296,6 +299,7 @@ export function ReportsPage() {
             {selectedReport.partner !== "none" ? (
               <label>
                 الطرف
+                {" "}
                 <select
                   value={partnerId}
                   onChange={(event) => setPartnerId(event.target.value)}
@@ -379,6 +383,7 @@ export function ReportsPage() {
           <section className="panel report-filters print-filters">
             <label>
               المستند
+              {" "}
               <select
                 value={printKind}
                 onChange={(event) =>
@@ -398,6 +403,7 @@ export function ReportsPage() {
             </label>
             <label>
               الرقم
+              {" "}
               <select
                 value={documentId}
                 onChange={(event) => setDocumentId(event.target.value)}
@@ -423,6 +429,7 @@ export function ReportsPage() {
               <>
                 <label>
                   من
+                  {" "}
                   <input
                     type="date"
                     value={dateFrom}
@@ -431,6 +438,7 @@ export function ReportsPage() {
                 </label>
                 <label>
                   إلى
+                  {" "}
                   <input
                     type="date"
                     value={dateTo}

@@ -16,6 +16,8 @@ from urllib.parse import urlparse
 from urllib.request import HTTPCookieProcessor, Request, build_opener
 
 MARKER = "[PIPEERP-DEMO-V1]"
+UNITS_PATH = "/master-data/units"
+PARTNERS_PATH = "/master-data/partners"
 
 
 class SeedError(RuntimeError):
@@ -103,7 +105,7 @@ def seed_master_data(api: Api) -> dict[str, dict[str, Any]]:
         "piece": ensure(
             api,
             "/master-data/units?include_inactive=true",
-            "/master-data/units",
+            UNITS_PATH,
             "code",
             "DEMO-PC",
             {"code": "DEMO-PC", "name_ar": "قطعة ديمو", "symbol": "قطعة", "decimal_places": 0},
@@ -111,7 +113,7 @@ def seed_master_data(api: Api) -> dict[str, dict[str, Any]]:
         "kg": ensure(
             api,
             "/master-data/units?include_inactive=true",
-            "/master-data/units",
+            UNITS_PATH,
             "code",
             "DEMO-KG",
             {"code": "DEMO-KG", "name_ar": "كيلوجرام ديمو", "symbol": "كجم", "decimal_places": 3},
@@ -119,7 +121,7 @@ def seed_master_data(api: Api) -> dict[str, dict[str, Any]]:
         "service": ensure(
             api,
             "/master-data/units?include_inactive=true",
-            "/master-data/units",
+            UNITS_PATH,
             "code",
             "DEMO-SRV",
             {"code": "DEMO-SRV", "name_ar": "خدمة ديمو", "symbol": "خدمة", "decimal_places": 0},
@@ -205,7 +207,7 @@ def seed_master_data(api: Api) -> dict[str, dict[str, Any]]:
         "supplier": ensure(
             api,
             "/master-data/partners?include_inactive=true",
-            "/master-data/partners",
+            PARTNERS_PATH,
             "code",
             "DEMO-SUP-01",
             {
@@ -221,7 +223,7 @@ def seed_master_data(api: Api) -> dict[str, dict[str, Any]]:
         "customer": ensure(
             api,
             "/master-data/partners?include_inactive=true",
-            "/master-data/partners",
+            PARTNERS_PATH,
             "code",
             "DEMO-CUS-01",
             {
@@ -237,7 +239,7 @@ def seed_master_data(api: Api) -> dict[str, dict[str, Any]]:
         "customer2": ensure(
             api,
             "/master-data/partners?include_inactive=true",
-            "/master-data/partners",
+            PARTNERS_PATH,
             "code",
             "DEMO-CUS-02",
             {

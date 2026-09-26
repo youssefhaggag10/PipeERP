@@ -15,6 +15,8 @@ down_revision: str | None = "20260818_0008"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+PARTNERS_ID = "partners.id"
+
 
 def _timestamps() -> list[sa.Column]:
     return [
@@ -75,7 +77,7 @@ def upgrade() -> None:
         sa.CheckConstraint("tax_amount >= 0", name=op.f("ck_sales_orders_tax_nonnegative")),
         sa.CheckConstraint("total >= 0", name=op.f("ck_sales_orders_total_nonnegative")),
         sa.CheckConstraint("version > 0", name=op.f("ck_sales_orders_version_positive")),
-        sa.ForeignKeyConstraint(["customer_id"], ["partners.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["customer_id"], [PARTNERS_ID], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["warehouse_id"], ["warehouses.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["created_by_id"], ["users.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
@@ -289,7 +291,7 @@ def upgrade() -> None:
         sa.CheckConstraint("total >= 0", name=op.f("ck_customer_invoices_total_nonnegative")),
         sa.CheckConstraint("version > 0", name=op.f("ck_customer_invoices_version_positive")),
         sa.ForeignKeyConstraint(["sales_order_id"], ["sales_orders.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["customer_id"], ["partners.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["customer_id"], [PARTNERS_ID], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("invoice_number"),
         sa.UniqueConstraint("sales_order_id"),
@@ -349,7 +351,7 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint("total >= 0", name=op.f("ck_sales_quotations_total_nonnegative")),
         sa.CheckConstraint("version > 0", name=op.f("ck_sales_quotations_version_positive")),
-        sa.ForeignKeyConstraint(["customer_id"], ["partners.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["customer_id"], [PARTNERS_ID], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["created_by_id"], ["users.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("quotation_number"),
@@ -410,8 +412,7 @@ def downgrade() -> None:
     # Do not remove the sales/order/invoice/weight sequences owned by the
     # master-data migration when rolling only this migration back.
     op.execute(
-        "DELETE FROM document_sequences "
-        "WHERE document_type IN ('sales_delivery','sales_quotation')"
+        "DELETE FROM document_sequences WHERE document_type IN ('sales_delivery','sales_quotation')"
     )
     for table in (
         "sales_quotation_lines",

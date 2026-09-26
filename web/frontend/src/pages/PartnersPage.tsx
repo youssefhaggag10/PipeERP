@@ -50,15 +50,152 @@ const money = new Intl.NumberFormat("ar-EG", {
   maximumFractionDigits: 2,
 });
 
+type PartnerType = "customer" | "supplier";
+
+const PARTNER_COPY: Record<PartnerType, { title: string; singular: string }> = {
+  customer: { title: "العملاء", singular: "عميل" },
+  supplier: { title: "الموردين", singular: "مورد" },
+};
+
+function PartnerList({
+  partners,
+  totalCount,
+  selectedId,
+  canManage,
+  title,
+  singular,
+  search,
+  onSelect,
+  onEdit,
+  onSearch,
+}: {
+  partners: Partner[];
+  totalCount: number;
+  selectedId: string;
+  canManage: boolean;
+  title: string;
+  singular: string;
+  search: string;
+  onSelect: (id: string) => void;
+  onEdit: (partner: Partner) => void;
+  onSearch: (value: string) => void;
+}) {
+  const activeCount = partners.filter((item) => item.is_active).length;
+  return (
+    <article className="panel">
+      <header className="panel__head">
+        <div>
+          <h3>{title}</h3>
+          <p>{activeCount} سجلًا نشطًا</p>
+        </div>
+      </header>
+      <div className="partner-search">
+        <input
+          value={search}
+          onChange={(event) => onSearch(event.target.value)}
+          placeholder="بحث بالاسم أو الكود أو الهاتف أو العنوان"
+          aria-label={`بحث في ${title}`}
+        />
+      </div>
+      {partners.length ? (
+        <div className="partner-cards">
+          {partners.map((partner) => (
+            <article
+              className={`partner-card ${partner.is_active ? "" : "partner-card--inactive"} ${selectedId === partner.id ? "partner-card--selected" : ""}`}
+              key={partner.id}
+              onClick={() => onSelect(partner.id)}
+            >
+              <span className="partner-card__avatar">
+                {partner.name_ar.charAt(0)}
+              </span>
+              <div>
+                <strong>{partner.name_ar}</strong>
+                <small dir="ltr">
+                  {partner.code} · {partner.phone || "بدون هاتف"}
+                </small>
+                {!partner.is_active ? (
+                  <div className="permission-chips">
+                    <span>متوقف</span>
+                  </div>
+                ) : null}
+              </div>
+              {canManage ? (
+                <button
+                  type="button"
+                  className="mini-action partner-card__edit"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onEdit(partner);
+                  }}
+                  aria-label={`تعديل ${singular}`}
+                >
+                  <Pencil size={15} />
+                </button>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="empty-state">
+          <span className="empty-state__icon">
+            <UsersRound size={27} />
+          </span>
+          <h4>{totalCount ? "لا توجد نتائج مطابقة" : `لا يوجد ${title} بعد`}</h4>
+          <p>
+            {totalCount
+              ? "جرّب اسمًا أو كودًا أو رقم هاتف آخر."
+              : `أنشئ أول ${singular} لاستخدامه في المستندات.`}
+          </p>
+        </div>
+      )}
+    </article>
+  );
+}
+
+function LinkedMovementsPanel({ data }: { data: LinkedMovements }) {
+  return (
+    <section className="panel partner-linked-movements">
+      <header className="panel__head">
+        <div>
+          <h3>الحركات المرتبطة — {data.partner_name_ar}</h3>
+          <p>سجل محاسبي للعرض فقط كما في الديسكتوب</p>
+        </div>
+        <strong>{money.format(Number(data.closing_balance))} ج.م</strong>
+      </header>
+      <div className="data-table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>التاريخ</th><th>المستند</th><th>البيان</th>
+              <th>مدين</th><th>دائن</th><th>الرصيد</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.lines.map((line, index) => (
+              <tr key={`${line.document_number}-${index}`}>
+                <td>{new Date(line.movement_date).toLocaleDateString("ar-EG")}</td>
+                <td dir="ltr">{line.document_number}</td>
+                <td>{line.movement_type}</td>
+                <td>{money.format(Number(line.debit))}</td>
+                <td>{money.format(Number(line.credit))}</td>
+                <td><strong>{money.format(Number(line.running_balance))}</strong></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 export function PartnersPage() {
   const { user } = useAuth();
   const location = useLocation();
-  const partnerType =
+  const partnerType: PartnerType =
     new URLSearchParams(location.search).get("type") === "supplier"
       ? "supplier"
       : "customer";
-  const title = partnerType === "supplier" ? "الموردين" : "العملاء";
-  const singular = partnerType === "supplier" ? "مورد" : "عميل";
+  const { title, singular } = PARTNER_COPY[partnerType];
   const canManage = user?.permissions.includes("partners.manage") ?? false;
   const [partners, setPartners] = useState<Partner[]>([]);
   const [search, setSearch] = useState("");
@@ -238,79 +375,18 @@ export function PartnersPage() {
       <section
         className={`master-layout ${canManage ? "" : "master-layout--single"}`}
       >
-        <article className="panel">
-          <header className="panel__head">
-            <div>
-              <h3>{title}</h3>
-              <p>
-                {visiblePartners.filter((item) => item.is_active).length} سجلًا
-                نشطًا
-              </p>
-            </div>
-          </header>
-          <div className="partner-search">
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="بحث بالاسم أو الكود أو الهاتف أو العنوان"
-              aria-label={`بحث في ${title}`}
-            />
-          </div>
-          {visiblePartners.length ? (
-            <div className="partner-cards">
-              {visiblePartners.map((partner) => (
-                <article
-                  className={`partner-card ${partner.is_active ? "" : "partner-card--inactive"} ${selectedId === partner.id ? "partner-card--selected" : ""}`}
-                  key={partner.id}
-                  onClick={() => setSelectedId(partner.id)}
-                >
-                  <span className="partner-card__avatar">
-                    {partner.name_ar.charAt(0)}
-                  </span>
-                  <div>
-                    <strong>{partner.name_ar}</strong>
-                    <small dir="ltr">
-                      {partner.code} · {partner.phone || "بدون هاتف"}
-                    </small>
-                    {!partner.is_active ? (
-                      <div className="permission-chips">
-                        <span>متوقف</span>
-                      </div>
-                    ) : null}
-                  </div>
-                  {canManage ? (
-                    <button
-                      className="mini-action partner-card__edit"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        editPartner(partner);
-                      }}
-                      aria-label={`تعديل ${singular}`}
-                    >
-                      <Pencil size={15} />
-                    </button>
-                  ) : null}
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state">
-              <span className="empty-state__icon">
-                <UsersRound size={27} />
-              </span>
-              <h4>
-                {partners.length
-                  ? "لا توجد نتائج مطابقة"
-                  : `لا يوجد ${title} بعد`}
-              </h4>
-              <p>
-                {partners.length
-                  ? "جرّب اسمًا أو كودًا أو رقم هاتف آخر."
-                  : `أنشئ أول ${singular} لاستخدامه في المستندات.`}
-              </p>
-            </div>
-          )}
-        </article>
+        <PartnerList
+          partners={visiblePartners}
+          totalCount={partners.length}
+          selectedId={selectedId}
+          canManage={canManage}
+          title={title}
+          singular={singular}
+          search={search}
+          onSelect={setSelectedId}
+          onEdit={editPartner}
+          onSearch={setSearch}
+        />
 
         {canManage ? (
           <article className="panel master-form-card">
@@ -322,6 +398,7 @@ export function PartnersPage() {
             <form className="compact-form" onSubmit={savePartner}>
               <label>
                 الكود
+                {" "}
                 <input
                   dir="ltr"
                   value={code}
@@ -332,6 +409,7 @@ export function PartnersPage() {
               </label>
               <label>
                 الاسم
+                {" "}
                 <input
                   value={name}
                   onChange={(event) => setName(event.target.value)}
@@ -341,6 +419,7 @@ export function PartnersPage() {
               </label>
               <label>
                 الهاتف
+                {" "}
                 <input
                   dir="ltr"
                   value={phone}
@@ -349,6 +428,7 @@ export function PartnersPage() {
               </label>
               <label>
                 العنوان
+                {" "}
                 <input
                   value={address}
                   onChange={(event) => setAddress(event.target.value)}
@@ -365,7 +445,7 @@ export function PartnersPage() {
                 </label>
               ) : null}
               <div className="form-actions">
-                <button className="primary-button">
+                <button type="submit" className="primary-button">
                   <UserRoundPlus size={17} />{" "}
                   {editing ? "حفظ التعديل" : `حفظ ${singular}`}
                 </button>
@@ -383,39 +463,7 @@ export function PartnersPage() {
           </article>
         ) : null}
       </section>
-      {linkedMovements ? (
-        <section className="panel partner-linked-movements">
-          <header className="panel__head">
-            <div>
-              <h3>الحركات المرتبطة — {linkedMovements.partner_name_ar}</h3>
-              <p>سجل محاسبي للعرض فقط كما في الديسكتوب</p>
-            </div>
-            <strong>{money.format(Number(linkedMovements.closing_balance))} ج.م</strong>
-          </header>
-          <div className="data-table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>التاريخ</th><th>المستند</th><th>البيان</th>
-                  <th>مدين</th><th>دائن</th><th>الرصيد</th>
-                </tr>
-              </thead>
-              <tbody>
-                {linkedMovements.lines.map((line, index) => (
-                  <tr key={`${line.document_number}-${index}`}>
-                    <td>{new Date(line.movement_date).toLocaleDateString("ar-EG")}</td>
-                    <td dir="ltr">{line.document_number}</td>
-                    <td>{line.movement_type}</td>
-                    <td>{money.format(Number(line.debit))}</td>
-                    <td>{money.format(Number(line.credit))}</td>
-                    <td><strong>{money.format(Number(line.running_balance))}</strong></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ) : null}
+      {linkedMovements ? <LinkedMovementsPanel data={linkedMovements} /> : null}
     </AppShell>
   );
 }

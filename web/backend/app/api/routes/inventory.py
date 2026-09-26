@@ -104,7 +104,7 @@ def stock_card(
     return list_stock_card(db, product_id=product_id, limit=limit)
 
 
-@router.post("/receipts", response_model=TransactionView, status_code=status.HTTP_201_CREATED)
+@router.post("/receipts", status_code=status.HTTP_201_CREATED)
 def receipt(
     payload: ReceiptRequest,
     request: Request,

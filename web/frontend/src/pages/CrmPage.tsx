@@ -579,6 +579,7 @@ export function CrmPage() {
             <div className="form-pair">
               <label>
                 الاسم
+                {" "}
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -588,6 +589,7 @@ export function CrmPage() {
               </label>
               <label>
                 الهاتف
+                {" "}
                 <input
                   dir="ltr"
                   value={phone}
@@ -599,6 +601,7 @@ export function CrmPage() {
             <div className="form-pair">
               <label>
                 هاتف بديل
+                {" "}
                 <input
                   dir="ltr"
                   value={alternatePhone}
@@ -607,6 +610,7 @@ export function CrmPage() {
               </label>
               <label>
                 الشركة / النشاط
+                {" "}
                 <input
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
@@ -615,6 +619,7 @@ export function CrmPage() {
             </div>
             <label>
               العنوان
+              {" "}
               <input
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
@@ -623,6 +628,7 @@ export function CrmPage() {
             <div className="form-pair">
               <label>
                 المصدر
+                {" "}
                 <select
                   value={source}
                   onChange={(e) => setSource(e.target.value)}
@@ -636,6 +642,7 @@ export function CrmPage() {
               </label>
               <label>
                 نوع العميل
+                {" "}
                 <select
                   value={customerType}
                   onChange={(e) => setCustomerType(e.target.value)}
@@ -652,6 +659,7 @@ export function CrmPage() {
             <div className="form-pair">
               <label>
                 درجة الاهتمام
+                {" "}
                 <select
                   value={temperature}
                   onChange={(e) =>
@@ -665,6 +673,7 @@ export function CrmPage() {
               </label>
               <label>
                 المسؤول
+                {" "}
                 <select
                   value={ownerId}
                   onChange={(e) => setOwnerId(e.target.value)}
@@ -680,6 +689,7 @@ export function CrmPage() {
             <div className="form-pair">
               <label>
                 المنتجات المهتم بها
+                {" "}
                 <input
                   value={interestedProducts}
                   onChange={(e) => setInterestedProducts(e.target.value)}
@@ -687,12 +697,14 @@ export function CrmPage() {
               </label>
               <label>
                 Tags
+                {" "}
                 <input value={tags} onChange={(e) => setTags(e.target.value)} />
               </label>
             </div>
             <div className="form-pair">
               <label>
                 قيمة الفرصة
+                {" "}
                 <input
                   type="number"
                   min="0"
@@ -703,6 +715,7 @@ export function CrmPage() {
               </label>
               <label>
                 سبب الخسارة
+                {" "}
                 <input
                   value={lostReason}
                   onChange={(e) => setLostReason(e.target.value)}
@@ -711,6 +724,7 @@ export function CrmPage() {
             </div>
             <label>
               ملاحظات عامة
+              {" "}
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
@@ -824,6 +838,7 @@ export function CrmPage() {
                   </button>
                   <label className="stock-card-filter">
                     مرحلة البيع
+                    {" "}
                     <select
                       value={selected.stage_code}
                       onChange={(e) => void changeStage(e.target.value)}
@@ -854,6 +869,7 @@ export function CrmPage() {
                     <div className="form-pair">
                       <label>
                         النوع
+                        {" "}
                         <select
                           value={activityType}
                           onChange={(e) => setActivityType(e.target.value)}
@@ -869,6 +885,7 @@ export function CrmPage() {
                       </label>
                       <label>
                         الأولوية
+                        {" "}
                         <select
                           value={activityPriority}
                           onChange={(e) => setActivityPriority(e.target.value)}
@@ -882,6 +899,7 @@ export function CrmPage() {
                     </div>
                     <label>
                       العنوان
+                      {" "}
                       <input
                         value={activitySubject}
                         onChange={(e) => setActivitySubject(e.target.value)}
@@ -890,6 +908,7 @@ export function CrmPage() {
                     </label>
                     <label>
                       الموعد
+                      {" "}
                       <input
                         name="due_at"
                         type="datetime-local"
@@ -942,6 +961,7 @@ export function CrmPage() {
             </div>
             <label className="stock-card-filter">
               الحالة
+              {" "}
               <select
                 value={activityStatus}
                 onChange={(event) => setActivityStatus(event.target.value)}
@@ -1026,6 +1046,7 @@ export function CrmPage() {
             </div>
             <label className="stock-card-filter">
               نوع التقرير
+              {" "}
               <select
                 value={reportMode}
                 onChange={(event) => setReportMode(event.target.value)}

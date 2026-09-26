@@ -35,7 +35,8 @@ def test_five_concurrent_issues_cannot_double_allocate_or_go_negative() -> None:
             )
         unit = db.scalar(select(UnitOfMeasure).where(UnitOfMeasure.code == "KG"))
         warehouse = db.scalar(select(Warehouse).where(Warehouse.code == "MAIN"))
-        assert unit is not None and warehouse is not None
+        assert unit is not None
+        assert warehouse is not None
         product = Product(
             code=f"FIFO-{suffix}",
             normalized_code=f"FIFO-{suffix}",

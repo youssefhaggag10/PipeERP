@@ -88,9 +88,7 @@ def sync_customers_to_leads(db: Session, principal: Principal) -> int:
     synced = 0
     now = datetime.now(UTC)
     for customer in customers:
-        lead = db.scalar(
-            select(CrmLead).where(CrmLead.customer_partner_id == customer.id).limit(1)
-        )
+        lead = db.scalar(select(CrmLead).where(CrmLead.customer_partner_id == customer.id).limit(1))
         subject = ""
         if lead is None and customer.phone.strip():
             lead = db.scalar(
@@ -151,7 +149,7 @@ def sync_customers_to_leads(db: Session, principal: Principal) -> int:
     return synced
 
 
-def _lead_query(principal: Principal) -> Select[tuple[CrmLead]]:
+def _lead_query(principal: Principal) -> Select[CrmLead]:
     statement = select(CrmLead)
     return (
         statement

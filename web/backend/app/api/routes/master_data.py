@@ -79,12 +79,11 @@ def units(
 ) -> list[UnitView]:
     enforce_permission(request, db, principal, PermissionCode.PRODUCTS_READ)
     return [
-        UnitView.model_validate(item)
-        for item in list_units(db, include_inactive=include_inactive)
+        UnitView.model_validate(item) for item in list_units(db, include_inactive=include_inactive)
     ]
 
 
-@router.post("/units", response_model=UnitView, status_code=status.HTTP_201_CREATED)
+@router.post("/units", status_code=status.HTTP_201_CREATED)
 def add_unit(
     payload: CreateUnitRequest,
     request: Request,
@@ -231,7 +230,7 @@ def add_product(
     return view
 
 
-@router.patch("/products/{product_id}", response_model=ProductView)
+@router.patch("/products/{product_id}")
 def edit_product(
     product_id: UUID,
     payload: UpdateProductRequest,
