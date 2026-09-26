@@ -24,6 +24,7 @@ from app.infrastructure.database.base import Base, TimestampMixin
 
 FINANCIAL_ACCOUNTS_ID = "financial_accounts.id"
 POSITIVE_AMOUNT = "amount > 0"
+POSTED_OR_REVERSED_STATUS = "status IN ('posted','reversed')"
 
 
 class FinancialAccount(TimestampMixin, Base):
@@ -73,7 +74,7 @@ class PaymentTransaction(TimestampMixin, Base):
             "reference_type IN ('sale','purchase') OR reference_type IS NULL",
             name="reference_type_valid",
         ),
-        CheckConstraint("status IN ('posted','reversed')", name="status_valid"),
+        CheckConstraint(POSTED_OR_REVERSED_STATUS, name="status_valid"),
         CheckConstraint(POSITIVE_AMOUNT, name="amount_positive"),
         CheckConstraint(
             "(transaction_type = 'customer_receipt' AND supplier_invoice_id IS NULL) OR "
@@ -165,7 +166,7 @@ class FinancialTransfer(TimestampMixin, Base):
         UniqueConstraint("reversal_idempotency_key"),
         CheckConstraint("from_account_id <> to_account_id", name="different_accounts"),
         CheckConstraint(POSITIVE_AMOUNT, name="amount_positive"),
-        CheckConstraint("status IN ('posted','reversed')", name="status_valid"),
+        CheckConstraint(POSTED_OR_REVERSED_STATUS, name="status_valid"),
         Index("ix_financial_transfers_from_date", "from_account_id", "transfer_date"),
         Index("ix_financial_transfers_to_date", "to_account_id", "transfer_date"),
     )
@@ -204,7 +205,7 @@ class FinancialAdjustment(TimestampMixin, Base):
         UniqueConstraint("idempotency_key"),
         UniqueConstraint("reversal_idempotency_key"),
         CheckConstraint("amount <> 0", name="amount_nonzero"),
-        CheckConstraint("status IN ('posted','reversed')", name="status_valid"),
+        CheckConstraint(POSTED_OR_REVERSED_STATUS, name="status_valid"),
         Index("ix_financial_adjustments_account_date", "financial_account_id", "adjustment_date"),
     )
 
@@ -268,7 +269,7 @@ class CustomerAccountAdjustment(TimestampMixin, Base):
         UniqueConstraint("adjustment_number"),
         CheckConstraint("adjustment_type IN ('debit','credit')", name="type_valid"),
         CheckConstraint(POSITIVE_AMOUNT, name="amount_positive"),
-        CheckConstraint("status IN ('posted','reversed')", name="status_valid"),
+        CheckConstraint(POSTED_OR_REVERSED_STATUS, name="status_valid"),
         Index("ix_customer_adjustments_customer_date", "customer_id", "adjustment_date"),
     )
 

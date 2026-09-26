@@ -105,23 +105,28 @@ def test_optional_scrap_uses_only_what_was_actually_issued() -> None:
 
 
 def test_completion_rejects_usage_above_issued_quantity() -> None:
+    materials = [material("BASE", "100", "100", "1")]
+    outputs = [output("PIPE", "10", "0", "90")]
     with pytest.raises(ValueError, match="يتجاوز المصروف"):
         calculate_completion_plan(
             actual_batches=2,
             issued_batches=1,
-            materials=[material("BASE", "100", "100", "1")],
-            outputs=[output("PIPE", "10", "0", "90")],
+            materials=materials,
+            outputs=outputs,
         )
 
 
 def test_completion_rejects_output_and_scrap_above_used_inputs() -> None:
+    materials = [material("BASE", "100", "100", "1")]
+    outputs = [output("PIPE", "10", "0", "95")]
+    scrap_weight = Decimal("6")
     with pytest.raises(ValueError, match="لا يمكن أن يتجاوز"):
         calculate_completion_plan(
             actual_batches=1,
             issued_batches=1,
-            materials=[material("BASE", "100", "100", "1")],
-            outputs=[output("PIPE", "10", "0", "95")],
-            scrap_weight_kg=Decimal("6"),
+            materials=materials,
+            outputs=outputs,
+            scrap_weight_kg=scrap_weight,
         )
 
 

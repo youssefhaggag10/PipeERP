@@ -53,6 +53,12 @@ ORIGINAL_TOTAL_LABEL = "الإجمالي الأصلي"
 TYPE_LABEL = "النوع"
 AMOUNT_LABEL = "المبلغ"
 REMAINING_LABEL = "المتبقي"
+DATE_LABEL = "التاريخ"
+NET_LABEL = "الصافي"
+PAID_LABEL = "المدفوع"
+STATUS_LABEL = "الحالة"
+PARTY_LABEL = "الطرف"
+ACCOUNT_LABEL = "الحساب"
 REPORT_TITLES: dict[str, str] = {
     "sales": "تقرير المبيعات",
     "purchases": "تقرير المشتريات",
@@ -452,7 +458,7 @@ def customer_statement_xlsx(view: CustomerStatementPrintView) -> BytesIO:
         ["رصيد أول المدة", statement.opening_balance, "الرصيد النهائي", statement.closing_balance]
     )
     sheet.append([])
-    headers = ["التاريخ", "المستند", "النوع / البيان", "مدين", "دائن", "الرصيد"]
+    headers = [DATE_LABEL, "المستند", "النوع / البيان", "مدين", "دائن", "الرصيد"]
     sheet.append(headers)
     for cell in sheet[sheet.max_row]:
         cell.font = Font(bold=True)
@@ -519,14 +525,14 @@ def _sales_report(
         rows.append(
             {
                 ORDER_NUMBER_LABEL: order.order_number,
-                "التاريخ": order.order_date.date().isoformat(),
+                DATE_LABEL: order.order_date.date().isoformat(),
                 CUSTOMER_LABEL: partner.name_ar,
                 ORIGINAL_TOTAL_LABEL: _money(original),
                 RETURN_LABEL: _money(returned),
-                "الصافي": _money(net),
-                "المدفوع": _money(effective_paid),
+                NET_LABEL: _money(net),
+                PAID_LABEL: _money(effective_paid),
                 REMAINING_LABEL: _money(remaining if invoice is not None else net),
-                "الحالة": order.status,
+                STATUS_LABEL: order.status,
             }
         )
         totals["original"] += original
@@ -536,14 +542,14 @@ def _sales_report(
         totals["remaining"] += remaining if invoice is not None else net
     columns = [
         ORDER_NUMBER_LABEL,
-        "التاريخ",
+        DATE_LABEL,
         CUSTOMER_LABEL,
         ORIGINAL_TOTAL_LABEL,
         RETURN_LABEL,
-        "الصافي",
-        "المدفوع",
+        NET_LABEL,
+        PAID_LABEL,
         REMAINING_LABEL,
-        "الحالة",
+        STATUS_LABEL,
     ]
     return columns, rows, {key: _money(value) for key, value in totals.items()}
 
@@ -577,14 +583,14 @@ def _purchases_report(
         rows.append(
             {
                 ORDER_NUMBER_LABEL: order.order_number,
-                "التاريخ": order.order_date.date().isoformat(),
+                DATE_LABEL: order.order_date.date().isoformat(),
                 SUPPLIER_LABEL: partner.name_ar,
                 ORIGINAL_TOTAL_LABEL: _money(original),
                 RETURN_LABEL: _money(returned),
-                "الصافي": _money(net),
-                "المدفوع": _money(effective_paid),
+                NET_LABEL: _money(net),
+                PAID_LABEL: _money(effective_paid),
                 REMAINING_LABEL: _money(remaining if invoice is not None else net),
-                "الحالة": order.status,
+                STATUS_LABEL: order.status,
             }
         )
         totals["original"] += original
@@ -594,14 +600,14 @@ def _purchases_report(
         totals["remaining"] += remaining if invoice is not None else net
     columns = [
         ORDER_NUMBER_LABEL,
-        "التاريخ",
+        DATE_LABEL,
         SUPPLIER_LABEL,
         ORIGINAL_TOTAL_LABEL,
         RETURN_LABEL,
-        "الصافي",
-        "المدفوع",
+        NET_LABEL,
+        PAID_LABEL,
         REMAINING_LABEL,
-        "الحالة",
+        STATUS_LABEL,
     ]
     return columns, rows, {key: _money(value) for key, value in totals.items()}
 
@@ -619,7 +625,7 @@ def _balances_report(
             "الرصيد الافتتاحي": _money(item.opening_balance),
             "صافي الفواتير": _money(item.invoices_total),
             "المرتجعات": _money(item.returns_total),
-            "المدفوع": _money(item.paid_total),
+            PAID_LABEL: _money(item.paid_total),
             "الاستردادات": _money(item.refunds_total),
             "دفعات مقدمة": _money(item.advances),
             "التسويات": _money(item.adjustments_total),
@@ -633,7 +639,7 @@ def _balances_report(
         "الرصيد الافتتاحي",
         "صافي الفواتير",
         "المرتجعات",
-        "المدفوع",
+        PAID_LABEL,
         "الاستردادات",
         "دفعات مقدمة",
         "التسويات",
@@ -670,13 +676,13 @@ def _payments_report(
                 payment.transaction_date,
                 {
                     "رقم الحركة": payment.transaction_number,
-                    "التاريخ": payment.transaction_date.isoformat(),
+                    DATE_LABEL: payment.transaction_date.isoformat(),
                     TYPE_LABEL: label,
-                    "الطرف": partner.name_ar,
-                    "الحساب": account.name_ar,
+                    PARTY_LABEL: partner.name_ar,
+                    ACCOUNT_LABEL: account.name_ar,
                     AMOUNT_LABEL: _money(payment.amount),
                     PAYMENT_METHOD_LABEL: payment.payment_method,
-                    "الحالة": payment.status,
+                    STATUS_LABEL: payment.status,
                     "ملاحظات": payment.notes,
                 },
                 money(payment.amount),
@@ -689,13 +695,13 @@ def _payments_report(
                 refund.refund_date,
                 {
                     "رقم الحركة": refund.refund_number,
-                    "التاريخ": refund.refund_date.isoformat(),
+                    DATE_LABEL: refund.refund_date.isoformat(),
                     TYPE_LABEL: label,
-                    "الطرف": partner.name_ar,
-                    "الحساب": account.name_ar,
+                    PARTY_LABEL: partner.name_ar,
+                    ACCOUNT_LABEL: account.name_ar,
                     AMOUNT_LABEL: _money(refund.amount),
                     PAYMENT_METHOD_LABEL: refund.payment_method,
-                    "الحالة": refund.status,
+                    STATUS_LABEL: refund.status,
                     "ملاحظات": refund.notes,
                 },
                 money(refund.amount),
@@ -704,13 +710,13 @@ def _payments_report(
     values.sort(key=lambda value: value[0], reverse=True)
     columns = [
         "رقم الحركة",
-        "التاريخ",
+        DATE_LABEL,
         TYPE_LABEL,
-        "الطرف",
-        "الحساب",
+        PARTY_LABEL,
+        ACCOUNT_LABEL,
         AMOUNT_LABEL,
         PAYMENT_METHOD_LABEL,
-        "الحالة",
+        STATUS_LABEL,
         "ملاحظات",
     ]
     return (

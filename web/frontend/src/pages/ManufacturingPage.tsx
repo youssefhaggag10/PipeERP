@@ -683,7 +683,7 @@ export function ManufacturingPage() {
         </button>
       </div>
 
-      {tab === "recipes" ? (
+      {tab === "recipes" ? (() => (
         <section className="master-layout manufacturing-layout">
           <article className="panel">
             <header className="panel__head">
@@ -896,7 +896,7 @@ export function ManufacturingPage() {
             </article>
           ) : null}
         </section>
-      ) : (
+      ))() : (() => (
         <>
           <section className="master-layout manufacturing-layout">
             <article className="panel">
@@ -936,7 +936,7 @@ export function ManufacturingPage() {
                 ))}
               </div>
             </article>
-            {canManage ? (
+            {canManage ? (() => (
               <article className="panel master-form-card">
                 <header className="panel__head">
                   <div>
@@ -1150,10 +1150,10 @@ export function ManufacturingPage() {
                   </button>
                 </form>
               </article>
-            ) : null}
+            ))() : null}
           </section>
 
-          {selected ? (
+          {selected ? (() => (
             <section className="panel manufacturing-detail">
               <header className="panel__head">
                 <div>
@@ -1531,6 +1531,7 @@ export function ManufacturingPage() {
                     </button>
                   </fieldset>
                   <button
+                    type="submit"
                     className="primary-button manufacturing-complete-button"
                     disabled={submitting}
                   >
@@ -1607,9 +1608,9 @@ export function ManufacturingPage() {
                 </>
               ) : null}
             </section>
-          ) : null}
+          ))() : null}
         </>
-      )}
+      ))()}
       {availability ? (
         <div className="availability-backdrop" role="presentation">
           <section

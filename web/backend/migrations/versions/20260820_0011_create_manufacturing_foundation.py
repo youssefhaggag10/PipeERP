@@ -18,6 +18,8 @@ depends_on: str | Sequence[str] | None = None
 USERS_ID = "users.id"
 MANUFACTURING_RECIPES_ID = "manufacturing_recipes.id"
 MANUFACTURING_ORDERS_ID = "manufacturing_orders.id"
+PRODUCTS_ID = "products.id"
+INVENTORY_TRANSACTIONS_ID = "inventory_transactions.id"
 
 
 def upgrade() -> None:
@@ -60,7 +62,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["scrap_product_id"],
-            ["products.id"],
+            [PRODUCTS_ID],
             name=op.f("fk_manufacturing_recipes_scrap_product_id_products"),
             ondelete="RESTRICT",
         ),
@@ -248,7 +250,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["product_id"],
-            ["products.id"],
+            [PRODUCTS_ID],
             name=op.f("fk_manufacturing_recipe_components_product_id_products"),
             ondelete="RESTRICT",
         ),
@@ -288,7 +290,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["product_id"],
-            ["products.id"],
+            [PRODUCTS_ID],
             name=op.f("fk_manufacturing_recipe_outputs_product_id_products"),
             ondelete="RESTRICT",
         ),
@@ -406,7 +408,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["scrap_inventory_transaction_id"],
-            ["inventory_transactions.id"],
+            [INVENTORY_TRANSACTIONS_ID],
             name=op.f(
                 "fk_manufacturing_completions_scrap_inventory_transaction_id_inventory_transactions"
             ),
@@ -492,13 +494,13 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["product_id"],
-            ["products.id"],
+            [PRODUCTS_ID],
             name=op.f("fk_manufacturing_order_materials_product_id_products"),
             ondelete="RESTRICT",
         ),
         sa.ForeignKeyConstraint(
             ["return_inventory_transaction_id"],
-            ["inventory_transactions.id"],
+            [INVENTORY_TRANSACTIONS_ID],
             name=op.f(
                 "fk_manufacturing_order_materials_return_inventory_transaction_id_inventory_transactions"
             ),
@@ -574,7 +576,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["inventory_transaction_id"],
-            ["inventory_transactions.id"],
+            [INVENTORY_TRANSACTIONS_ID],
             name=op.f(
                 "fk_manufacturing_order_outputs_inventory_transaction_id_inventory_transactions"
             ),
@@ -588,7 +590,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["product_id"],
-            ["products.id"],
+            [PRODUCTS_ID],
             name=op.f("fk_manufacturing_order_outputs_product_id_products"),
             ondelete="RESTRICT",
         ),
@@ -660,7 +662,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["inventory_transaction_id"],
-            ["inventory_transactions.id"],
+            [INVENTORY_TRANSACTIONS_ID],
             name=op.f(
                 "fk_manufacturing_completion_outputs_inventory_transaction_id_inventory_transactions"
             ),
@@ -668,7 +670,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["product_id"],
-            ["products.id"],
+            [PRODUCTS_ID],
             name=op.f("fk_manufacturing_completion_outputs_product_id_products"),
             ondelete="RESTRICT",
         ),
@@ -724,7 +726,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["inventory_transaction_id"],
-            ["inventory_transactions.id"],
+            [INVENTORY_TRANSACTIONS_ID],
             name=op.f(
                 "fk_manufacturing_material_issues_inventory_transaction_id_inventory_transactions"
             ),
@@ -740,7 +742,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["reversal_transaction_id"],
-            ["inventory_transactions.id"],
+            [INVENTORY_TRANSACTIONS_ID],
             name=op.f(
                 "fk_manufacturing_material_issues_reversal_transaction_id_inventory_transactions"
             ),
@@ -796,7 +798,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["excluded_product_id"],
-            ["products.id"],
+            [PRODUCTS_ID],
             name=op.f("fk_manufacturing_mix_adjustments_excluded_product_id_products"),
             ondelete="RESTRICT",
         ),
@@ -840,7 +842,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["product_id"],
-            ["products.id"],
+            [PRODUCTS_ID],
             name=op.f("fk_manufacturing_mix_adjustment_materials_product_id_products"),
             ondelete="RESTRICT",
         ),

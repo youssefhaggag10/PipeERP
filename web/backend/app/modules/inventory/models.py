@@ -19,6 +19,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.base import Base, TimestampMixin
 
+PRODUCTS_ID = "products.id"
+WAREHOUSES_ID = "warehouses.id"
+INVENTORY_TRANSACTIONS_ID = "inventory_transactions.id"
+
 
 class InventoryLot(TimestampMixin, Base):
     __tablename__ = "inventory_lots"
@@ -29,10 +33,10 @@ class InventoryLot(TimestampMixin, Base):
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     product_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PRODUCTS_ID, ondelete="RESTRICT"), nullable=False
     )
     warehouse_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(WAREHOUSES_ID, ondelete="RESTRICT"), nullable=False
     )
     lot_number: Mapped[str] = mapped_column(String(80), nullable=False)
     normalized_lot_number: Mapped[str] = mapped_column(String(80), nullable=False)
@@ -73,17 +77,17 @@ class InventoryLayer(TimestampMixin, Base):
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     product_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PRODUCTS_ID, ondelete="RESTRICT"), nullable=False
     )
     warehouse_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(WAREHOUSES_ID, ondelete="RESTRICT"), nullable=False
     )
     lot_id: Mapped[UUID | None] = mapped_column(
         Uuid, ForeignKey("inventory_lots.id", ondelete="RESTRICT")
     )
     source_transaction_id: Mapped[UUID | None] = mapped_column(
         Uuid,
-        ForeignKey("inventory_transactions.id", ondelete="RESTRICT"),
+        ForeignKey(INVENTORY_TRANSACTIONS_ID, ondelete="RESTRICT"),
         unique=True,
     )
     provenance_root_layer_id: Mapped[UUID | None] = mapped_column(
@@ -135,10 +139,10 @@ class InventoryTransaction(Base):
     idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
     transaction_type: Mapped[str] = mapped_column(String(32), nullable=False)
     product_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PRODUCTS_ID, ondelete="RESTRICT"), nullable=False
     )
     warehouse_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(WAREHOUSES_ID, ondelete="RESTRICT"), nullable=False
     )
     lot_id: Mapped[UUID | None] = mapped_column(
         Uuid, ForeignKey("inventory_lots.id", ondelete="RESTRICT")
@@ -152,7 +156,7 @@ class InventoryTransaction(Base):
     reference_id: Mapped[str | None] = mapped_column(String(80))
     reference_line_id: Mapped[str | None] = mapped_column(String(80))
     reversal_of_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("inventory_transactions.id", ondelete="RESTRICT")
+        Uuid, ForeignKey(INVENTORY_TRANSACTIONS_ID, ondelete="RESTRICT")
     )
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
     posted_by_id: Mapped[UUID] = mapped_column(
@@ -177,7 +181,7 @@ class InventoryAllocation(TimestampMixin, Base):
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     outbound_transaction_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("inventory_transactions.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(INVENTORY_TRANSACTIONS_ID, ondelete="RESTRICT"), nullable=False
     )
     source_layer_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey("inventory_layers.id", ondelete="RESTRICT"), nullable=False
@@ -197,10 +201,10 @@ class InventoryBalance(TimestampMixin, Base):
     )
 
     product_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("products.id", ondelete="RESTRICT"), primary_key=True
+        Uuid, ForeignKey(PRODUCTS_ID, ondelete="RESTRICT"), primary_key=True
     )
     warehouse_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("warehouses.id", ondelete="RESTRICT"), primary_key=True
+        Uuid, ForeignKey(WAREHOUSES_ID, ondelete="RESTRICT"), primary_key=True
     )
     quantity_on_hand: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     weight_on_hand_kg: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)

@@ -322,6 +322,7 @@ export function InventoryPage() {
                 />
               </label>
               <button
+                type="submit"
                 className="primary-button"
                 disabled={
                   submitting ||

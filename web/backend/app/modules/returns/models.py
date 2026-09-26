@@ -20,6 +20,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.infrastructure.database.base import Base, TimestampMixin
 
 USERS_ID = "users.id"
+INVENTORY_TRANSACTIONS_ID = "inventory_transactions.id"
 
 
 class InvoiceReturn(TimestampMixin, Base):
@@ -130,10 +131,10 @@ class InvoiceReturnLine(TimestampMixin, Base):
         Uuid, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
     )
     inventory_transaction_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("inventory_transactions.id", ondelete="RESTRICT")
+        Uuid, ForeignKey(INVENTORY_TRANSACTIONS_ID, ondelete="RESTRICT")
     )
     reversal_inventory_transaction_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("inventory_transactions.id", ondelete="RESTRICT")
+        Uuid, ForeignKey(INVENTORY_TRANSACTIONS_ID, ondelete="RESTRICT")
     )
     quantity: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     weight_kg: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False, default=0)
@@ -218,7 +219,7 @@ class InvoiceReturnSource(TimestampMixin, Base):
         Uuid, ForeignKey("inventory_layers.id", ondelete="RESTRICT")
     )
     return_inventory_transaction_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("inventory_transactions.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(INVENTORY_TRANSACTIONS_ID, ondelete="RESTRICT"), nullable=False
     )
     return_inventory_allocation_id: Mapped[UUID | None] = mapped_column(
         Uuid, ForeignKey("inventory_allocations.id", ondelete="RESTRICT")
@@ -227,7 +228,7 @@ class InvoiceReturnSource(TimestampMixin, Base):
         Uuid, ForeignKey("inventory_layers.id", ondelete="RESTRICT")
     )
     reversal_inventory_transaction_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("inventory_transactions.id", ondelete="RESTRICT")
+        Uuid, ForeignKey(INVENTORY_TRANSACTIONS_ID, ondelete="RESTRICT")
     )
     reversal_inventory_layer_id: Mapped[UUID | None] = mapped_column(
         Uuid, ForeignKey("inventory_layers.id", ondelete="RESTRICT")

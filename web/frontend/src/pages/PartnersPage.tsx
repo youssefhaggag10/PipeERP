@@ -101,32 +101,30 @@ function PartnerList({
         <div className="partner-cards">
           {partners.map((partner) => (
             <article
-              role="button"
-              tabIndex={0}
               className={`partner-card ${partner.is_active ? "" : "partner-card--inactive"} ${selectedId === partner.id ? "partner-card--selected" : ""}`}
               key={partner.id}
-              onClick={() => onSelect(partner.id)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  onSelect(partner.id);
-                }
-              }}
             >
-              <span className="partner-card__avatar">
-                {partner.name_ar.charAt(0)}
-              </span>
-              <div>
-                <strong>{partner.name_ar}</strong>
-                <small dir="ltr">
-                  {partner.code} · {partner.phone || "بدون هاتف"}
-                </small>
-                {!partner.is_active ? (
-                  <div className="permission-chips">
-                    <span>متوقف</span>
-                  </div>
-                ) : null}
-              </div>
+              <button
+                type="button"
+                className="partner-card__select"
+                onClick={() => onSelect(partner.id)}
+                aria-label={`اختيار ${singular} ${partner.name_ar}`}
+              >
+                <span className="partner-card__avatar">
+                  {partner.name_ar.charAt(0)}
+                </span>
+                <span>
+                  <strong>{partner.name_ar}</strong>
+                  <small dir="ltr">
+                    {partner.code} · {partner.phone || "بدون هاتف"}
+                  </small>
+                  {!partner.is_active ? (
+                    <span className="permission-chips">
+                      <span>متوقف</span>
+                    </span>
+                  ) : null}
+                </span>
+              </button>
               {canManage ? (
                 <button
                   type="button"

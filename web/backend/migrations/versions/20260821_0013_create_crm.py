@@ -11,6 +11,8 @@ down_revision: str | None = "20260821_0012"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+USERS_ID = "users.id"
+
 
 def upgrade() -> None:
     op.create_table(
@@ -29,7 +31,7 @@ def upgrade() -> None:
         sa.Column(
             "assigned_user_id",
             sa.Uuid(),
-            sa.ForeignKey("users.id", ondelete="RESTRICT"),
+            sa.ForeignKey(USERS_ID, ondelete="RESTRICT"),
             nullable=False,
         ),
         sa.Column("interested_products", sa.Text(), nullable=False, server_default=""),
@@ -43,7 +45,7 @@ def upgrade() -> None:
         sa.Column(
             "created_by_id",
             sa.Uuid(),
-            sa.ForeignKey("users.id", ondelete="RESTRICT"),
+            sa.ForeignKey(USERS_ID, ondelete="RESTRICT"),
             nullable=False,
         ),
         sa.Column("last_contact_at", sa.DateTime(timezone=True)),
@@ -77,7 +79,7 @@ def upgrade() -> None:
         sa.Column(
             "assigned_user_id",
             sa.Uuid(),
-            sa.ForeignKey("users.id", ondelete="RESTRICT"),
+            sa.ForeignKey(USERS_ID, ondelete="RESTRICT"),
             nullable=False,
         ),
         sa.Column("status", sa.String(16), nullable=False, server_default="scheduled"),
@@ -85,7 +87,7 @@ def upgrade() -> None:
         sa.Column(
             "created_by_id",
             sa.Uuid(),
-            sa.ForeignKey("users.id", ondelete="RESTRICT"),
+            sa.ForeignKey(USERS_ID, ondelete="RESTRICT"),
             nullable=False,
         ),
         sa.Column("completed_at", sa.DateTime(timezone=True)),

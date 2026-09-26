@@ -416,8 +416,6 @@ def edit_warehouse(
             db,
             warehouse_id=warehouse_id,
             payload=payload,
-            actor=principal,
-            client=client_context(request),
         )
     except (MasterDataConflict, MasterDataNotFound, IntegrityError, ValueError) as exc:
         db.rollback()

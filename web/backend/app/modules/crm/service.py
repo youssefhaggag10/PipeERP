@@ -149,7 +149,7 @@ def sync_customers_to_leads(db: Session, principal: Principal) -> int:
     return synced
 
 
-def _lead_query(principal: Principal) -> Select[CrmLead]:
+def _lead_query(principal: Principal) -> Select[tuple[CrmLead]]:
     statement = select(CrmLead)
     return (
         statement

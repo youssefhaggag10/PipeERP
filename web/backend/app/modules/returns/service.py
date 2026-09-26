@@ -19,6 +19,7 @@ from app.modules.inventory.models import (
 )
 from app.modules.inventory.schemas import ReceiptRequest
 from app.modules.inventory.service import (
+    ExactLayerIssueRequest,
     lock_inventory_contexts,
     post_exact_layer_issue,
     post_receipt,
@@ -261,7 +262,7 @@ def list_returnable_invoices(
                     refunded=refunded,
                     remaining=remaining,
                     refundable=refundable,
-                    return_status=("none" if returned == 0 else "full" if net == 0 else "partial"),
+                    return_status=_return_status(returned=returned, net=net),
                 )
             )
     elif return_type == "purchase":
@@ -299,7 +300,7 @@ def list_returnable_invoices(
                     refunded=refunded,
                     remaining=remaining,
                     refundable=refundable,
-                    return_status=("none" if returned == 0 else "full" if net == 0 else "partial"),
+                    return_status=_return_status(returned=returned, net=net),
                 )
             )
     else:
@@ -793,6 +794,14 @@ def _candidate_basis_amount(candidate: SourceCandidate) -> Decimal:
     )
 
 
+def _return_status(*, returned: Decimal, net: Decimal) -> Literal["none", "partial", "full"]:
+    if returned == 0:
+        return "none"
+    if net == 0:
+        return "full"
+    return "partial"
+
+
 def _requested_source_amounts(
     candidate: SourceCandidate, *, requested_quantity: Decimal, requested_weight: Decimal
 ) -> tuple[Decimal, Decimal]:
@@ -804,10 +813,8 @@ def _requested_source_amounts(
             raise ReturnsConflict("الوزن المطلوب يتجاوز المتاح من مصدر المخزون المحدد")
         if weight == candidate.remaining_weight_kg:
             return candidate.remaining_quantity, candidate.remaining_weight_kg
-        paired_quantity = (
-            quantity(candidate.remaining_quantity * weight / candidate.remaining_weight_kg)
-            if candidate.remaining_weight_kg > 0
-            else ZERO
+        paired_quantity = quantity(
+            candidate.remaining_quantity * weight / candidate.remaining_weight_kg
         )
         return paired_quantity, weight
 
@@ -818,10 +825,8 @@ def _requested_source_amounts(
         raise ReturnsConflict("الكمية المطلوبة تتجاوز المتاح من مصدر المخزون المحدد")
     if returned_quantity == candidate.remaining_quantity:
         return candidate.remaining_quantity, candidate.remaining_weight_kg
-    paired_weight = (
-        quantity(candidate.remaining_weight_kg * returned_quantity / candidate.remaining_quantity)
-        if candidate.remaining_quantity > 0
-        else ZERO
+    paired_weight = quantity(
+        candidate.remaining_weight_kg * returned_quantity / candidate.remaining_quantity
     )
     return returned_quantity, paired_weight
 
@@ -847,91 +852,87 @@ def _purchase_attributable_error(
     )
 
 
-def _prepare_sources_for_line(
-    *,
-    return_type: str,
-    request_line: ReturnLineRequest,
-    source: ReturnableLineView,
-    candidates: list[SourceCandidate],
-) -> list[PreparedSource]:
-    request = request_line
-    available_candidates = [item for item in candidates if _candidate_basis_amount(item) > 0]
-    target_remaining = (
-        source.remaining_weight_kg if source.cost_basis == "weight" else source.remaining_quantity
+def _prepared_source(candidate: SourceCandidate, *, amount: Decimal) -> PreparedSource:
+    returned_quantity, returned_weight = _requested_source_amounts(
+        candidate,
+        requested_quantity=amount if candidate.cost_basis == "quantity" else ZERO,
+        requested_weight=amount if candidate.cost_basis == "weight" else ZERO,
     )
-    available_total = quantity(
-        sum((_candidate_basis_amount(item) for item in available_candidates), ZERO)
+    basis_amount = returned_weight if candidate.cost_basis == "weight" else returned_quantity
+    return PreparedSource(
+        candidate=candidate,
+        quantity=returned_quantity,
+        weight_kg=returned_weight,
+        total_cost=quantity(basis_amount * candidate.unit_cost),
     )
 
-    if request.mode == "full_remaining":
-        requested_total = target_remaining
-        if return_type == "purchase" and requested_total > available_total:
+
+def _prepare_full_remaining_sources(
+    *,
+    return_type: str,
+    source: ReturnableLineView,
+    candidates: list[SourceCandidate],
+    requested_total: Decimal,
+    available_total: Decimal,
+) -> list[PreparedSource]:
+    if return_type == "purchase" and requested_total > available_total:
+        raise _purchase_attributable_error(
+            source=source,
+            requested=requested_total,
+            available=available_total,
+            candidates=candidates,
+        )
+    prepared: list[PreparedSource] = []
+    remaining_target = requested_total
+    for candidate in candidates:
+        if remaining_target <= 0:
+            break
+        take = min(_candidate_basis_amount(candidate), remaining_target)
+        prepared.append(_prepared_source(candidate, amount=take))
+        remaining_target = quantity(remaining_target - take)
+    if remaining_target != 0:
+        if return_type == "purchase":
             raise _purchase_attributable_error(
                 source=source,
                 requested=requested_total,
                 available=available_total,
                 candidates=candidates,
             )
-        prepared: list[PreparedSource] = []
-        remaining_target = requested_total
-        for candidate in available_candidates:
-            if remaining_target <= 0:
-                break
-            available = _candidate_basis_amount(candidate)
-            take = min(available, remaining_target)
-            returned_quantity, returned_weight = _requested_source_amounts(
-                candidate,
-                requested_quantity=take if candidate.cost_basis == "quantity" else ZERO,
-                requested_weight=take if candidate.cost_basis == "weight" else ZERO,
-            )
-            basis_amount = (
-                returned_weight if candidate.cost_basis == "weight" else returned_quantity
-            )
-            prepared.append(
-                PreparedSource(
-                    candidate=candidate,
-                    quantity=returned_quantity,
-                    weight_kg=returned_weight,
-                    total_cost=quantity(basis_amount * candidate.unit_cost),
-                )
-            )
-            remaining_target = quantity(remaining_target - take)
-        if remaining_target != 0:
-            if return_type == "purchase":
-                raise _purchase_attributable_error(
-                    source=source,
-                    requested=requested_total,
-                    available=available_total,
-                    candidates=candidates,
-                )
-            raise ReturnsConflict("مصادر تسليم المبيعات لا تغطي كامل الكمية المتبقية")
-        return prepared
+        raise ReturnsConflict("مصادر تسليم المبيعات لا تغطي كامل الكمية المتبقية")
+    return prepared
 
-    candidate_by_id = {item.source_id: item for item in available_candidates}
-    requested_sources = request.sources
-    if not requested_sources:
-        if len(available_candidates) != 1:
-            raise ReturnsConflict(
-                "اختر الدفعة أو مصدر التسليم المطلوب إرجاعه؛ "
-                "لا يمكن اختيار مصدر تلقائيًا عند تعدد المصادر"
-            )
-        requested_sources = [
-            ReturnSourceRequest(
-                source_id=available_candidates[0].source_id,
-                quantity=request.quantity,
-                weight_kg=request.weight_kg,
-            )
-        ]
 
-    requested_total = quantity(
-        sum(
-            (
-                item.weight_kg if source.cost_basis == "weight" else item.quantity
-                for item in requested_sources
-            ),
-            ZERO,
+def _requested_sources(
+    *,
+    request: ReturnLineRequest,
+    available_candidates: list[SourceCandidate],
+) -> list[ReturnSourceRequest]:
+    if request.sources:
+        return request.sources
+    if len(available_candidates) != 1:
+        raise ReturnsConflict(
+            "اختر الدفعة أو مصدر التسليم المطلوب إرجاعه؛ "
+            "لا يمكن اختيار مصدر تلقائيًا عند تعدد المصادر"
         )
-    )
+    return [
+        ReturnSourceRequest(
+            source_id=available_candidates[0].source_id,
+            quantity=request.quantity,
+            weight_kg=request.weight_kg,
+        )
+    ]
+
+
+def _prepare_selected_sources(
+    *,
+    return_type: str,
+    source: ReturnableLineView,
+    candidates: list[SourceCandidate],
+    requested_sources: list[ReturnSourceRequest],
+    requested_total: Decimal,
+    available_total: Decimal,
+) -> list[PreparedSource]:
+    candidate_by_id = {item.source_id: item for item in candidates}
     if return_type == "purchase" and requested_total > available_total:
         raise _purchase_attributable_error(
             source=source,
@@ -959,18 +960,67 @@ def _prepare_sources_for_line(
                     candidates=candidates,
                 ) from exc
             raise
-        basis_amount = (
-            returned_weight if selected_candidate.cost_basis == "weight" else returned_quantity
-        )
         prepared.append(
             PreparedSource(
                 candidate=selected_candidate,
                 quantity=returned_quantity,
                 weight_kg=returned_weight,
-                total_cost=quantity(basis_amount * selected_candidate.unit_cost),
+                total_cost=quantity(
+                    (
+                        returned_weight
+                        if selected_candidate.cost_basis == "weight"
+                        else returned_quantity
+                    )
+                    * selected_candidate.unit_cost
+                ),
             )
         )
     return prepared
+
+
+def _prepare_sources_for_line(
+    *,
+    return_type: str,
+    request_line: ReturnLineRequest,
+    source: ReturnableLineView,
+    candidates: list[SourceCandidate],
+) -> list[PreparedSource]:
+    available_candidates = [item for item in candidates if _candidate_basis_amount(item) > 0]
+    available_total = quantity(
+        sum((_candidate_basis_amount(item) for item in available_candidates), ZERO)
+    )
+    target_remaining = (
+        source.remaining_weight_kg if source.cost_basis == "weight" else source.remaining_quantity
+    )
+    if request_line.mode == "full_remaining":
+        return _prepare_full_remaining_sources(
+            return_type=return_type,
+            source=source,
+            candidates=available_candidates,
+            requested_total=target_remaining,
+            available_total=available_total,
+        )
+    selected_sources = _requested_sources(
+        request=request_line,
+        available_candidates=available_candidates,
+    )
+    requested_total = quantity(
+        sum(
+            (
+                item.weight_kg if source.cost_basis == "weight" else item.quantity
+                for item in selected_sources
+            ),
+            ZERO,
+        )
+    )
+    return _prepare_selected_sources(
+        return_type=return_type,
+        source=source,
+        candidates=available_candidates,
+        requested_sources=selected_sources,
+        requested_total=requested_total,
+        available_total=available_total,
+    )
 
 
 def _existing_return(db: Session, *, idempotency_key: str, digest: str) -> InvoiceReturn | None:
@@ -1150,17 +1200,19 @@ def _post_source_inventory(
         raise ReturnsConflict("مصدر طبقة مرتجع الشراء غير مكتمل")
     transaction, allocation = post_exact_layer_issue(
         db,
-        source_layer_id=candidate.consumed_layer_id,
-        product_id=prepared_line.source.product_id,
-        warehouse_id=warehouse_id,
-        requested_quantity=prepared_source.quantity,
-        requested_weight_kg=prepared_source.weight_kg,
-        cost_basis=candidate.cost_basis,
-        idempotency_key=child_key,
-        reference_type="purchase_return",
-        reference_id=str(document.id),
-        reference_line_id=str(line.id),
-        notes=f"{document.return_number} — {document.reason}",
+        request=ExactLayerIssueRequest(
+            source_layer_id=candidate.consumed_layer_id,
+            product_id=prepared_line.source.product_id,
+            warehouse_id=warehouse_id,
+            requested_quantity=prepared_source.quantity,
+            requested_weight_kg=prepared_source.weight_kg,
+            cost_basis=candidate.cost_basis,
+            idempotency_key=child_key,
+            reference_type="purchase_return",
+            reference_id=str(document.id),
+            reference_line_id=str(line.id),
+            notes=f"{document.return_number} — {document.reason}",
+        ),
         actor_user_id=actor.user.id,
         client=client,
     )
@@ -1445,21 +1497,23 @@ def _reverse_sales_source(
         raise ReturnsConflict("تعذر العثور على طبقة مرتجع المبيعات")
     reversal, _ = post_exact_layer_issue(
         db,
-        source_layer_id=return_layer_id,
-        product_id=line.product_id,
-        warehouse_id=document.warehouse_id,
-        requested_quantity=source.quantity,
-        requested_weight_kg=source.weight_kg,
-        cost_basis=source.cost_basis,
-        idempotency_key=child_key,
-        reference_type="sales_return_reversal",
-        reference_id=str(document.id),
-        reference_line_id=str(line.id),
-        notes=payload.reason,
+        request=ExactLayerIssueRequest(
+            source_layer_id=return_layer_id,
+            product_id=line.product_id,
+            warehouse_id=document.warehouse_id,
+            requested_quantity=source.quantity,
+            requested_weight_kg=source.weight_kg,
+            cost_basis=source.cost_basis,
+            idempotency_key=child_key,
+            reference_type="sales_return_reversal",
+            reference_id=str(document.id),
+            reference_line_id=str(line.id),
+            notes=payload.reason,
+            transaction_type="reversal_out",
+            reversal_of_id=source.return_inventory_transaction_id,
+        ),
         actor_user_id=actor.user.id,
         client=client,
-        transaction_type="reversal_out",
-        reversal_of_id=source.return_inventory_transaction_id,
     )
     source.reversal_inventory_layer_id = None
     return reversal

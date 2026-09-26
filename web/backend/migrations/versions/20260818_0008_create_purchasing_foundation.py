@@ -14,6 +14,8 @@ revision: str = "20260818_0008"
 down_revision: str | None = "20260818_0007"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
+
+NOW_SQL = "now()"
 VERSION_POSITIVE = "version > 0"
 PURCHASE_ORDERS_ID = "purchase_orders.id"
 
@@ -30,7 +32,7 @@ def upgrade() -> None:
         sa.Column(
             "order_date",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
         sa.Column("notes", sa.Text(), nullable=False),
@@ -40,13 +42,13 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
         sa.CheckConstraint(
@@ -99,13 +101,13 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
         sa.CheckConstraint(
@@ -183,7 +185,7 @@ def upgrade() -> None:
         sa.Column("notes", sa.Text(), nullable=False),
         sa.Column("posted_by_id", sa.Uuid(), nullable=False),
         sa.Column(
-            "posted_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False
+            "posted_at", sa.DateTime(timezone=True), server_default=sa.text(NOW_SQL), nullable=False
         ),
         sa.Column("reversed_by_id", sa.Uuid(), nullable=True),
         sa.Column("reversed_at", sa.DateTime(timezone=True), nullable=True),
@@ -237,13 +239,13 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
         sa.CheckConstraint(
@@ -291,13 +293,13 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
         sa.CheckConstraint(

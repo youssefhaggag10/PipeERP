@@ -1,4 +1,5 @@
 import unicodedata
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from hashlib import sha256
@@ -37,6 +38,23 @@ from app.modules.master_data.models import Partner, Product, UnitOfMeasure, Ware
 
 class InventoryError(Exception):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class ExactLayerIssueRequest:
+    source_layer_id: UUID
+    product_id: UUID
+    warehouse_id: UUID
+    requested_quantity: Decimal
+    requested_weight_kg: Decimal
+    cost_basis: str
+    idempotency_key: str
+    reference_type: str
+    reference_id: str
+    reference_line_id: str
+    notes: str
+    transaction_type: str = "return_out"
+    reversal_of_id: UUID | None = None
 
 
 class InventoryNotFound(InventoryError):
@@ -104,9 +122,7 @@ def _locked_balance(db: Session, product_id: UUID, warehouse_id: UUID) -> Invent
     return balance
 
 
-def lock_inventory_contexts(
-    db: Session, contexts: set[tuple[UUID, UUID]]
-) -> None:
+def lock_inventory_contexts(db: Session, contexts: set[tuple[UUID, UUID]]) -> None:
     """Lock product and balance rows in deterministic order before multi-source posting."""
     for product_id, warehouse_id in sorted(contexts, key=lambda item: (str(item[0]), str(item[1]))):
         _lock_context(db, product_id, warehouse_id)
@@ -270,9 +286,7 @@ def post_receipt(
 def receipt_layer_for_transaction(
     db: Session, transaction_id: UUID, *, lock: bool = False
 ) -> InventoryLayer:
-    statement = select(InventoryLayer).where(
-        InventoryLayer.source_transaction_id == transaction_id
-    )
+    statement = select(InventoryLayer).where(InventoryLayer.source_transaction_id == transaction_id)
     if lock:
         statement = statement.with_for_update()
     layer = db.scalar(statement)
@@ -284,23 +298,24 @@ def receipt_layer_for_transaction(
 def post_exact_layer_issue(
     db: Session,
     *,
-    source_layer_id: UUID,
-    product_id: UUID,
-    warehouse_id: UUID,
-    requested_quantity: Decimal,
-    requested_weight_kg: Decimal,
-    cost_basis: str,
-    idempotency_key: str,
-    reference_type: str,
-    reference_id: str,
-    reference_line_id: str,
-    notes: str,
+    request: ExactLayerIssueRequest,
     actor_user_id: UUID,
     client: ClientContext,
-    transaction_type: str = "return_out",
-    reversal_of_id: UUID | None = None,
 ) -> tuple[InventoryTransaction, InventoryAllocation]:
     """Issue exact amounts from one proven source layer without generic FIFO."""
+    source_layer_id = request.source_layer_id
+    product_id = request.product_id
+    warehouse_id = request.warehouse_id
+    requested_quantity = request.requested_quantity
+    requested_weight_kg = request.requested_weight_kg
+    cost_basis = request.cost_basis
+    idempotency_key = request.idempotency_key
+    reference_type = request.reference_type
+    reference_id = request.reference_id
+    reference_line_id = request.reference_line_id
+    notes = request.notes
+    transaction_type = request.transaction_type
+    reversal_of_id = request.reversal_of_id
     if transaction_type not in {"return_out", "reversal_out"}:
         raise ValueError("نوع حركة الإخراج المحددة غير صالح")
     requested_quantity = quantity(requested_quantity)
@@ -327,9 +342,7 @@ def post_exact_layer_issue(
 
     _lock_context(db, product_id, warehouse_id)
     layer = db.scalar(
-        select(InventoryLayer)
-        .where(InventoryLayer.id == source_layer_id)
-        .with_for_update()
+        select(InventoryLayer).where(InventoryLayer.id == source_layer_id).with_for_update()
     )
     if layer is None:
         raise InventoryNotFound("طبقة المخزون المحددة غير موجودة")
@@ -1335,9 +1348,7 @@ def _return_reference_context(db: Session, reference_uuid: UUID) -> tuple[str, s
     return (row[0], row[1]) if row else None
 
 
-def _manufacturing_reference_context(
-    db: Session, reference_uuid: UUID
-) -> tuple[str, str] | None:
+def _manufacturing_reference_context(db: Session, reference_uuid: UUID) -> tuple[str, str] | None:
     from app.modules.manufacturing.models import ManufacturingOrder
 
     number = db.scalar(

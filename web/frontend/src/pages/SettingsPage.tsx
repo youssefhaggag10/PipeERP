@@ -244,12 +244,12 @@ export function SettingsPage() {
       <label>اسم المنشأة<input value={settings.company_name_ar} disabled={!canManage} onChange={(event) => setSettings({ ...settings, company_name_ar: event.target.value })} required/></label>
       <label>العنوان<input value={settings.address} disabled={!canManage} onChange={(event) => setSettings({ ...settings, address: event.target.value })}/></label>
       <label>أرقام الشركة والمبيعات<textarea dir="ltr" rows={5} value={settings.phone} disabled={!canManage} placeholder="رقم في كل سطر؛ الرقم الأول هو الرئيسي" onChange={(event) => setSettings({ ...settings, phone: event.target.value })}/></label>
-      {canManage ? <button className="primary-button"><Save size={17}/> حفظ إعدادات الفاتورة</button> : null}
+      {canManage ? <button type="submit" className="primary-button"><Save size={17}/> حفظ إعدادات الفاتورة</button> : null}
     </form></section> : null}
     {tab === "watermark" ? <section className="panel settings-panel"><header className="panel__head"><div><h3>شعار الهيدر الثابت</h3><p>يظهر دائمًا بجوار اسم المستخدم في الشريط العلوي بدل العلامة المائية داخل الصفحات.</p></div><Image size={20}/></header><form className="compact-form settings-print-form" onSubmit={saveHeaderLogo}>
       <label className="watermark-file"><span><Upload size={17}/> اختيار صورة اللوجو</span><input type="file" accept="image/png,image/jpeg,image/webp,image/bmp" onChange={(event) => chooseHeaderLogo(event.target.files?.[0])}/></label>
       {headerLogo.image ? <div className="watermark-preview"><img src={headerLogo.image} alt="معاينة شعار الهيدر"/><button type="button" className="mini-action" onClick={() => setHeaderLogo({ image: "" })}><Trash2 size={14}/> استخدام شعار النظام الافتراضي</button></div> : <p className="settings-note">سيُستخدم شعار PipeERP الافتراضي بجوار اسم المستخدم.</p>}
-      <button className="primary-button"><Save size={17}/> حفظ وتطبيق شعار الهيدر</button>
+      <button type="submit" className="primary-button"><Save size={17}/> حفظ وتطبيق شعار الهيدر</button>
     </form></section> : null}
     {tab === "appearance" ? <section className="panel settings-panel"><header className="panel__head"><div><h3>الثيم وحجم واجهة البرنامج</h3><p>لا تؤثر هذه الإعدادات على تنسيق الفواتير المطبوعة.</p></div><MonitorCog size={20}/></header><form className="compact-form settings-print-form" onSubmit={saveAppearance}>
       <label>الثيم<select value={appearance.theme} onChange={(event) => setAppearance({ ...appearance, theme: event.target.value as AppearanceSettings["theme"] })}><option value="system">حسب إعداد الجهاز</option><option value="light">فاتح</option><option value="dark">داكن</option></select></label>

@@ -213,6 +213,18 @@ const typeLabels: Record<TransactionType, string> = {
   supplier_payment: "سداد مورد",
 };
 
+function paymentStatusTone(status: AccountInvoice["payment_status"]): string {
+  if (status === "paid") return "received";
+  if (status === "partial") return "approved";
+  return "cancelled";
+}
+
+function paymentStatusLabel(status: AccountInvoice["payment_status"]): string {
+  if (status === "paid") return "مدفوعة";
+  if (status === "partial") return "مدفوعة جزئيًا";
+  return "غير مدفوعة";
+}
+
 export function TreasuryPage() {
   const { user } = useAuth();
   const canManage = user?.permissions.includes("accounts.manage") ?? false;
@@ -1044,6 +1056,7 @@ export function TreasuryPage() {
                           </small>
                         </span>
                         <input
+                          aria-label={`المبلغ المخصص للفاتورة ${item.invoice_number}`}
                           type="number"
                           min="0"
                           max={item.remaining}
@@ -1740,7 +1753,7 @@ export function TreasuryPage() {
                 <td>{currency.format(Number(item.remaining))}</td>
                 <td><span className="purchase-status purchase-status--received">{item.invoice_status === "posted" ? "معتمدة" : item.invoice_status}</span></td>
                 <td><span className={`purchase-status purchase-status--${item.return_status === "none" ? "received" : item.return_status === "partial" ? "approved" : "cancelled"}`}>{item.delivery_return_status}</span></td>
-                <td><span className={`purchase-status purchase-status--${item.payment_status === "paid" ? "received" : item.payment_status === "partial" ? "approved" : "cancelled"}`}>{item.payment_status === "paid" ? "مدفوعة" : item.payment_status === "partial" ? "مدفوعة جزئيًا" : "غير مدفوعة"}</span></td>
+                <td><span className={`purchase-status purchase-status--${paymentStatusTone(item.payment_status)}`}>{paymentStatusLabel(item.payment_status)}</span></td>
                 <td><span className="invoice-row-actions">{canManage && Number(item.remaining) > 0 ? <button className="mini-action" onClick={() => payInvoice(item)}>{item.invoice_type === "sales" ? "تحصيل" : "سداد"}</button> : null}{canReturns && item.return_status !== "full" ? <button className="mini-action" onClick={() => returnInvoice(item)}>إنشاء مرتجع</button> : null}</span></td>
               </tr>)}</tbody>
             </table>

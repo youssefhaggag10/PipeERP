@@ -493,35 +493,92 @@ def list_open_invoices(
     return result
 
 
+def _orders_for_payment_type(
+    db: Session, *, transaction_type: str, partner_id: UUID
+) -> tuple[list[SalesOrder | PurchaseOrder], Literal["sale", "purchase"]]:
+    if transaction_type == "customer_receipt":
+        return (
+            list(
+                db.scalars(
+                    select(SalesOrder)
+                    .where(
+                        SalesOrder.customer_id == partner_id,
+                        SalesOrder.status.notin_({"cancelled", "reversed"}),
+                    )
+                    .order_by(SalesOrder.order_date, SalesOrder.id)
+                )
+            ),
+            "sale",
+        )
+    if transaction_type == "supplier_payment":
+        return (
+            list(
+                db.scalars(
+                    select(PurchaseOrder)
+                    .where(
+                        PurchaseOrder.supplier_id == partner_id,
+                        PurchaseOrder.status != "cancelled",
+                    )
+                    .order_by(PurchaseOrder.order_date, PurchaseOrder.id)
+                )
+            ),
+            "purchase",
+        )
+    raise ValueError("نوع الحركة المالية غير صحيح")
+
+
+def _net_open_order_amounts(
+    db: Session,
+    *,
+    order: SalesOrder | PurchaseOrder,
+    reference_type: Literal["sale", "purchase"],
+    paid: Decimal,
+) -> tuple[Decimal, Decimal]:
+    invoice: CustomerInvoice | SupplierInvoice | None
+    if reference_type == "sale":
+        invoice = db.scalar(
+            select(CustomerInvoice).where(
+                CustomerInvoice.sales_order_id == order.id,
+                CustomerInvoice.status == "posted",
+            )
+        )
+        invoice_kind = "sales"
+    else:
+        invoice = db.scalar(
+            select(SupplierInvoice).where(
+                SupplierInvoice.purchase_order_id == order.id,
+                SupplierInvoice.status == "posted",
+            )
+        )
+        invoice_kind = "purchase"
+    if invoice is None:
+        return order.total, paid
+    order_total = money(
+        max(
+            ZERO,
+            order.total
+            - _invoice_returned_total(db, invoice_kind=invoice_kind, invoice_id=invoice.id),
+        )
+    )
+    effective_paid = money(
+        max(
+            ZERO,
+            paid - _invoice_refunded_total(db, invoice_kind=invoice_kind, invoice_id=invoice.id),
+        )
+    )
+    return order_total, effective_paid
+
+
 def list_open_orders(
     db: Session, *, transaction_type: str, partner_id: UUID
 ) -> list[OpenOrderView]:
     partner = db.get(Partner, partner_id)
     if partner is None:
         raise TreasuryNotFound("العميل أو المورد غير موجود")
+    orders, reference_type = _orders_for_payment_type(
+        db, transaction_type=transaction_type, partner_id=partner_id
+    )
     result: list[OpenOrderView] = []
-    if transaction_type == "customer_receipt":
-        orders = db.scalars(
-            select(SalesOrder)
-            .where(
-                SalesOrder.customer_id == partner_id,
-                SalesOrder.status.notin_({"cancelled", "reversed"}),
-            )
-            .order_by(SalesOrder.order_date, SalesOrder.id)
-        )
-        reference_type = "sale"
-    elif transaction_type == "supplier_payment":
-        orders = db.scalars(
-            select(PurchaseOrder)
-            .where(
-                PurchaseOrder.supplier_id == partner_id,
-                PurchaseOrder.status != "cancelled",
-            )
-            .order_by(PurchaseOrder.order_date, PurchaseOrder.id)
-        )
-        reference_type = "purchase"
-    else:
-        raise ValueError("نوع الحركة المالية غير صحيح")
     for order in orders:
         paid = _sum(
             db,
@@ -531,59 +588,12 @@ def list_open_orders(
                 PaymentTransaction.status == "posted",
             ),
         )
-        order_total = order.total
-        if reference_type == "sale":
-            invoice = db.scalar(
-                select(CustomerInvoice).where(
-                    CustomerInvoice.sales_order_id == order.id,
-                    CustomerInvoice.status == "posted",
-                )
-            )
-            if invoice is not None:
-                order_total = money(
-                    max(
-                        ZERO,
-                        order.total
-                        - _invoice_returned_total(db, invoice_kind="sales", invoice_id=invoice.id),
-                    )
-                )
-                paid = money(
-                    max(
-                        ZERO,
-                        paid
-                        - _invoice_refunded_total(db, invoice_kind="sales", invoice_id=invoice.id),
-                    )
-                )
-        else:
-            supplier_invoice = db.scalar(
-                select(SupplierInvoice).where(
-                    SupplierInvoice.purchase_order_id == order.id,
-                    SupplierInvoice.status == "posted",
-                )
-            )
-            if supplier_invoice is not None:
-                order_total = money(
-                    max(
-                        ZERO,
-                        order.total
-                        - _invoice_returned_total(
-                            db,
-                            invoice_kind="purchase",
-                            invoice_id=supplier_invoice.id,
-                        ),
-                    )
-                )
-                paid = money(
-                    max(
-                        ZERO,
-                        paid
-                        - _invoice_refunded_total(
-                            db,
-                            invoice_kind="purchase",
-                            invoice_id=supplier_invoice.id,
-                        ),
-                    )
-                )
+        order_total, paid = _net_open_order_amounts(
+            db,
+            order=order,
+            reference_type=reference_type,
+            paid=paid,
+        )
         remaining = money(order_total - paid)
         if remaining > ZERO:
             result.append(
@@ -593,7 +603,7 @@ def list_open_orders(
                     order_date=order.order_date,
                     partner_id=partner.id,
                     partner_name_ar=partner.name_ar,
-                    reference_type=reference_type,  # type: ignore[arg-type]
+                    reference_type=reference_type,
                     status=order.status,
                     total=order_total,
                     paid=paid,

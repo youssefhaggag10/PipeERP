@@ -21,17 +21,22 @@ def test_purchase_loss_and_additional_cost_are_capitalized_over_net_amount() -> 
 
 
 def test_purchase_costing_rejects_total_loss_and_negative_cost() -> None:
+    gross_amount = Decimal("10")
+    total_loss = Decimal("10")
+    no_loss = Decimal("0")
+    unit_price = Decimal("2")
+    negative_price = Decimal("-1")
     with pytest.raises(ValueError, match="الفاقد"):
         calculate_receipt_cost(
-            gross_amount=Decimal("10"),
-            loss_amount=Decimal("10"),
-            unit_price=Decimal("2"),
+            gross_amount=gross_amount,
+            loss_amount=total_loss,
+            unit_price=unit_price,
         )
     with pytest.raises(ValueError, match="سالبتين"):
         calculate_receipt_cost(
-            gross_amount=Decimal("10"),
-            loss_amount=Decimal("0"),
-            unit_price=Decimal("-1"),
+            gross_amount=gross_amount,
+            loss_amount=no_loss,
+            unit_price=negative_price,
         )
 
 

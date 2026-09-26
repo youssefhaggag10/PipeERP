@@ -21,6 +21,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.infrastructure.database.base import Base, TimestampMixin
 
 SALES_ORDERS_ID = "sales_orders.id"
+PARTNERS_ID = "partners.id"
+PRODUCTS_ID = "products.id"
+USERS_ID = "users.id"
 SUBTOTAL_NONNEGATIVE = "subtotal >= 0"
 TOTAL_NONNEGATIVE = "total >= 0"
 VERSION_POSITIVE = "version > 0"
@@ -47,7 +50,7 @@ class SalesOrder(TimestampMixin, Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     order_number: Mapped[str] = mapped_column(String(40), nullable=False)
     customer_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("partners.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PARTNERS_ID, ondelete="RESTRICT"), nullable=False
     )
     warehouse_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False
@@ -65,7 +68,7 @@ class SalesOrder(TimestampMixin, Base):
     total: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False, default=0)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_by_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT"), nullable=False
     )
 
 
@@ -87,7 +90,7 @@ class SalesOrderLine(TimestampMixin, Base):
         Uuid, ForeignKey(SALES_ORDERS_ID, ondelete="CASCADE"), nullable=False
     )
     product_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PRODUCTS_ID, ondelete="RESTRICT"), nullable=False
     )
     quantity: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     unit: Mapped[str] = mapped_column(String(40), nullable=False)
@@ -156,7 +159,7 @@ class SalesWeightCardLine(TimestampMixin, Base):
         Uuid, ForeignKey("sales_order_lines.id", ondelete="RESTRICT"), nullable=False
     )
     product_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PRODUCTS_ID, ondelete="RESTRICT"), nullable=False
     )
     quantity_pieces: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     standard_weight_kg: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
@@ -186,14 +189,14 @@ class SalesDelivery(Base):
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="posted")
     posted_by_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT"), nullable=False
     )
     posted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     reversal_idempotency_key: Mapped[str | None] = mapped_column(String(120))
     reversed_by_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT")
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT")
     )
     reversed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     reversal_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -246,7 +249,7 @@ class CustomerInvoice(TimestampMixin, Base):
         Uuid, ForeignKey(SALES_ORDERS_ID, ondelete="RESTRICT"), nullable=False
     )
     customer_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("partners.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PARTNERS_ID, ondelete="RESTRICT"), nullable=False
     )
     invoice_type: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="posted")
@@ -283,7 +286,7 @@ class SalesQuotation(TimestampMixin, Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     quotation_number: Mapped[str] = mapped_column(String(40), nullable=False)
     customer_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("partners.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PARTNERS_ID, ondelete="RESTRICT"), nullable=False
     )
     quotation_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -294,7 +297,7 @@ class SalesQuotation(TimestampMixin, Base):
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_by_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT"), nullable=False
     )
 
 
@@ -312,7 +315,7 @@ class SalesQuotationLine(TimestampMixin, Base):
         Uuid, ForeignKey("sales_quotations.id", ondelete="CASCADE"), nullable=False
     )
     product_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("products.id", ondelete="RESTRICT")
+        Uuid, ForeignKey(PRODUCTS_ID, ondelete="RESTRICT")
     )
     item_name: Mapped[str] = mapped_column(String(200), nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)

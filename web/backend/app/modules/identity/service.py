@@ -31,6 +31,7 @@ from app.modules.identity.security import (
 MAX_IP_FAILURES = 20
 IP_FAILURE_WINDOW = timedelta(minutes=5)
 _DUMMY_PASSWORD_HASH = hash_password("invalid-account-password-placeholder")
+AUTH_LOGIN_EVENT = "auth.login"
 
 
 class IdentityError(Exception):
@@ -239,7 +240,7 @@ def _ip_is_rate_limited(db: Session, client: ClientContext, now: datetime) -> bo
         return False
     failures = db.scalar(
         select(func.count(AuditLog.id)).where(
-            AuditLog.event_type == "auth.login",
+            AuditLog.event_type == AUTH_LOGIN_EVENT,
             AuditLog.outcome == "failure",
             AuditLog.ip_address == client.ip_address,
             AuditLog.created_at >= now - IP_FAILURE_WINDOW,
@@ -263,7 +264,7 @@ def authenticate(
     if _ip_is_rate_limited(db, client, current_time):
         add_audit(
             db,
-            event_type="auth.login",
+            event_type=AUTH_LOGIN_EVENT,
             entity_type="session",
             outcome="denied",
             client=client,
@@ -278,7 +279,7 @@ def authenticate(
         verify_password(password, _DUMMY_PASSWORD_HASH)
         add_audit(
             db,
-            event_type="auth.login",
+            event_type=AUTH_LOGIN_EVENT,
             entity_type="session",
             outcome="failure",
             client=client,
@@ -297,7 +298,7 @@ def authenticate(
         add_audit(
             db,
             actor_user_id=user.id,
-            event_type="auth.login",
+            event_type=AUTH_LOGIN_EVENT,
             entity_type="session",
             outcome="failure",
             client=client,
@@ -327,7 +328,7 @@ def authenticate(
     add_audit(
         db,
         actor_user_id=user.id,
-        event_type="auth.login",
+        event_type=AUTH_LOGIN_EVENT,
         entity_type="session",
         entity_id=str(auth_session.id),
         outcome="success",

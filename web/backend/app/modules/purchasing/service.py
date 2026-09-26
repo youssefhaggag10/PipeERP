@@ -45,6 +45,8 @@ from app.modules.purchasing.schemas import (
 from app.modules.returns.models import InvoiceReturn
 from app.modules.treasury.models import PaymentAllocation, PaymentTransaction
 
+PURCHASE_ORDER_NOT_FOUND = "أمر الشراء غير موجود"
+
 
 class PurchasingError(Exception):
     pass
@@ -133,7 +135,7 @@ def list_purchase_orders(db: Session, *, limit: int = 100) -> list[PurchaseOrder
 def get_purchase_order(db: Session, order_id: UUID) -> PurchaseOrderView:
     order = db.get(PurchaseOrder, order_id)
     if order is None:
-        raise PurchasingNotFound("أمر الشراء غير موجود")
+        raise PurchasingNotFound(PURCHASE_ORDER_NOT_FOUND)
     return _order_view(db, order)
 
 
@@ -301,7 +303,7 @@ def approve_purchase_order(
 ) -> PurchaseOrderView:
     order = db.scalar(select(PurchaseOrder).where(PurchaseOrder.id == order_id).with_for_update())
     if order is None:
-        raise PurchasingNotFound("أمر الشراء غير موجود")
+        raise PurchasingNotFound(PURCHASE_ORDER_NOT_FOUND)
     if order.version != version:
         raise PurchasingConflict("عدّل مستخدم آخر أمر الشراء؛ حدّث الصفحة ثم أعد المحاولة")
     if order.status != "draft":
@@ -364,7 +366,7 @@ def _receipt_view(db: Session, receipt: PurchaseReceipt) -> PurchaseReceiptView:
 
 def list_purchase_receipts(db: Session, *, order_id: UUID) -> list[PurchaseReceiptView]:
     if db.get(PurchaseOrder, order_id) is None:
-        raise PurchasingNotFound("أمر الشراء غير موجود")
+        raise PurchasingNotFound(PURCHASE_ORDER_NOT_FOUND)
     receipts = list(
         db.scalars(
             select(PurchaseReceipt)
@@ -486,7 +488,7 @@ def post_purchase_receipt(
 
     order = db.scalar(select(PurchaseOrder).where(PurchaseOrder.id == order_id).with_for_update())
     if order is None:
-        raise PurchasingNotFound("أمر الشراء غير موجود")
+        raise PurchasingNotFound(PURCHASE_ORDER_NOT_FOUND)
     if order.status not in {"approved", "partially_received"}:
         raise PurchasingConflict("يجب اعتماد أمر الشراء قبل تسجيل الاستلام")
     order_lines = {
@@ -562,7 +564,7 @@ def create_supplier_invoice(
 ) -> SupplierInvoiceView:
     order = db.scalar(select(PurchaseOrder).where(PurchaseOrder.id == order_id).with_for_update())
     if order is None:
-        raise PurchasingNotFound("أمر الشراء غير موجود")
+        raise PurchasingNotFound(PURCHASE_ORDER_NOT_FOUND)
     if order.status != "received":
         raise PurchasingConflict("يجب استلام أمر الشراء بالكامل قبل تسجيل فاتورة المورد")
     existing = db.scalar(
@@ -620,7 +622,7 @@ def receive_purchase_order(
     """Mirror the desktop action: receive every remaining line and post its invoice."""
     order = db.scalar(select(PurchaseOrder).where(PurchaseOrder.id == order_id).with_for_update())
     if order is None:
-        raise PurchasingNotFound("أمر الشراء غير موجود")
+        raise PurchasingNotFound(PURCHASE_ORDER_NOT_FOUND)
     if order.status == "received":
         return _order_view(db, order)
     if order.version != payload.version:
@@ -759,6 +761,64 @@ def reverse_supplier_invoice(
     return SupplierInvoiceView.model_validate(invoice)
 
 
+def _reverse_receipt_line(
+    db: Session,
+    *,
+    receipt: PurchaseReceipt,
+    receipt_line: PurchaseReceiptLine,
+    order_line: PurchaseOrderLine,
+    idempotency_key: str,
+    reason: str,
+    actor: Principal,
+    client: ClientContext,
+) -> None:
+    child_key = sha256(
+        f"purchase-reversal:{idempotency_key}:{receipt_line.id}".encode()
+    ).hexdigest()
+    try:
+        reverse_purchase_receipt_inventory(
+            db,
+            transaction_id=receipt_line.inventory_transaction_id,
+            purchase_receipt_id=receipt.id,
+            purchase_order_line_id=order_line.id,
+            idempotency_key=child_key,
+            actor_user_id=actor.user.id,
+            client=client,
+            reason=reason,
+        )
+    except InventoryNotFound as exc:
+        raise PurchasingNotFound(str(exc)) from exc
+    except (InventoryConflict, InsufficientStock) as exc:
+        raise PurchasingConflict(str(exc)) from exc
+    order_line.received_quantity = quantity(
+        order_line.received_quantity - receipt_line.gross_quantity
+    )
+    order_line.received_weight_kg = quantity(
+        order_line.received_weight_kg - receipt_line.gross_weight_kg
+    )
+    if order_line.received_quantity < 0 or order_line.received_weight_kg < 0:
+        raise PurchasingConflict("عكس الاستلام سينتج كميات مستلمة سالبة")
+    order_line.version += 1
+
+
+def _purchase_order_receipt_status(lines: list[PurchaseOrderLine]) -> str:
+    any_received = any(
+        line.received_quantity > 0 if line.cost_basis == "quantity" else line.received_weight_kg > 0
+        for line in lines
+    )
+    all_received = all(
+        line.received_quantity >= line.ordered_quantity
+        if line.cost_basis == "quantity"
+        else line.received_weight_kg >= line.ordered_weight_kg
+        for line in lines
+    )
+    if all_received:
+        return "received"
+    if any_received:
+        return "partially_received"
+    return "approved"
+
+
 def reverse_purchase_receipt(
     db: Session,
     *,
@@ -809,51 +869,18 @@ def reverse_purchase_receipt(
         order_line = order_lines.get(receipt_line.purchase_order_line_id)
         if order_line is None:
             raise PurchasingConflict("تعذر تحميل بند أمر الشراء المرتبط بالاستلام")
-        child_key = sha256(
-            f"purchase-reversal:{idempotency_key}:{receipt_line.id}".encode()
-        ).hexdigest()
-        try:
-            reverse_purchase_receipt_inventory(
-                db,
-                transaction_id=receipt_line.inventory_transaction_id,
-                purchase_receipt_id=receipt.id,
-                purchase_order_line_id=order_line.id,
-                idempotency_key=child_key,
-                actor_user_id=actor.user.id,
-                client=client,
-                reason=payload.reason,
-            )
-        except InventoryNotFound as exc:
-            raise PurchasingNotFound(str(exc)) from exc
-        except (InventoryConflict, InsufficientStock) as exc:
-            raise PurchasingConflict(str(exc)) from exc
-        order_line.received_quantity = quantity(
-            order_line.received_quantity - receipt_line.gross_quantity
+        _reverse_receipt_line(
+            db,
+            receipt=receipt,
+            receipt_line=receipt_line,
+            order_line=order_line,
+            idempotency_key=idempotency_key,
+            reason=payload.reason,
+            actor=actor,
+            client=client,
         )
-        order_line.received_weight_kg = quantity(
-            order_line.received_weight_kg - receipt_line.gross_weight_kg
-        )
-        if order_line.received_quantity < 0 or order_line.received_weight_kg < 0:
-            raise PurchasingConflict("عكس الاستلام سينتج كميات مستلمة سالبة")
-        order_line.version += 1
 
-    any_received = any(
-        (
-            line.received_quantity > 0
-            if line.cost_basis == "quantity"
-            else line.received_weight_kg > 0
-        )
-        for line in order_lines.values()
-    )
-    all_received = all(
-        (line.received_quantity >= line.ordered_quantity)
-        if line.cost_basis == "quantity"
-        else (line.received_weight_kg >= line.ordered_weight_kg)
-        for line in order_lines.values()
-    )
-    order.status = (
-        "received" if all_received else "partially_received" if any_received else "approved"
-    )
+    order.status = _purchase_order_receipt_status(list(order_lines.values()))
     order.version += 1
     receipt.status = "reversed"
     receipt.reversal_idempotency_key = idempotency_key

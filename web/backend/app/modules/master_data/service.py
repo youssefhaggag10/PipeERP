@@ -549,8 +549,6 @@ def update_warehouse(
     *,
     warehouse_id: UUID,
     payload: UpdateWarehouseRequest,
-    actor: Principal,
-    client: ClientContext,
 ) -> Warehouse:
     warehouse = db.get(Warehouse, warehouse_id)
     if warehouse is None:

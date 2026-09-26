@@ -24,7 +24,10 @@ from app.modules.inventory.models import (  # noqa: E402
     InventoryLayer,
     InventoryTransaction,
 )
-from app.modules.inventory.service import post_exact_layer_issue  # noqa: E402
+from app.modules.inventory.service import (  # noqa: E402
+    ExactLayerIssueRequest,
+    post_exact_layer_issue,
+)
 from app.modules.master_data.models import (  # noqa: E402
     DocumentSequence,
     Partner,
@@ -1213,17 +1216,19 @@ def test_sales_return_reversal_is_blocked_after_return_layer_consumption() -> No
             assert actor is not None
             post_exact_layer_issue(
                 db,
-                source_layer_id=source.return_inventory_layer_id,
-                product_id=UUID(ids["product"]),
-                warehouse_id=UUID(ids["warehouse"]),
-                requested_quantity=Decimal("1"),
-                requested_weight_kg=Decimal("0"),
-                cost_basis="quantity",
-                idempotency_key="consume-sales-return-layer-0001",
-                reference_type="test_consumption",
-                reference_id=document["id"],
-                reference_line_id=ids["line"],
-                notes="استهلاك لاحق",
+                request=ExactLayerIssueRequest(
+                    source_layer_id=source.return_inventory_layer_id,
+                    product_id=UUID(ids["product"]),
+                    warehouse_id=UUID(ids["warehouse"]),
+                    requested_quantity=Decimal("1"),
+                    requested_weight_kg=Decimal("0"),
+                    cost_basis="quantity",
+                    idempotency_key="consume-sales-return-layer-0001",
+                    reference_type="test_consumption",
+                    reference_id=document["id"],
+                    reference_line_id=ids["line"],
+                    notes="استهلاك لاحق",
+                ),
                 actor_user_id=actor.id,
                 client=ClientContext("127.0.0.1", "test", "consume-return"),
             )

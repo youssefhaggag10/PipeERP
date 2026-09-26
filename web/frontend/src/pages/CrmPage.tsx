@@ -354,7 +354,8 @@ export function CrmPage() {
     event.preventDefault();
     if (!selected) return;
     const form = new FormData(event.currentTarget);
-    const dueValue = activityDue || String(form.get("due_at") || "");
+    const dueField = form.get("due_at");
+    const dueValue = activityDue || (typeof dueField === "string" ? dueField : "");
     try {
       await api(`/crm/leads/${selected.id}/activities`, {
         method: "POST",
