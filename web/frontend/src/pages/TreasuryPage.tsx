@@ -1505,8 +1505,8 @@ export function TreasuryPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {statement.lines.map((line, index) => (
-                          <Fragment key={`${line.document_number}-${index}`}>
+                        {statement.lines.map((line) => (
+                          <Fragment key={`${line.document_number}-${line.movement_date}-${line.movement_type}`}>
                             <tr>
                               <td>
                                 {new Date(line.movement_date).toLocaleDateString(
@@ -1522,10 +1522,10 @@ export function TreasuryPage() {
                               </td>
                             </tr>
                             {(statement.invoice_details[line.document_number] ?? []).map(
-                              (detail, detailIndex) => (
+                              (detail) => (
                                 <tr
                                   className="statement-detail-row"
-                                  key={`${line.document_number}-detail-${detailIndex}`}
+                                  key={`${line.document_number}-detail-${detail.code}`}
                                 >
                                   <td />
                                   <td>↳ بند فاتورة</td>

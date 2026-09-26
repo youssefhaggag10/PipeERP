@@ -13,7 +13,8 @@ def _migration_module():  # type: ignore[no-untyped-def]
         / "20260912_0017_return_source_layers.py"
     )
     spec = spec_from_file_location("migration_0017", migration_path)
-    assert spec is not None and spec.loader is not None
+    assert spec is not None
+    assert spec.loader is not None
     migration = module_from_spec(spec)
     spec.loader.exec_module(migration)
     return migration

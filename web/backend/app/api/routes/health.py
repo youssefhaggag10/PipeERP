@@ -15,12 +15,12 @@ class HealthResponse(BaseModel):
     service: Literal["pipeerp-api"]
 
 
-@router.get("/health", response_model=HealthResponse)
+@router.get("/health")
 def health() -> HealthResponse:
     return HealthResponse(status="ok", service="pipeerp-api")
 
 
-@router.get("/health/ready", response_model=HealthResponse)
+@router.get("/health/ready")
 def readiness(db: DatabaseSession) -> HealthResponse:
     try:
         db.execute(text("SELECT 1"))

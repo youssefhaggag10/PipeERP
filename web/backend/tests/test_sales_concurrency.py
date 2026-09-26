@@ -41,7 +41,8 @@ def test_five_concurrent_deliveries_post_stock_and_invoice_once() -> None:
             )
         unit = db.scalar(select(UnitOfMeasure).where(UnitOfMeasure.code == "KG"))
         warehouse = db.scalar(select(Warehouse).where(Warehouse.code == "MAIN"))
-        assert unit is not None and warehouse is not None
+        assert unit is not None
+        assert warehouse is not None
         customer = Partner(
             code=f"CUS-{suffix}",
             normalized_code=f"CUS-{suffix}",

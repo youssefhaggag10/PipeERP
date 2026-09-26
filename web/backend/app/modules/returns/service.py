@@ -65,6 +65,7 @@ from app.modules.sales.models import (
 from app.modules.treasury.models import FinancialAccount, PaymentAllocation, PaymentTransaction
 
 ZERO = Decimal("0")
+PURCHASE_INVOICE_NOT_POSTED = "فاتورة المشتريات غير موجودة أو غير معتمدة"
 PAYMENT_ACCOUNT_TYPES = {
     "cash": "cash",
     "bank_transfer": "bank",
@@ -652,7 +653,7 @@ def get_returnable_lines(
     elif return_type == "purchase":
         purchase_invoice = db.get(SupplierInvoice, invoice_id)
         if purchase_invoice is None or purchase_invoice.status != "posted":
-            raise ReturnsNotFound("فاتورة المشتريات غير موجودة أو غير معتمدة")
+            raise ReturnsNotFound(PURCHASE_INVOICE_NOT_POSTED)
         purchase_lines = list(
             db.scalars(
                 select(PurchaseOrderLine)
@@ -1009,7 +1010,7 @@ def _lock_return_context(db: Session, payload: CreateInvoiceReturnRequest) -> Re
             .with_for_update()
         )
         if supplier_invoice is None or supplier_invoice.status != "posted":
-            raise ReturnsNotFound("فاتورة المشتريات غير موجودة أو غير معتمدة")
+            raise ReturnsNotFound(PURCHASE_INVOICE_NOT_POSTED)
         purchase_order = db.get(PurchaseOrder, supplier_invoice.purchase_order_id)
         context = (
             ReturnContext(
@@ -1583,7 +1584,7 @@ def _lock_refund_invoice(db: Session, payload: CreateRefundRequest) -> RefundInv
         select(SupplierInvoice).where(SupplierInvoice.id == payload.invoice_id).with_for_update()
     )
     if supplier_invoice is None or supplier_invoice.status != "posted":
-        raise ReturnsNotFound("فاتورة المشتريات غير موجودة أو غير معتمدة")
+        raise ReturnsNotFound(PURCHASE_INVOICE_NOT_POSTED)
     return RefundInvoiceContext(
         return_type="purchase",
         invoice_id=supplier_invoice.id,

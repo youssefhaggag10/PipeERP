@@ -97,7 +97,7 @@ def _manage(request: Request, db: DatabaseSession, principal: CurrentPrincipal) 
     enforce_csrf(request, db, principal)
 
 
-@router.get("/options", response_model=TreasuryOptionsView)
+@router.get("/options")
 def options(
     request: Request,
     principal: CurrentPrincipal,
@@ -107,7 +107,7 @@ def options(
     return treasury_options(db)
 
 
-@router.get("/financial-accounts", response_model=list[FinancialAccountView])
+@router.get("/financial-accounts")
 def accounts(
     request: Request,
     principal: CurrentPrincipal,
@@ -120,7 +120,6 @@ def accounts(
 
 @router.post(
     "/financial-accounts",
-    response_model=FinancialAccountView,
     status_code=status.HTTP_201_CREATED,
 )
 def add_account(
@@ -141,7 +140,7 @@ def add_account(
         raise _translate_error(exc) from exc
 
 
-@router.put("/financial-accounts/{account_id}", response_model=FinancialAccountView)
+@router.put("/financial-accounts/{account_id}")
 def edit_account(
     account_id: UUID,
     payload: UpdateFinancialAccountRequest,
@@ -165,7 +164,7 @@ def edit_account(
         raise _translate_error(exc) from exc
 
 
-@router.get("/payments", response_model=list[PaymentView])
+@router.get("/payments")
 def payments(
     request: Request,
     principal: CurrentPrincipal,
@@ -176,7 +175,7 @@ def payments(
     return list_payments(db, limit=limit)
 
 
-@router.post("/payments", response_model=PaymentView, status_code=status.HTTP_201_CREATED)
+@router.post("/payments", status_code=status.HTTP_201_CREATED)
 def add_payment(
     payload: PostPaymentRequest,
     request: Request,
@@ -200,7 +199,7 @@ def add_payment(
         raise _translate_error(exc) from exc
 
 
-@router.post("/payments/{payment_id}/reversal", response_model=PaymentView)
+@router.post("/payments/{payment_id}/reversal")
 def undo_payment(
     payment_id: UUID,
     payload: ReverseRequest,
@@ -226,7 +225,7 @@ def undo_payment(
         raise _translate_error(exc) from exc
 
 
-@router.get("/open-invoices", response_model=list[OpenInvoiceView])
+@router.get("/open-invoices")
 def open_invoices(
     transaction_type: Annotated[str, Query(pattern="^customer_receipt$")],
     partner_id: UUID,
@@ -271,7 +270,7 @@ def _invoice_payment_methods(
     )
 
 
-@router.get("/invoices", response_model=list[AccountInvoiceView])
+@router.get("/invoices")
 def all_invoices(
     invoice_type: Annotated[str, Query(pattern="^(sales|purchase)$")],
     request: Request,
@@ -316,7 +315,7 @@ def all_invoices(
     return result
 
 
-@router.get("/open-orders", response_model=list[OpenOrderView])
+@router.get("/open-orders")
 def open_orders(
     transaction_type: Annotated[str, Query(pattern="^(customer_receipt|supplier_payment)$")],
     partner_id: UUID,
@@ -331,7 +330,7 @@ def open_orders(
         raise _translate_error(exc) from exc
 
 
-@router.get("/transfers", response_model=list[TransferView])
+@router.get("/transfers")
 def transfers(
     request: Request,
     principal: CurrentPrincipal,
@@ -341,7 +340,7 @@ def transfers(
     return list_transfers(db)
 
 
-@router.post("/transfers", response_model=TransferView, status_code=status.HTTP_201_CREATED)
+@router.post("/transfers", status_code=status.HTTP_201_CREATED)
 def add_transfer(
     payload: TransferRequest,
     request: Request,
@@ -365,7 +364,7 @@ def add_transfer(
         raise _translate_error(exc) from exc
 
 
-@router.post("/transfers/{transfer_id}/reversal", response_model=TransferView)
+@router.post("/transfers/{transfer_id}/reversal")
 def undo_transfer(
     transfer_id: UUID,
     payload: ReverseRequest,
@@ -393,7 +392,6 @@ def undo_transfer(
 
 @router.post(
     "/financial-adjustments",
-    response_model=FinancialAdjustmentView,
     status_code=status.HTTP_201_CREATED,
 )
 def add_financial_adjustment(
@@ -421,7 +419,6 @@ def add_financial_adjustment(
 
 @router.post(
     "/financial-adjustments/{adjustment_id}/reversal",
-    response_model=FinancialAdjustmentView,
 )
 def undo_financial_adjustment(
     adjustment_id: UUID,
@@ -448,7 +445,7 @@ def undo_financial_adjustment(
         raise _translate_error(exc) from exc
 
 
-@router.get("/opening-balances", response_model=list[OpeningBalanceView])
+@router.get("/opening-balances")
 def opening_balances(
     request: Request,
     principal: CurrentPrincipal,
@@ -460,7 +457,6 @@ def opening_balances(
 
 @router.post(
     "/opening-balances",
-    response_model=OpeningBalanceView,
     status_code=status.HTTP_201_CREATED,
 )
 def add_opening_balance(
@@ -481,7 +477,7 @@ def add_opening_balance(
         raise _translate_error(exc) from exc
 
 
-@router.post("/opening-balances/{entry_id}/reversal", response_model=OpeningBalanceView)
+@router.post("/opening-balances/{entry_id}/reversal")
 def undo_opening_balance(
     entry_id: UUID,
     payload: ReverseRequest,
@@ -505,7 +501,7 @@ def undo_opening_balance(
         raise _translate_error(exc) from exc
 
 
-@router.get("/customer-adjustments", response_model=list[CustomerAdjustmentView])
+@router.get("/customer-adjustments")
 def customer_adjustments(
     request: Request,
     principal: CurrentPrincipal,
@@ -517,7 +513,6 @@ def customer_adjustments(
 
 @router.post(
     "/customer-adjustments/{adjustment_id}/reversal",
-    response_model=CustomerAdjustmentView,
 )
 def undo_customer_adjustment(
     adjustment_id: UUID,
@@ -542,7 +537,7 @@ def undo_customer_adjustment(
         raise _translate_error(exc) from exc
 
 
-@router.get("/summary", response_model=TreasurySummaryView)
+@router.get("/summary")
 def summary(
     request: Request,
     principal: CurrentPrincipal,
@@ -552,7 +547,7 @@ def summary(
     return treasury_summary(db)
 
 
-@router.get("/partner-balances", response_model=list[PartnerBalanceView])
+@router.get("/partner-balances")
 def partner_balances(
     partner_type: Annotated[str, Query(pattern="^(customer|supplier)$")],
     request: Request,
@@ -563,7 +558,7 @@ def partner_balances(
     return list_partner_balances(db, partner_type=partner_type)
 
 
-@router.get("/partners/{partner_id}/statement", response_model=PartnerStatementView)
+@router.get("/partners/{partner_id}/statement")
 def statement(
     partner_id: UUID,
     date_from: date,

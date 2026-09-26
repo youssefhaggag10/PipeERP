@@ -425,20 +425,25 @@ def test_sales_return_refund_and_safe_reversal_flow() -> None:
             InventoryBalance,
             (UUID(ids["product"]), UUID(ids["warehouse"])),
         )
-        assert balance is not None and balance.quantity_on_hand == Decimal("8.000000")
+        assert balance is not None
+        assert balance.quantity_on_hand == Decimal("8.000000")
         stored_return = db.scalar(select(InvoiceReturn))
         stored_refund = db.scalar(select(ReturnRefund))
         line = db.scalar(select(InvoiceReturnLine))
-        assert stored_return is not None and stored_return.status == "reversed"
-        assert stored_refund is not None and stored_refund.status == "reversed"
-        assert line is not None and line.reversal_inventory_transaction_id is not None
+        assert stored_return is not None
+        assert stored_return.status == "reversed"
+        assert stored_refund is not None
+        assert stored_refund.status == "reversed"
+        assert line is not None
+        assert line.reversal_inventory_transaction_id is not None
         return_layer = db.scalar(
             select(InventoryLayer).where(
                 InventoryLayer.source_type == "sales_return",
                 InventoryLayer.source_id == str(stored_return.id),
             )
         )
-        assert return_layer is not None and return_layer.quantity_remaining == 0
+        assert return_layer is not None
+        assert return_layer.quantity_remaining == 0
         partner_balance = next(
             item
             for item in list_partner_balances(db, partner_type="customer")
@@ -492,7 +497,10 @@ def _seed_purchase(factory: sessionmaker[Session]) -> dict[str, str]:
         warehouse = db.scalar(select(Warehouse).where(Warehouse.code == "MAIN"))
         unit = db.scalar(select(UnitOfMeasure).where(UnitOfMeasure.code == "PCS"))
         cash = db.scalar(select(FinancialAccount).where(FinancialAccount.code == "CASH-RET"))
-        assert actor_id is not None and warehouse is not None and unit is not None and cash
+        assert actor_id is not None
+        assert warehouse is not None
+        assert unit is not None
+        assert cash
         supplier = Partner(
             code="SUP-RET",
             normalized_code="SUP-RET",
@@ -765,7 +773,8 @@ def test_purchase_return_uses_receipt_source_and_supplier_refund_is_capped() -> 
             InventoryBalance,
             (UUID(ids["product"]), UUID(ids["warehouse"])),
         )
-        assert balance is not None and balance.quantity_on_hand == Decimal("5.000000")
+        assert balance is not None
+        assert balance.quantity_on_hand == Decimal("5.000000")
         partner_balance = next(
             item
             for item in list_partner_balances(db, partner_type="supplier")
@@ -838,8 +847,10 @@ def _make_sales_delivery_use_two_cost_layers(
             InventoryBalance,
             (UUID(ids["product"]), UUID(ids["warehouse"])),
         )
-        assert issue is not None and first_layer is not None
-        assert first_allocation is not None and balance is not None
+        assert issue is not None
+        assert first_layer is not None
+        assert first_allocation is not None
+        assert balance is not None
         first_layer.quantity_received = Decimal("10")
         first_layer.quantity_remaining = Decimal("9")
         first_layer.unit_cost = Decimal("100")
@@ -1124,9 +1135,14 @@ def test_weight_sales_return_uses_document_price_per_kg_and_source_cost() -> Non
             InventoryBalance,
             (UUID(ids["product"]), UUID(ids["warehouse"])),
         )
-        assert order_line is not None and order is not None and invoice is not None
-        assert issue is not None and allocation is not None and source_layer is not None
-        assert delivery_line is not None and balance is not None
+        assert order_line is not None
+        assert order is not None
+        assert invoice is not None
+        assert issue is not None
+        assert allocation is not None
+        assert source_layer is not None
+        assert delivery_line is not None
+        assert balance is not None
         order.billing_method = "weight"
         invoice.invoice_type = "weight"
         order_line.unit_price = Decimal("250")
@@ -1192,7 +1208,8 @@ def test_sales_return_reversal_is_blocked_after_return_layer_consumption() -> No
         with factory.begin() as db:
             source = db.scalar(select(InvoiceReturnSource))
             actor = db.scalar(select(User).where(User.normalized_username == "admin"))
-            assert source is not None and source.return_inventory_layer_id is not None
+            assert source is not None
+            assert source.return_inventory_layer_id is not None
             assert actor is not None
             post_exact_layer_issue(
                 db,
@@ -1251,9 +1268,12 @@ def test_purchase_return_consumes_target_receipt_not_unrelated_fifo_stock() -> N
         target = db.get(InventoryLayer, target_layer_id)
         unrelated = db.get(InventoryLayer, unrelated_layer_id)
         source = db.scalar(select(InvoiceReturnSource))
-        assert target is not None and target.quantity_remaining == Decimal("80.000000")
-        assert unrelated is not None and unrelated.quantity_remaining == Decimal("100.000000")
-        assert source is not None and source.consumed_inventory_layer_id == target_layer_id
+        assert target is not None
+        assert target.quantity_remaining == Decimal("80.000000")
+        assert unrelated is not None
+        assert unrelated.quantity_remaining == Decimal("100.000000")
+        assert source is not None
+        assert source.consumed_inventory_layer_id == target_layer_id
         assert source.unit_cost == Decimal("200.000000")
 
 
@@ -1297,8 +1317,10 @@ def test_purchase_full_return_rejects_attributable_shortage_atomically() -> None
         assert db.scalar(select(func.count(InventoryTransaction.id))) == before_transactions
         target = db.get(InventoryLayer, target_layer_id)
         unrelated = db.get(InventoryLayer, unrelated_layer_id)
-        assert target is not None and target.quantity_remaining == Decimal("15.000000")
-        assert unrelated is not None and unrelated.quantity_remaining == Decimal("100.000000")
+        assert target is not None
+        assert target.quantity_remaining == Decimal("15.000000")
+        assert unrelated is not None
+        assert unrelated.quantity_remaining == Decimal("100.000000")
 
 
 def test_purchase_loss_uses_net_received_amount_as_returnable_stock() -> None:
@@ -1495,8 +1517,11 @@ def test_purchase_full_return_preserves_multiple_receipt_layer_costs() -> None:
             InventoryBalance,
             (UUID(ids["product"]), UUID(ids["warehouse"])),
         )
-        assert actor_id is not None and order_line is not None and first_receipt is not None
-        assert invoice is not None and balance is not None
+        assert actor_id is not None
+        assert order_line is not None
+        assert first_receipt is not None
+        assert invoice is not None
+        assert balance is not None
         second_transaction = InventoryTransaction(
             idempotency_key="seed-second-purchase-receipt-move",
             transaction_type="receipt",
@@ -1602,7 +1627,8 @@ def test_reversed_purchase_receipt_is_not_eligible_for_source_layer_return() -> 
     with factory.begin() as db:
         original = db.get(InventoryTransaction, UUID(ids["receipt_transaction"]))
         actor_id = db.scalar(select(User.id).where(User.normalized_username == "admin"))
-        assert original is not None and actor_id is not None
+        assert original is not None
+        assert actor_id is not None
         db.add(
             InventoryTransaction(
                 idempotency_key="seed-reversed-purchase-receipt",

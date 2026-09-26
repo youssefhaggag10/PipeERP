@@ -16,6 +16,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 USERS_ID = "users.id"
+MANUFACTURING_RECIPES_ID = "manufacturing_recipes.id"
 
 
 def upgrade() -> None:
@@ -172,7 +173,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["recipe_id"],
-            ["manufacturing_recipes.id"],
+            [MANUFACTURING_RECIPES_ID],
             name=op.f("fk_manufacturing_orders_recipe_id_manufacturing_recipes"),
             ondelete="RESTRICT",
         ),
@@ -252,7 +253,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["recipe_id"],
-            ["manufacturing_recipes.id"],
+            [MANUFACTURING_RECIPES_ID],
             name=op.f("fk_manufacturing_recipe_components_recipe_id_manufacturing_recipes"),
             ondelete="CASCADE",
         ),
@@ -292,7 +293,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["recipe_id"],
-            ["manufacturing_recipes.id"],
+            [MANUFACTURING_RECIPES_ID],
             name=op.f("fk_manufacturing_recipe_outputs_recipe_id_manufacturing_recipes"),
             ondelete="CASCADE",
         ),

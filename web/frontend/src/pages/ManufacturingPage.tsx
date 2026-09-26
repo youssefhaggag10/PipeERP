@@ -140,8 +140,13 @@ type Options = {
   material_products: Option[];
   scrap_products: Option[];
 };
-type DraftLine = { product_id: string; quantity: string };
+type DraftLine = { key: string; product_id: string; quantity: string };
+
+function createDraftLine(productId = "", quantity = ""): DraftLine {
+  return { key: clientId("manufacturing-line"), product_id: productId, quantity };
+}
 type AdjustmentDraft = {
+  key: string;
   excluded_product_id: string;
   batch_count: string;
   reason: string;
@@ -214,7 +219,7 @@ export function ManufacturingPage() {
   });
   const [recipeOutputs, setRecipeOutputs] = useState<string[]>([]);
   const [recipeComponents, setRecipeComponents] = useState<DraftLine[]>([
-    { product_id: "", quantity: "" },
+    createDraftLine(),
   ]);
   const [orderForm, setOrderForm] = useState({
     recipe_id: "",
@@ -222,7 +227,7 @@ export function ManufacturingPage() {
     notes: "",
   });
   const [orderOutputs, setOrderOutputs] = useState<DraftLine[]>([
-    { product_id: "", quantity: "" },
+    createDraftLine(),
   ]);
   const [scrapInputs, setScrapInputs] = useState<DraftLine[]>([]);
   const [completion, setCompletion] = useState({
@@ -355,7 +360,7 @@ export function ManufacturingPage() {
   function updateLine(
     setter: Dispatch<SetStateAction<DraftLine[]>>,
     index: number,
-    field: keyof DraftLine,
+    field: "product_id" | "quantity",
     value: string,
   ) {
     setter((current) =>
@@ -403,7 +408,7 @@ export function ManufacturingPage() {
     });
     setRecipeOutputs([]);
     setRecipeComponents([
-      { product_id: options.material_products[0]?.id || "", quantity: "" },
+      createDraftLine(options.material_products[0]?.id || ""),
     ]);
   }
   function editRecipe(item: Recipe) {
@@ -417,6 +422,7 @@ export function ManufacturingPage() {
     setRecipeOutputs(item.outputs.map((output) => output.product_id));
     setRecipeComponents(
       item.components.map((component) => ({
+        key: clientId("manufacturing-line"),
         product_id: component.product_id,
         quantity: component.quantity_per_batch,
       })),
@@ -463,7 +469,7 @@ export function ManufacturingPage() {
   function resetOrderForm() {
     setEditingOrderId("");
     setOrderOutputs([
-      { product_id: activeRecipe?.outputs[0]?.product_id || "", quantity: "" },
+      createDraftLine(activeRecipe?.outputs[0]?.product_id || ""),
     ]);
     setScrapInputs([]);
     setOrderForm((current) => ({ ...current, notes: "" }));
@@ -477,6 +483,7 @@ export function ManufacturingPage() {
     });
     setOrderOutputs(
       item.outputs.map((output) => ({
+        key: clientId("manufacturing-line"),
         product_id: output.product_id,
         quantity: output.planned_quantity,
       })),
@@ -485,6 +492,7 @@ export function ManufacturingPage() {
       item.materials
         .filter((material) => material.component_kind === "scrap")
         .map((material) => ({
+          key: clientId("manufacturing-line"),
           product_id: material.product_id,
           quantity: material.quantity_per_batch,
         })),
@@ -789,7 +797,7 @@ export function ManufacturingPage() {
                 <fieldset>
                   <legend>الخامات لكل خلطة</legend>
                   {recipeComponents.map((line, index) => (
-                    <div className="manufacturing-line" key={index}>
+                    <div className="manufacturing-line" key={line.key}>
                       <select
                         value={line.product_id}
                         onChange={(event) =>
@@ -844,10 +852,7 @@ export function ManufacturingPage() {
                     onClick={() =>
                       setRecipeComponents((current) => [
                         ...current,
-                        {
-                          product_id: options.material_products[0]?.id || "",
-                          quantity: "",
-                        },
+                        createDraftLine(options.material_products[0]?.id || ""),
                       ])
                     }
                   >
@@ -991,7 +996,7 @@ export function ManufacturingPage() {
                   <fieldset>
                     <legend>الإنتاج المطلوب</legend>
                     {orderOutputs.map((line, index) => (
-                      <div className="manufacturing-line" key={index}>
+                      <div className="manufacturing-line" key={line.key}>
                         <select
                           value={line.product_id}
                           onChange={(event) =>
@@ -1049,11 +1054,9 @@ export function ManufacturingPage() {
                       onClick={() =>
                         setOrderOutputs((current) => [
                           ...current,
-                          {
-                            product_id:
-                              activeRecipe?.outputs[0]?.product_id || "",
-                            quantity: "",
-                          },
+                          createDraftLine(
+                            activeRecipe?.outputs[0]?.product_id || "",
+                          ),
                         ])
                       }
                     >
@@ -1063,7 +1066,7 @@ export function ManufacturingPage() {
                   <fieldset>
                     <legend>كسر معاد استخدامه — اختياري</legend>
                     {scrapInputs.map((line, index) => (
-                      <div className="manufacturing-line" key={index}>
+                      <div className="manufacturing-line" key={line.key}>
                         <select
                           value={line.product_id}
                           onChange={(event) =>
@@ -1115,11 +1118,10 @@ export function ManufacturingPage() {
                       onClick={() =>
                         setScrapInputs((current) => [
                           ...current,
-                          {
-                            product_id: options.scrap_products[0]?.id || "",
-                            quantity:
-                              activeRecipe?.suggested_scrap_per_batch || "",
-                          },
+                          createDraftLine(
+                            options.scrap_products[0]?.id || "",
+                            activeRecipe?.suggested_scrap_per_batch || "",
+                          ),
                         ])
                       }
                     >
@@ -1388,7 +1390,7 @@ export function ManufacturingPage() {
                   <fieldset className="manufacturing-adjustments">
                     <legend>الخلطات المعدلة — اختياري</legend>
                     {adjustments.map((item, index) => (
-                      <article key={index}>
+                      <article key={item.key}>
                         <button
                           type="button"
                           className="mini-action"
@@ -1514,6 +1516,7 @@ export function ManufacturingPage() {
                         setAdjustments((current) => [
                           ...current,
                           {
+                            key: clientId("manufacturing-adjustment"),
                             excluded_product_id:
                               selected.materials[0]?.product_id || "",
                             batch_count: "1",

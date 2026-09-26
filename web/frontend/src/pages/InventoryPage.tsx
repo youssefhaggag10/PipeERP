@@ -489,7 +489,7 @@ export function InventoryPage() {
   );
 }
 
-function Empty({ icon, title }: { icon: ReactNode; title: string }) {
+function Empty({ icon, title }: Readonly<{ icon: ReactNode; title: string }>) {
   return (
     <div className="empty-state">
       <span className="empty-state__icon">{icon}</span>

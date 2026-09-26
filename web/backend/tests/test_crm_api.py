@@ -157,7 +157,8 @@ def test_crm_lead_activity_pipeline_and_conversion_flow() -> None:
 
     with factory() as db:
         partner = db.scalar(select(Partner).where(Partner.phone == "01000000000"))
-        assert partner is not None and partner.is_customer
+        assert partner is not None
+        assert partner.is_customer
     app.dependency_overrides.clear()
 
 
@@ -183,7 +184,8 @@ def test_crm_navigation_syncs_customers_once_and_only_admin_schedules() -> None:
         headers = _login(client)
         first = client.get("/api/v1/crm/options")
         second = client.get("/api/v1/crm/options")
-        assert first.status_code == 200 and second.status_code == 200
+        assert first.status_code == 200
+        assert second.status_code == 200
         leads = client.get("/api/v1/crm/leads").json()
         assert len(leads) == 1
         assert leads[0]["name"] == "عميل موجود"

@@ -400,7 +400,8 @@ def test_web_only_purchase_approval_and_partial_receipt_routes_are_disabled() ->
 
     with factory() as db:
         order_row = db.scalar(select(PurchaseOrder))
-        assert order_row is not None and order_row.status == "received"
+        assert order_row is not None
+        assert order_row.status == "received"
         assert db.scalar(select(func.count(PurchaseReceipt.id))) == 2
         assert db.scalar(select(func.count(PurchaseReceiptLine.id))) == 2
         assert db.scalar(select(func.count(SupplierInvoice.id))) == 1
@@ -628,6 +629,9 @@ def test_purchase_receipt_reversal_is_atomic_after_fifo_layer_consumption() -> N
         stored_receipt = db.get(PurchaseReceipt, UUID(receipt["id"]))
         order = db.get(PurchaseOrder, UUID(created["id"]))
         balance = db.scalar(select(InventoryBalance))
-        assert stored_receipt is not None and stored_receipt.status == "posted"
-        assert order is not None and order.status == "received"
-        assert balance is not None and balance.quantity_on_hand == Decimal("8.000000")
+        assert stored_receipt is not None
+        assert stored_receipt.status == "posted"
+        assert order is not None
+        assert order.status == "received"
+        assert balance is not None
+        assert balance.quantity_on_hand == Decimal("8.000000")

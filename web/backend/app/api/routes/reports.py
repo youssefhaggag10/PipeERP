@@ -33,7 +33,7 @@ def _read(request: Request, db: DatabaseSession, principal: CurrentPrincipal) ->
     enforce_permission(request, db, principal, PermissionCode.REPORTS_READ)
 
 
-@router.get("/options", response_model=ReportOptionsView)
+@router.get("/options")
 def options(
     request: Request, principal: CurrentPrincipal, db: DatabaseSession
 ) -> ReportOptionsView:
@@ -95,7 +95,7 @@ def export_xlsx(
     )
 
 
-@router.get("/print/sales-invoices/{invoice_id}", response_model=PrintDocumentView)
+@router.get("/print/sales-invoices/{invoice_id}")
 def print_sales_invoice(
     invoice_id: UUID,
     request: Request,
@@ -118,7 +118,7 @@ def print_sales_invoice(
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
 
 
-@router.get("/print/quotations/{quotation_id}", response_model=PrintDocumentView)
+@router.get("/print/quotations/{quotation_id}")
 def print_quotation(
     quotation_id: UUID,
     request: Request,
@@ -133,7 +133,7 @@ def print_quotation(
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
 
 
-@router.get("/print/customer-statements/{customer_id}", response_model=CustomerStatementPrintView)
+@router.get("/print/customer-statements/{customer_id}")
 def print_customer_statement(
     customer_id: UUID,
     date_from: date,

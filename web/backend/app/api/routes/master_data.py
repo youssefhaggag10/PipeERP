@@ -70,7 +70,7 @@ def _translate_error(exc: Exception) -> HTTPException:
     return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
 
 
-@router.get("/units", response_model=list[UnitView])
+@router.get("/units")
 def units(
     request: Request,
     principal: CurrentPrincipal,
@@ -102,7 +102,7 @@ def add_unit(
     return view
 
 
-@router.put("/units/{unit_id}", response_model=UnitView)
+@router.put("/units/{unit_id}")
 def edit_unit(
     unit_id: UUID,
     payload: UpdateUnitRequest,
@@ -128,7 +128,7 @@ def edit_unit(
     return view
 
 
-@router.get("/categories", response_model=list[CategoryView])
+@router.get("/categories")
 def categories(
     request: Request,
     principal: CurrentPrincipal,
@@ -142,7 +142,7 @@ def categories(
     ]
 
 
-@router.post("/categories", response_model=CategoryView, status_code=status.HTTP_201_CREATED)
+@router.post("/categories", status_code=status.HTTP_201_CREATED)
 def add_category(
     payload: CreateCategoryRequest,
     request: Request,
@@ -166,7 +166,7 @@ def add_category(
     return view
 
 
-@router.put("/categories/{category_id}", response_model=CategoryView)
+@router.put("/categories/{category_id}")
 def edit_category(
     category_id: UUID,
     payload: UpdateCategoryRequest,
@@ -192,7 +192,7 @@ def edit_category(
     return view
 
 
-@router.get("/products", response_model=list[ProductView])
+@router.get("/products")
 def products(
     request: Request,
     principal: CurrentPrincipal,
@@ -206,7 +206,7 @@ def products(
     ]
 
 
-@router.post("/products", response_model=ProductView, status_code=status.HTTP_201_CREATED)
+@router.post("/products", status_code=status.HTTP_201_CREATED)
 def add_product(
     payload: CreateProductRequest,
     request: Request,
@@ -278,7 +278,7 @@ def remove_product(
     db.commit()
 
 
-@router.get("/partners", response_model=list[PartnerView])
+@router.get("/partners")
 def partners(
     request: Request,
     principal: CurrentPrincipal,
@@ -292,7 +292,7 @@ def partners(
     ]
 
 
-@router.post("/partners", response_model=PartnerView, status_code=status.HTTP_201_CREATED)
+@router.post("/partners", status_code=status.HTTP_201_CREATED)
 def add_partner(
     payload: CreatePartnerRequest,
     request: Request,
@@ -316,7 +316,7 @@ def add_partner(
     return view
 
 
-@router.put("/partners/{partner_id}", response_model=PartnerView)
+@router.put("/partners/{partner_id}")
 def edit_partner(
     partner_id: UUID,
     payload: UpdatePartnerRequest,
@@ -342,7 +342,7 @@ def edit_partner(
     return view
 
 
-@router.get("/partners/{partner_id}/linked-movements", response_model=PartnerStatementView)
+@router.get("/partners/{partner_id}/linked-movements")
 def partner_linked_movements(
     partner_id: UUID,
     partner_type: Annotated[str, Query(pattern="^(customer|supplier)$")],
@@ -363,7 +363,7 @@ def partner_linked_movements(
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
 
 
-@router.get("/warehouses", response_model=list[WarehouseView])
+@router.get("/warehouses")
 def warehouses(
     request: Request,
     principal: CurrentPrincipal,
@@ -377,7 +377,7 @@ def warehouses(
     ]
 
 
-@router.post("/warehouses", response_model=WarehouseView, status_code=status.HTTP_201_CREATED)
+@router.post("/warehouses", status_code=status.HTTP_201_CREATED)
 def add_warehouse(
     payload: CreateWarehouseRequest,
     request: Request,
@@ -401,7 +401,7 @@ def add_warehouse(
     return view
 
 
-@router.put("/warehouses/{warehouse_id}", response_model=WarehouseView)
+@router.put("/warehouses/{warehouse_id}")
 def edit_warehouse(
     warehouse_id: UUID,
     payload: UpdateWarehouseRequest,
@@ -427,7 +427,7 @@ def edit_warehouse(
     return view
 
 
-@router.get("/settings", response_model=CompanySettingsView)
+@router.get("/settings")
 def settings(
     request: Request,
     principal: CurrentPrincipal,
@@ -441,7 +441,7 @@ def settings(
     return CompanySettingsView.model_validate(item)
 
 
-@router.put("/settings", response_model=CompanySettingsView)
+@router.put("/settings")
 def edit_settings(
     payload: UpdateCompanySettingsRequest,
     request: Request,

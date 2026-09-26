@@ -20,6 +20,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.base import Base, TimestampMixin
 
+SALES_ORDERS_ID = "sales_orders.id"
+SUBTOTAL_NONNEGATIVE = "subtotal >= 0"
+
 
 class SalesOrder(TimestampMixin, Base):
     __tablename__ = "sales_orders"
@@ -30,7 +33,7 @@ class SalesOrder(TimestampMixin, Base):
             name="status_valid",
         ),
         CheckConstraint("billing_method IN ('piece', 'weight')", name="billing_method_valid"),
-        CheckConstraint("subtotal >= 0", name="subtotal_nonnegative"),
+        CheckConstraint(SUBTOTAL_NONNEGATIVE, name="subtotal_nonnegative"),
         CheckConstraint("discount_amount >= 0", name="discount_nonnegative"),
         CheckConstraint("transport_amount >= 0", name="transport_nonnegative"),
         CheckConstraint("tax_amount >= 0", name="tax_nonnegative"),
@@ -79,7 +82,7 @@ class SalesOrderLine(TimestampMixin, Base):
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     sales_order_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("sales_orders.id", ondelete="CASCADE"), nullable=False
+        Uuid, ForeignKey(SALES_ORDERS_ID, ondelete="CASCADE"), nullable=False
     )
     product_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
@@ -105,13 +108,13 @@ class SalesWeightCard(TimestampMixin, Base):
         CheckConstraint("tare_weight_kg >= 0", name="tare_nonnegative"),
         CheckConstraint("net_weight_kg > 0", name="net_positive"),
         CheckConstraint("uniform_price_per_kg >= 0", name="uniform_price_nonnegative"),
-        CheckConstraint("subtotal >= 0", name="subtotal_nonnegative"),
+        CheckConstraint(SUBTOTAL_NONNEGATIVE, name="subtotal_nonnegative"),
         Index("ix_sales_weight_cards_order", "sales_order_id", "created_at"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     sales_order_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("sales_orders.id", ondelete="CASCADE"), nullable=False
+        Uuid, ForeignKey(SALES_ORDERS_ID, ondelete="CASCADE"), nullable=False
     )
     card_number: Mapped[str] = mapped_column(String(40), nullable=False)
     card_date: Mapped[datetime] = mapped_column(
@@ -175,7 +178,7 @@ class SalesDelivery(Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     delivery_number: Mapped[str] = mapped_column(String(40), nullable=False)
     sales_order_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("sales_orders.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(SALES_ORDERS_ID, ondelete="RESTRICT"), nullable=False
     )
     idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -226,7 +229,7 @@ class CustomerInvoice(TimestampMixin, Base):
         UniqueConstraint("sales_order_id"),
         CheckConstraint("invoice_type IN ('standard', 'weight')", name="invoice_type_valid"),
         CheckConstraint("status IN ('posted', 'reversed')", name="status_valid"),
-        CheckConstraint("subtotal >= 0", name="subtotal_nonnegative"),
+        CheckConstraint(SUBTOTAL_NONNEGATIVE, name="subtotal_nonnegative"),
         CheckConstraint("discount_amount >= 0", name="discount_nonnegative"),
         CheckConstraint("transport_amount >= 0", name="transport_nonnegative"),
         CheckConstraint("tax_amount >= 0", name="tax_nonnegative"),
@@ -238,7 +241,7 @@ class CustomerInvoice(TimestampMixin, Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     invoice_number: Mapped[str] = mapped_column(String(40), nullable=False)
     sales_order_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("sales_orders.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(SALES_ORDERS_ID, ondelete="RESTRICT"), nullable=False
     )
     customer_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey("partners.id", ondelete="RESTRICT"), nullable=False

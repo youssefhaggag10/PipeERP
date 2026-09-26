@@ -1,3 +1,5 @@
+let fallbackSequence = 0;
+
 function fallbackUuid(): string {
   const cryptoApi = globalThis.crypto;
   if (cryptoApi?.getRandomValues) {
@@ -8,8 +10,8 @@ function fallbackUuid(): string {
     return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
   }
 
-  // These identifiers prevent duplicate submissions; they are not security tokens.
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+  fallbackSequence += 1;
+  return `${Date.now().toString(36)}-${fallbackSequence.toString(36)}`;
 }
 
 export function clientId(prefix = ""): string {

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from hashlib import sha256
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -59,6 +59,8 @@ PAYMENT_ACCOUNT_TYPES = {
     "cheque": "bank",
     "wallet": "wallet",
 }
+StatementPartnerType = Literal["customer", "supplier"]
+type StatementMovement = tuple[datetime, str, str, Decimal, Decimal, str]
 
 
 class TreasuryError(Exception):
@@ -1609,6 +1611,218 @@ def treasury_summary(db: Session) -> TreasurySummaryView:
     )
 
 
+def _resolve_statement_partner_type(
+    partner: Partner, requested_type: str | None
+) -> StatementPartnerType:
+    if requested_type is None:
+        if partner.is_customer and partner.is_supplier:
+            raise TreasuryConflict("حدد هل المطلوب كشف حساب عميل أم مورد")
+        requested_type = "customer" if partner.is_customer else "supplier"
+    if requested_type not in {"customer", "supplier"}:
+        raise ValueError("نوع كشف الحساب غير صحيح")
+    if requested_type == "customer" and not partner.is_customer:
+        raise TreasuryConflict("نوع كشف الحساب لا يطابق بيانات الطرف")
+    if requested_type == "supplier" and not partner.is_supplier:
+        raise TreasuryConflict("نوع كشف الحساب لا يطابق بيانات الطرف")
+    return "customer" if requested_type == "customer" else "supplier"
+
+
+def _opening_statement_movements(db: Session, partner_id: UUID) -> list[StatementMovement]:
+    movements: list[StatementMovement] = []
+    entries = db.scalars(
+        select(PartnerOpeningBalance).where(PartnerOpeningBalance.partner_id == partner_id)
+    )
+    for entry in entries:
+        movements.append(
+            (
+                datetime.combine(entry.entry_date, time.min, tzinfo=UTC),
+                entry.entry_number,
+                "رصيد افتتاحي",
+                entry.amount if entry.nature == "debit" else ZERO,
+                entry.amount if entry.nature == "credit" else ZERO,
+                entry.notes,
+            )
+        )
+    return movements
+
+
+def _customer_statement_movements(db: Session, partner_id: UUID) -> list[StatementMovement]:
+    movements: list[StatementMovement] = []
+    invoices = db.scalars(
+        select(CustomerInvoice).where(
+            CustomerInvoice.customer_id == partner_id,
+            CustomerInvoice.status == "posted",
+        )
+    )
+    for invoice in invoices:
+        movements.append(
+            (
+                _as_utc(invoice.invoice_date),
+                invoice.invoice_number,
+                "فاتورة مبيعات",
+                invoice.total,
+                ZERO,
+                invoice.notes,
+            )
+        )
+    returns = db.scalars(
+        select(InvoiceReturn).where(
+            InvoiceReturn.partner_id == partner_id,
+            InvoiceReturn.return_type == "sales",
+            InvoiceReturn.status == "posted",
+        )
+    )
+    for item in returns:
+        movements.append(
+            (
+                _as_utc(item.return_date),
+                item.return_number,
+                "مرتجع مبيعات",
+                ZERO,
+                item.total,
+                item.reason,
+            )
+        )
+    adjustments = db.scalars(
+        select(CustomerAccountAdjustment).where(
+            CustomerAccountAdjustment.customer_id == partner_id,
+            CustomerAccountAdjustment.status == "posted",
+        )
+    )
+    for adjustment in adjustments:
+        movements.append(
+            (
+                _as_utc(adjustment.adjustment_date),
+                adjustment.adjustment_number,
+                "تسوية حساب عميل",
+                adjustment.amount if adjustment.adjustment_type == "debit" else ZERO,
+                adjustment.amount if adjustment.adjustment_type == "credit" else ZERO,
+                adjustment.notes,
+            )
+        )
+    return movements
+
+
+def _supplier_statement_movements(db: Session, partner_id: UUID) -> list[StatementMovement]:
+    movements: list[StatementMovement] = []
+    invoices = db.scalars(
+        select(SupplierInvoice).where(
+            SupplierInvoice.supplier_id == partner_id,
+            SupplierInvoice.status == "posted",
+        )
+    )
+    for invoice in invoices:
+        movements.append(
+            (
+                _as_utc(invoice.posted_at or invoice.created_at),
+                invoice.invoice_number,
+                "فاتورة مشتريات",
+                ZERO,
+                invoice.total,
+                "",
+            )
+        )
+    returns = db.scalars(
+        select(InvoiceReturn).where(
+            InvoiceReturn.partner_id == partner_id,
+            InvoiceReturn.return_type == "purchase",
+            InvoiceReturn.status == "posted",
+        )
+    )
+    for item in returns:
+        movements.append(
+            (
+                _as_utc(item.return_date),
+                item.return_number,
+                "مرتجع مشتريات",
+                item.total,
+                ZERO,
+                item.reason,
+            )
+        )
+    return movements
+
+
+def _payment_statement_movements(
+    db: Session, partner_id: UUID, partner_type: StatementPartnerType
+) -> list[StatementMovement]:
+    is_customer = partner_type == "customer"
+    transaction_type = "customer_receipt" if is_customer else "supplier_payment"
+    payments = db.scalars(
+        select(PaymentTransaction).where(
+            PaymentTransaction.partner_id == partner_id,
+            PaymentTransaction.transaction_type == transaction_type,
+            PaymentTransaction.status == "posted",
+        )
+    )
+    return [
+        (
+            _as_utc(payment.transaction_date),
+            payment.transaction_number,
+            "تحصيل عميل" if is_customer else "سداد مورد",
+            ZERO if is_customer else payment.amount,
+            payment.amount if is_customer else ZERO,
+            payment.notes,
+        )
+        for payment in payments
+    ]
+
+
+def _refund_statement_movements(
+    db: Session, partner_id: UUID, partner_type: StatementPartnerType
+) -> list[StatementMovement]:
+    is_customer = partner_type == "customer"
+    refund_type = "customer_refund" if is_customer else "supplier_refund"
+    refunds = db.scalars(
+        select(ReturnRefund).where(
+            ReturnRefund.partner_id == partner_id,
+            ReturnRefund.refund_type == refund_type,
+            ReturnRefund.status == "posted",
+        )
+    )
+    return [
+        (
+            _as_utc(refund.refund_date),
+            refund.refund_number,
+            "رد مبلغ لعميل" if is_customer else "استرداد من مورد",
+            refund.amount if is_customer else ZERO,
+            ZERO if is_customer else refund.amount,
+            refund.notes,
+        )
+        for refund in refunds
+    ]
+
+
+def _statement_lines(
+    movements: list[StatementMovement],
+    *,
+    start: datetime,
+    end: datetime,
+    partner_type: StatementPartnerType,
+) -> tuple[Decimal, Decimal, list[StatementLineView]]:
+    def delta(row: StatementMovement) -> Decimal:
+        return row[3] - row[4] if partner_type == "customer" else row[4] - row[3]
+
+    opening = money(sum((delta(row) for row in movements if row[0] < start), ZERO))
+    running = opening
+    lines: list[StatementLineView] = []
+    for row in movements:
+        if start <= row[0] < end:
+            running = money(running + delta(row))
+            lines.append(
+                StatementLineView(
+                    movement_date=row[0],
+                    document_number=row[1],
+                    movement_type=row[2],
+                    debit=row[3],
+                    credit=row[4],
+                    running_balance=running,
+                    notes=row[5],
+                )
+            )
+    return opening, running, lines
+
+
 def partner_statement(
     db: Session,
     *,
@@ -1622,201 +1836,33 @@ def partner_statement(
     partner = db.get(Partner, partner_id)
     if partner is None:
         raise TreasuryNotFound("العميل أو المورد غير موجود")
-    if partner_type is None:
-        if partner.is_customer and partner.is_supplier:
-            raise TreasuryConflict("حدد هل المطلوب كشف حساب عميل أم مورد")
-        partner_type = "customer" if partner.is_customer else "supplier"
-    if partner_type not in {"customer", "supplier"}:
-        raise ValueError("نوع كشف الحساب غير صحيح")
-    if (partner_type == "customer" and not partner.is_customer) or (
-        partner_type == "supplier" and not partner.is_supplier
-    ):
-        raise TreasuryConflict("نوع كشف الحساب لا يطابق بيانات الطرف")
+    resolved_type = _resolve_statement_partner_type(partner, partner_type)
     start = datetime.combine(date_from, time.min, tzinfo=UTC)
     end = datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=UTC)
-    movements: list[tuple[datetime, str, str, Decimal, Decimal, str]] = []
-    opening_entries = db.scalars(
-        select(PartnerOpeningBalance).where(PartnerOpeningBalance.partner_id == partner.id)
+    movements = _opening_statement_movements(db, partner.id)
+    type_movements = (
+        _customer_statement_movements(db, partner.id)
+        if resolved_type == "customer"
+        else _supplier_statement_movements(db, partner.id)
     )
-    for opening_entry in opening_entries:
-        at = datetime.combine(opening_entry.entry_date, time.min, tzinfo=UTC)
-        debit = opening_entry.amount if opening_entry.nature == "debit" else ZERO
-        credit = opening_entry.amount if opening_entry.nature == "credit" else ZERO
-        movements.append(
-            (
-                at,
-                opening_entry.entry_number,
-                "رصيد افتتاحي",
-                debit,
-                credit,
-                opening_entry.notes,
-            )
-        )
-    if partner_type == "customer":
-        invoices = db.scalars(
-            select(CustomerInvoice).where(
-                CustomerInvoice.customer_id == partner.id,
-                CustomerInvoice.status == "posted",
-            )
-        )
-        for sales_invoice in invoices:
-            movements.append(
-                (
-                    _as_utc(sales_invoice.invoice_date),
-                    sales_invoice.invoice_number,
-                    "فاتورة مبيعات",
-                    sales_invoice.total,
-                    ZERO,
-                    sales_invoice.notes,
-                )
-            )
-        sales_returns = db.scalars(
-            select(InvoiceReturn).where(
-                InvoiceReturn.partner_id == partner.id,
-                InvoiceReturn.return_type == "sales",
-                InvoiceReturn.status == "posted",
-            )
-        )
-        for sales_return in sales_returns:
-            movements.append(
-                (
-                    _as_utc(sales_return.return_date),
-                    sales_return.return_number,
-                    "مرتجع مبيعات",
-                    ZERO,
-                    sales_return.total,
-                    sales_return.reason,
-                )
-            )
-        adjustments = db.scalars(
-            select(CustomerAccountAdjustment).where(
-                CustomerAccountAdjustment.customer_id == partner.id,
-                CustomerAccountAdjustment.status == "posted",
-            )
-        )
-        for customer_adjustment in adjustments:
-            movements.append(
-                (
-                    _as_utc(customer_adjustment.adjustment_date),
-                    customer_adjustment.adjustment_number,
-                    "تسوية حساب عميل",
-                    customer_adjustment.amount
-                    if customer_adjustment.adjustment_type == "debit"
-                    else ZERO,
-                    customer_adjustment.amount
-                    if customer_adjustment.adjustment_type == "credit"
-                    else ZERO,
-                    customer_adjustment.notes,
-                )
-            )
-        payment_type = "customer_receipt"
-        refund_type = "customer_refund"
-    else:
-        invoices = db.scalars(
-            select(SupplierInvoice).where(
-                SupplierInvoice.supplier_id == partner.id,
-                SupplierInvoice.status == "posted",
-            )
-        )
-        for supplier_invoice in invoices:
-            at = _as_utc(supplier_invoice.posted_at or supplier_invoice.created_at)
-            movements.append(
-                (
-                    at,
-                    supplier_invoice.invoice_number,
-                    "فاتورة مشتريات",
-                    ZERO,
-                    supplier_invoice.total,
-                    "",
-                )
-            )
-        purchase_returns = db.scalars(
-            select(InvoiceReturn).where(
-                InvoiceReturn.partner_id == partner.id,
-                InvoiceReturn.return_type == "purchase",
-                InvoiceReturn.status == "posted",
-            )
-        )
-        for purchase_return in purchase_returns:
-            movements.append(
-                (
-                    _as_utc(purchase_return.return_date),
-                    purchase_return.return_number,
-                    "مرتجع مشتريات",
-                    purchase_return.total,
-                    ZERO,
-                    purchase_return.reason,
-                )
-            )
-        payment_type = "supplier_payment"
-        refund_type = "supplier_refund"
-    payments = db.scalars(
-        select(PaymentTransaction).where(
-            PaymentTransaction.partner_id == partner.id,
-            PaymentTransaction.transaction_type == payment_type,
-            PaymentTransaction.status == "posted",
-        )
-    )
-    for payment in payments:
-        movements.append(
-            (
-                _as_utc(payment.transaction_date),
-                payment.transaction_number,
-                "تحصيل عميل" if partner_type == "customer" else "سداد مورد",
-                ZERO if partner_type == "customer" else payment.amount,
-                payment.amount if partner_type == "customer" else ZERO,
-                payment.notes,
-            )
-        )
-    refunds = db.scalars(
-        select(ReturnRefund).where(
-            ReturnRefund.partner_id == partner.id,
-            ReturnRefund.refund_type == refund_type,
-            ReturnRefund.status == "posted",
-        )
-    )
-    for refund in refunds:
-        movements.append(
-            (
-                _as_utc(refund.refund_date),
-                refund.refund_number,
-                "رد مبلغ لعميل" if partner_type == "customer" else "استرداد من مورد",
-                refund.amount if partner_type == "customer" else ZERO,
-                ZERO if partner_type == "customer" else refund.amount,
-                refund.notes,
-            )
-        )
+    movements.extend(type_movements)
+    movements.extend(_payment_statement_movements(db, partner.id, resolved_type))
+    movements.extend(_refund_statement_movements(db, partner.id, resolved_type))
     movements.sort(key=lambda row: (row[0], row[1]))
-
-    def delta(row: tuple[datetime, str, str, Decimal, Decimal, str]) -> Decimal:
-        return row[3] - row[4] if partner_type == "customer" else row[4] - row[3]
-
-    opening = money(sum((delta(row) for row in movements if row[0] < start), ZERO))
-    running = opening
-    lines: list[StatementLineView] = []
-    for row in movements:
-        if not start <= row[0] < end:
-            continue
-        running = money(running + delta(row))
-        lines.append(
-            StatementLineView(
-                movement_date=row[0],
-                document_number=row[1],
-                movement_type=row[2],
-                debit=row[3],
-                credit=row[4],
-                running_balance=running,
-                notes=row[5],
-            )
-        )
+    opening, closing, lines = _statement_lines(
+        movements,
+        start=start,
+        end=end,
+        partner_type=resolved_type,
+    )
     return PartnerStatementView(
         partner_id=partner.id,
         partner_code=partner.code,
         partner_name_ar=partner.name_ar,
-        partner_type=partner_type,  # type: ignore[arg-type]
+        partner_type=resolved_type,
         date_from=date_from,
         date_to=date_to,
         opening_balance=opening,
-        closing_balance=running,
+        closing_balance=closing,
         lines=lines,
     )

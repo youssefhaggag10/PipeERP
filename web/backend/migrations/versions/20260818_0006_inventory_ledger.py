@@ -9,6 +9,7 @@ revision: str = "20260818_0006"
 down_revision: str | None = "20260818_0005"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
+PRODUCTS_ID = "products.id"
 
 
 def timestamps() -> tuple[sa.Column[object], sa.Column[object]]:
@@ -39,7 +40,7 @@ def upgrade() -> None:
         *timestamps(),
         sa.ForeignKeyConstraint(
             ["product_id"],
-            ["products.id"],
+            [PRODUCTS_ID],
             ondelete="RESTRICT",
             name=op.f("fk_inventory_lots_product_id_products"),
         ),
@@ -128,7 +129,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["product_id"],
-            ["products.id"],
+            [PRODUCTS_ID],
             ondelete="RESTRICT",
             name=op.f("fk_inventory_layers_product_id_products"),
         ),
@@ -198,7 +199,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["product_id"],
-            ["products.id"],
+            [PRODUCTS_ID],
             ondelete="RESTRICT",
             name=op.f("fk_inventory_transactions_product_id_products"),
         ),
@@ -298,7 +299,7 @@ def upgrade() -> None:
         sa.CheckConstraint("version > 0", name=op.f("ck_inventory_balances_version_positive")),
         sa.ForeignKeyConstraint(
             ["product_id"],
-            ["products.id"],
+            [PRODUCTS_ID],
             ondelete="RESTRICT",
             name=op.f("fk_inventory_balances_product_id_products"),
         ),

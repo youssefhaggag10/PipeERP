@@ -22,6 +22,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.base import Base, TimestampMixin
 
+FINANCIAL_ACCOUNTS_ID = "financial_accounts.id"
+
 
 class FinancialAccount(TimestampMixin, Base):
     __tablename__ = "financial_accounts"
@@ -91,7 +93,7 @@ class PaymentTransaction(TimestampMixin, Base):
         Uuid, ForeignKey("partners.id", ondelete="RESTRICT"), nullable=False
     )
     financial_account_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("financial_accounts.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(FINANCIAL_ACCOUNTS_ID, ondelete="RESTRICT"), nullable=False
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False)
     payment_method: Mapped[str] = mapped_column(String(24), nullable=False)
@@ -173,10 +175,10 @@ class FinancialTransfer(TimestampMixin, Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     from_account_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("financial_accounts.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(FINANCIAL_ACCOUNTS_ID, ondelete="RESTRICT"), nullable=False
     )
     to_account_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("financial_accounts.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(FINANCIAL_ACCOUNTS_ID, ondelete="RESTRICT"), nullable=False
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
@@ -211,7 +213,7 @@ class FinancialAdjustment(TimestampMixin, Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     financial_account_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("financial_accounts.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(FINANCIAL_ACCOUNTS_ID, ondelete="RESTRICT"), nullable=False
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False)
     target_balance: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False)

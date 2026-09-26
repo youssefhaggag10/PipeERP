@@ -118,7 +118,11 @@ function dateParts(value: string) {
   };
 }
 
-function Background({ company, page, pages }: { company: Company; page: number; pages: number }) {
+function Background({
+  company,
+  page,
+  pages,
+}: Readonly<{ company: Company; page: number; pages: number }>) {
   const parts = companyParts(company.name_ar);
   const phones = company.phone.split(/[\n،,]/).map((value) => value.trim()).filter(Boolean);
   return (
@@ -153,7 +157,9 @@ const ordinaryColumns = [
   { key: "serial", label: "م", className: "a4-col-serial" },
 ] as const;
 
-export function BrandedDocumentPreview({ document }: { document: PrintDocument }) {
+export function BrandedDocumentPreview({
+  document,
+}: Readonly<{ document: PrintDocument }>) {
   const pages = chunks(document.lines, 6);
   const isWeight = document.document_type === "weight_invoice";
   const when = dateParts(document.document_date);
@@ -180,9 +186,14 @@ export function BrandedDocumentPreview({ document }: { document: PrintDocument }
     <div className="a4-document print-document-target">
       {pages.map((lines, pageIndex) => {
         const isLast = pageIndex === pages.length - 1;
-        const padded = [...lines, ...Array.from({ length: Math.max(0, 3 - lines.length) }, () => null)];
+        const populatedRows = lines.map((line) => ({ key: `line-${line.code}`, line }));
+        const blankRows = ["blank-first", "blank-second", "blank-third"]
+          .slice(0, Math.max(0, 3 - lines.length))
+          .map((key) => ({ key, line: null }));
+        const padded = [...populatedRows, ...blankRows];
+        const pageKey = lines[0]?.code ?? `${document.document_number}-empty`;
         return (
-          <article className="a4-branded-sheet" dir="rtl" key={pageIndex}>
+          <article className="a4-branded-sheet" dir="rtl" key={pageKey}>
             <Background company={document.company} page={pageIndex + 1} pages={pages.length} />
             <h1 className="a4-document-title">{document.document_title}</h1>
             <section className={`a4-document-meta ${isWeight ? "is-weight" : ""}`} dir="ltr">
@@ -202,8 +213,8 @@ export function BrandedDocumentPreview({ document }: { document: PrintDocument }
                 ))}
               </div>
               <div className="a4-items-body" style={{ gridTemplateRows: `repeat(${padded.length}, 1fr)` }}>
-                {padded.map((line, rowIndex) => (
-                  <div className="a4-item-row" dir="ltr" key={line ? `${line.code}-${rowIndex}` : `blank-${rowIndex}`}>
+                {padded.map(({ key, line }, rowIndex) => (
+                  <div className="a4-item-row" dir="ltr" key={key}>
                     <span className="a4-col-notes" dir="rtl">{line?.notes || ""}</span>
                     <span className="a4-col-total">{line ? money.format(Number(line.line_total)) : ""}</span>
                     <span className="a4-col-price">{line ? (isWeight ? Number(line.actual_weight_kg || 0).toLocaleString("ar-EG", { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : money.format(Number(line.unit_price))) : ""}</span>
@@ -250,7 +261,7 @@ type StatementFlatRow = {
   detail: DocumentLine | null;
 };
 
-export function BrandedStatementPreview({ data }: { data: Statement }) {
+export function BrandedStatementPreview({ data }: Readonly<{ data: Statement }>) {
   const statementRows: StatementFlatRow[] = data.statement.lines.flatMap((line) => [
     { line, detail: null },
     ...(data.invoice_details[line.document_number] || []).map((detail) => ({ line, detail })),
@@ -270,7 +281,7 @@ export function BrandedStatementPreview({ data }: { data: Statement }) {
   return (
     <div className="a4-document print-document-target">
       {ledgerPages.map((rows, pageIndex) => (
-        <article className="a4-branded-sheet a4-statement-sheet" dir="rtl" key={`ledger-${pageIndex}`}>
+        <article className="a4-branded-sheet a4-statement-sheet" dir="rtl" key={`ledger-${rows[0]?.line.document_number ?? "empty"}-${rows[0]?.line.movement_date ?? data.statement.date_from}`}>
           <Background company={data.company} page={pageIndex + 1} pages={totalPages} />
           <h1 className="a4-document-title">كشف حساب عميل</h1>
           <div className="a4-statement-body">
@@ -285,10 +296,10 @@ export function BrandedStatementPreview({ data }: { data: Statement }) {
             <table className="a4-ledger-table">
               <thead><tr><th>التاريخ</th><th>رقم المستند</th><th>نوع المستند</th><th>البيان</th><th>مدين</th><th>دائن</th><th>الرصيد</th><th>الحالة</th></tr></thead>
               <tbody>
-                {rows.map(({ line, detail }, rowIndex) => detail ? (
-                  <tr className="a4-ledger-detail" key={`detail-${rowIndex}`}><td colSpan={3}>تفاصيل الفاتورة</td><td>{detail.name}<small>{detail.code} · {detail.quantity} {detail.unit}</small></td><td>{money.format(Number(detail.line_total))}</td><td>—</td><td>—</td><td>بند</td></tr>
+                {rows.map(({ line, detail }) => detail ? (
+                  <tr className="a4-ledger-detail" key={`${line.document_number}-detail-${detail.code}`}><td colSpan={3}>تفاصيل الفاتورة</td><td>{detail.name}<small>{detail.code} · {detail.quantity} {detail.unit}</small></td><td>{money.format(Number(detail.line_total))}</td><td>—</td><td>—</td><td>بند</td></tr>
                 ) : (
-                  <tr key={`${line.document_number}-${rowIndex}`}><td>{new Date(line.movement_date).toLocaleDateString("ar-EG")}</td><td>{line.document_number}</td><td>{line.movement_type}</td><td>{line.notes || line.movement_type}</td><td>{money.format(Number(line.debit))}</td><td>{money.format(Number(line.credit))}</td><td>{money.format(Number(line.running_balance))}</td><td>مرحّل</td></tr>
+                  <tr key={`${line.document_number}-${line.movement_date}-${line.movement_type}`}><td>{new Date(line.movement_date).toLocaleDateString("ar-EG")}</td><td>{line.document_number}</td><td>{line.movement_type}</td><td>{line.notes || line.movement_type}</td><td>{money.format(Number(line.debit))}</td><td>{money.format(Number(line.credit))}</td><td>{money.format(Number(line.running_balance))}</td><td>مرحّل</td></tr>
                 ))}
               </tbody>
             </table>

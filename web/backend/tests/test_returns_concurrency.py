@@ -233,7 +233,8 @@ def test_two_concurrent_full_sales_returns_cannot_exceed_delivery_allocation() -
             )
         unit = db.scalar(select(UnitOfMeasure).where(UnitOfMeasure.code == "KG"))
         warehouse = db.scalar(select(Warehouse).where(Warehouse.code == "MAIN"))
-        assert unit is not None and warehouse is not None
+        assert unit is not None
+        assert warehouse is not None
         customer = Partner(
             code=f"SRC-RET-CUS-{suffix}",
             normalized_code=f"SRC-RET-CUS-{suffix}",
@@ -308,7 +309,9 @@ def test_two_concurrent_full_sales_returns_cannot_exceed_delivery_allocation() -
         line_id = db.scalar(
             select(SalesOrderLine.id).where(SalesOrderLine.sales_order_id == order.id)
         )
-        assert delivered.delivery is not None and invoice is not None and line_id is not None
+        assert delivered.delivery is not None
+        assert invoice is not None
+        assert line_id is not None
         actor_id = actor.id
         invoice_id = invoice.id
 
@@ -381,7 +384,8 @@ def test_two_concurrent_full_purchase_returns_cannot_consume_root_twice() -> Non
             )
         unit = db.scalar(select(UnitOfMeasure).where(UnitOfMeasure.code == "KG"))
         warehouse = db.scalar(select(Warehouse).where(Warehouse.code == "MAIN"))
-        assert unit is not None and warehouse is not None
+        assert unit is not None
+        assert warehouse is not None
         supplier = Partner(
             code=f"SRC-RET-SUP-{suffix}",
             normalized_code=f"SRC-RET-SUP-{suffix}",

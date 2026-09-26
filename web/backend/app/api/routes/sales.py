@@ -51,7 +51,7 @@ def _translate(exc: Exception) -> HTTPException:
     return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
 
 
-@router.get("/options", response_model=SalesOptionsView)
+@router.get("/options")
 def options(request: Request, principal: CurrentPrincipal, db: DatabaseSession) -> SalesOptionsView:
     if not (
         PermissionCode.SALES_READ in principal.permissions
@@ -61,7 +61,7 @@ def options(request: Request, principal: CurrentPrincipal, db: DatabaseSession) 
     return sales_options(db)
 
 
-@router.get("/orders", response_model=list[SalesOrderView])
+@router.get("/orders")
 def orders(
     request: Request,
     principal: CurrentPrincipal,
@@ -84,7 +84,7 @@ def orders(
     ]
 
 
-@router.get("/orders/{order_id}", response_model=SalesOrderView)
+@router.get("/orders/{order_id}")
 def order(
     order_id: UUID,
     request: Request,
@@ -109,7 +109,7 @@ def order(
         raise _translate(exc) from exc
 
 
-@router.post("/orders", response_model=SalesOrderView, status_code=status.HTTP_201_CREATED)
+@router.post("/orders", status_code=status.HTTP_201_CREATED)
 def create_piece(
     payload: CreatePieceOrderRequest,
     request: Request,
@@ -129,7 +129,7 @@ def create_piece(
         raise _translate(exc) from exc
 
 
-@router.post("/weight-orders", response_model=SalesOrderView, status_code=status.HTTP_201_CREATED)
+@router.post("/weight-orders", status_code=status.HTTP_201_CREATED)
 def create_weight(
     payload: CreateWeightSaleRequest,
     request: Request,
@@ -149,7 +149,7 @@ def create_weight(
         raise _translate(exc) from exc
 
 
-@router.post("/orders/{order_id}/delivery", response_model=SalesOrderView)
+@router.post("/orders/{order_id}/delivery")
 def deliver(
     order_id: UUID,
     payload: DeliverOrderRequest,
@@ -182,7 +182,7 @@ def deliver(
         raise _translate(exc) from exc
 
 
-@router.post("/deliveries/{delivery_id}/reversal", response_model=SalesOrderView)
+@router.post("/deliveries/{delivery_id}/reversal")
 def reverse_delivery(
     delivery_id: UUID,
     payload: ReverseDeliveryRequest,
@@ -215,7 +215,7 @@ def reverse_delivery(
         raise _translate(exc) from exc
 
 
-@router.get("/quotations", response_model=list[QuotationView])
+@router.get("/quotations")
 def quotations(
     request: Request,
     principal: CurrentPrincipal,
@@ -226,7 +226,7 @@ def quotations(
     return list_quotations(db, limit=limit)
 
 
-@router.post("/quotations", response_model=QuotationView, status_code=status.HTTP_201_CREATED)
+@router.post("/quotations", status_code=status.HTTP_201_CREATED)
 def quotation(
     payload: CreateQuotationRequest,
     request: Request,

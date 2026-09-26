@@ -18,6 +18,8 @@ from urllib.request import HTTPCookieProcessor, Request, build_opener
 MARKER = "[PIPEERP-DEMO-V1]"
 UNITS_PATH = "/master-data/units"
 PARTNERS_PATH = "/master-data/partners"
+CATEGORIES_WITH_INACTIVE_PATH = "/master-data/categories?include_inactive=true"
+PARTNERS_WITH_INACTIVE_PATH = "/master-data/partners?include_inactive=true"
 
 
 class SeedError(RuntimeError):
@@ -130,7 +132,7 @@ def seed_master_data(api: Api) -> dict[str, dict[str, Any]]:
     categories = {
         "raw": ensure(
             api,
-            "/master-data/categories?include_inactive=true",
+            CATEGORIES_WITH_INACTIVE_PATH,
             "/master-data/categories",
             "code",
             "DEMO-RAW",
@@ -138,7 +140,7 @@ def seed_master_data(api: Api) -> dict[str, dict[str, Any]]:
         ),
         "finished": ensure(
             api,
-            "/master-data/categories?include_inactive=true",
+            CATEGORIES_WITH_INACTIVE_PATH,
             "/master-data/categories",
             "code",
             "DEMO-FG",
@@ -146,7 +148,7 @@ def seed_master_data(api: Api) -> dict[str, dict[str, Any]]:
         ),
         "other": ensure(
             api,
-            "/master-data/categories?include_inactive=true",
+            CATEGORIES_WITH_INACTIVE_PATH,
             "/master-data/categories",
             "code",
             "DEMO-OTHER",
@@ -206,7 +208,7 @@ def seed_master_data(api: Api) -> dict[str, dict[str, Any]]:
     partners = {
         "supplier": ensure(
             api,
-            "/master-data/partners?include_inactive=true",
+            PARTNERS_WITH_INACTIVE_PATH,
             PARTNERS_PATH,
             "code",
             "DEMO-SUP-01",
@@ -222,7 +224,7 @@ def seed_master_data(api: Api) -> dict[str, dict[str, Any]]:
         ),
         "customer": ensure(
             api,
-            "/master-data/partners?include_inactive=true",
+            PARTNERS_WITH_INACTIVE_PATH,
             PARTNERS_PATH,
             "code",
             "DEMO-CUS-01",
@@ -238,7 +240,7 @@ def seed_master_data(api: Api) -> dict[str, dict[str, Any]]:
         ),
         "customer2": ensure(
             api,
-            "/master-data/partners?include_inactive=true",
+            PARTNERS_WITH_INACTIVE_PATH,
             PARTNERS_PATH,
             "code",
             "DEMO-CUS-02",

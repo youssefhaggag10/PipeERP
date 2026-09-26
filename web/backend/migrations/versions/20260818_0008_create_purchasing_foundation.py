@@ -14,6 +14,7 @@ revision: str = "20260818_0008"
 down_revision: str | None = "20260818_0007"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
+VERSION_POSITIVE = "version > 0"
 
 
 def upgrade() -> None:
@@ -52,7 +53,7 @@ def upgrade() -> None:
             name=op.f("ck_purchase_orders_status_valid"),
         ),
         sa.CheckConstraint("total >= 0", name=op.f("ck_purchase_orders_total_nonnegative")),
-        sa.CheckConstraint("version > 0", name=op.f("ck_purchase_orders_version_positive")),
+        sa.CheckConstraint(VERSION_POSITIVE, name=op.f("ck_purchase_orders_version_positive")),
         sa.ForeignKeyConstraint(
             ["created_by_id"],
             ["users.id"],
@@ -148,7 +149,7 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "unit_price >= 0", name=op.f("ck_purchase_order_lines_unit_price_nonnegative")
         ),
-        sa.CheckConstraint("version > 0", name=op.f("ck_purchase_order_lines_version_positive")),
+        sa.CheckConstraint(VERSION_POSITIVE, name=op.f("ck_purchase_order_lines_version_positive")),
         sa.ForeignKeyConstraint(
             ["product_id"],
             ["products.id"],
@@ -249,7 +250,7 @@ def upgrade() -> None:
             name=op.f("ck_supplier_invoices_status_valid"),
         ),
         sa.CheckConstraint("total >= 0", name=op.f("ck_supplier_invoices_total_nonnegative")),
-        sa.CheckConstraint("version > 0", name=op.f("ck_supplier_invoices_version_positive")),
+        sa.CheckConstraint(VERSION_POSITIVE, name=op.f("ck_supplier_invoices_version_positive")),
         sa.ForeignKeyConstraint(
             ["purchase_order_id"],
             ["purchase_orders.id"],

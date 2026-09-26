@@ -44,6 +44,10 @@ from app.modules.treasury.schemas import StatementLineView
 from app.modules.treasury.service import list_partner_balances, partner_statement
 
 ZERO = Decimal("0")
+ORDER_NUMBER_LABEL = "رقم الأمر"
+RETURN_LABEL = "المرتجع"
+SUPPLIER_LABEL = "المورد"
+PAYMENT_METHOD_LABEL = "الطريقة"
 REPORT_TITLES: dict[str, str] = {
     "sales": "تقرير المبيعات",
     "purchases": "تقرير المشتريات",
@@ -509,11 +513,11 @@ def _sales_report(
         effective_paid = money(max(ZERO, paid - refunded))
         rows.append(
             {
-                "رقم الأمر": order.order_number,
+                ORDER_NUMBER_LABEL: order.order_number,
                 "التاريخ": order.order_date.date().isoformat(),
                 "العميل": partner.name_ar,
                 "الإجمالي الأصلي": _money(original),
-                "المرتجع": _money(returned),
+                RETURN_LABEL: _money(returned),
                 "الصافي": _money(net),
                 "المدفوع": _money(effective_paid),
                 "المتبقي": _money(remaining if invoice is not None else net),
@@ -526,11 +530,11 @@ def _sales_report(
         totals["paid"] += effective_paid
         totals["remaining"] += remaining if invoice is not None else net
     columns = [
-        "رقم الأمر",
+        ORDER_NUMBER_LABEL,
         "التاريخ",
         "العميل",
         "الإجمالي الأصلي",
-        "المرتجع",
+        RETURN_LABEL,
         "الصافي",
         "المدفوع",
         "المتبقي",
@@ -567,11 +571,11 @@ def _purchases_report(
         effective_paid = money(max(ZERO, paid - refunded))
         rows.append(
             {
-                "رقم الأمر": order.order_number,
+                ORDER_NUMBER_LABEL: order.order_number,
                 "التاريخ": order.order_date.date().isoformat(),
-                "المورد": partner.name_ar,
+                SUPPLIER_LABEL: partner.name_ar,
                 "الإجمالي الأصلي": _money(original),
-                "المرتجع": _money(returned),
+                RETURN_LABEL: _money(returned),
                 "الصافي": _money(net),
                 "المدفوع": _money(effective_paid),
                 "المتبقي": _money(remaining if invoice is not None else net),
@@ -584,11 +588,11 @@ def _purchases_report(
         totals["paid"] += effective_paid
         totals["remaining"] += remaining if invoice is not None else net
     columns = [
-        "رقم الأمر",
+        ORDER_NUMBER_LABEL,
         "التاريخ",
-        "المورد",
+        SUPPLIER_LABEL,
         "الإجمالي الأصلي",
-        "المرتجع",
+        RETURN_LABEL,
         "الصافي",
         "المدفوع",
         "المتبقي",
@@ -600,7 +604,7 @@ def _purchases_report(
 def _balances_report(
     db: Session, *, partner_type: str, partner_id: UUID | None
 ) -> tuple[list[str], list[dict[str, str]], dict[str, str]]:
-    name_label = "العميل" if partner_type == "customer" else "المورد"
+    name_label = "العميل" if partner_type == "customer" else SUPPLIER_LABEL
     values = list_partner_balances(db, partner_type=partner_type)
     if partner_id is not None:
         values = [item for item in values if item.partner_id == partner_id]
@@ -666,7 +670,7 @@ def _payments_report(
                     "الطرف": partner.name_ar,
                     "الحساب": account.name_ar,
                     "المبلغ": _money(payment.amount),
-                    "الطريقة": payment.payment_method,
+                    PAYMENT_METHOD_LABEL: payment.payment_method,
                     "الحالة": payment.status,
                     "ملاحظات": payment.notes,
                 },
@@ -685,7 +689,7 @@ def _payments_report(
                     "الطرف": partner.name_ar,
                     "الحساب": account.name_ar,
                     "المبلغ": _money(refund.amount),
-                    "الطريقة": refund.payment_method,
+                    PAYMENT_METHOD_LABEL: refund.payment_method,
                     "الحالة": refund.status,
                     "ملاحظات": refund.notes,
                 },
@@ -700,7 +704,7 @@ def _payments_report(
         "الطرف",
         "الحساب",
         "المبلغ",
-        "الطريقة",
+        PAYMENT_METHOD_LABEL,
         "الحالة",
         "ملاحظات",
     ]

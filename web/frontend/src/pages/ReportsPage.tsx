@@ -116,15 +116,11 @@ export function ReportsPage() {
   const selectedReport = reports.find((item) => item.key === reportKey)!;
   const filteredPartners = useMemo(
     () =>
-      partners.filter(
-        (item) =>
-          selectedReport.partner === "all" ||
-          (selectedReport.partner === "customer"
-            ? item.is_customer
-            : selectedReport.partner === "supplier"
-              ? item.is_supplier
-              : false),
-      ),
+      partners.filter((item) => {
+        if (selectedReport.partner === "all") return true;
+        if (selectedReport.partner === "customer") return item.is_customer;
+        return selectedReport.partner === "supplier" && item.is_supplier;
+      }),
     [partners, selectedReport.partner],
   );
   const printOptions =
@@ -357,8 +353,8 @@ export function ReportsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {result.rows.map((row, index) => (
-                      <tr key={index}>
+                    {result.rows.map((row) => (
+                      <tr key={Object.values(row).join("|")}>
                         {result.columns.map((column) => (
                           <td key={column}>{row[column] ?? "—"}</td>
                         ))}

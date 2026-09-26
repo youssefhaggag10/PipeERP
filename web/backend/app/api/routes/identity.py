@@ -49,13 +49,13 @@ def _translate_error(exc: Exception) -> HTTPException:
     return HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
 
 
-@router.get("/users", response_model=list[UserView])
+@router.get("/users")
 def users(request: Request, principal: CurrentPrincipal, db: DatabaseSession) -> list[UserView]:
     enforce_permission(request, db, principal, PermissionCode.USERS_READ)
     return list_users(db)
 
 
-@router.post("/users", response_model=UserView, status_code=status.HTTP_201_CREATED)
+@router.post("/users", status_code=status.HTTP_201_CREATED)
 def add_user(
     payload: CreateUserRequest,
     request: Request,
@@ -105,7 +105,7 @@ def remove_user(
     db.commit()
 
 
-@router.patch("/users/{user_id}", response_model=UserView)
+@router.patch("/users/{user_id}")
 def edit_user(
     user_id: UUID,
     payload: UpdateUserRequest,
@@ -135,13 +135,13 @@ def edit_user(
     return view
 
 
-@router.get("/roles", response_model=list[RoleView])
+@router.get("/roles")
 def roles(request: Request, principal: CurrentPrincipal, db: DatabaseSession) -> list[RoleView]:
     enforce_permission(request, db, principal, PermissionCode.ROLES_READ)
     return list_roles(db)
 
 
-@router.post("/roles", response_model=RoleView, status_code=status.HTTP_201_CREATED)
+@router.post("/roles", status_code=status.HTTP_201_CREATED)
 def add_role(
     payload: CreateRoleRequest,
     request: Request,
@@ -169,7 +169,7 @@ def add_role(
     return view
 
 
-@router.put("/roles/{role_id}/permissions", response_model=RoleView)
+@router.put("/roles/{role_id}/permissions")
 def edit_role_permissions(
     role_id: UUID,
     payload: UpdateRolePermissionsRequest,
@@ -196,7 +196,7 @@ def edit_role_permissions(
     return view
 
 
-@router.get("/audit", response_model=list[AuditLogView])
+@router.get("/audit")
 def audit_log(
     request: Request,
     principal: CurrentPrincipal,

@@ -67,7 +67,7 @@ def _manage(request: Request, db: DatabaseSession, principal: CurrentPrincipal) 
     enforce_csrf(request, db, principal)
 
 
-@router.get("/options", response_model=CrmOptions)
+@router.get("/options")
 def crm_options(request: Request, principal: CurrentPrincipal, db: DatabaseSession) -> CrmOptions:
     _read(request, db, principal)
     try:
@@ -80,13 +80,13 @@ def crm_options(request: Request, principal: CurrentPrincipal, db: DatabaseSessi
         raise _error(exc) from exc
 
 
-@router.get("/summary", response_model=CrmSummary)
+@router.get("/summary")
 def crm_summary(request: Request, principal: CurrentPrincipal, db: DatabaseSession) -> CrmSummary:
     _read(request, db, principal)
     return summary(db, principal)
 
 
-@router.get("/pipeline", response_model=list[PipelineItem])
+@router.get("/pipeline")
 def crm_pipeline(
     request: Request, principal: CurrentPrincipal, db: DatabaseSession
 ) -> list[PipelineItem]:
@@ -94,7 +94,7 @@ def crm_pipeline(
     return pipeline(db, principal)
 
 
-@router.get("/reports", response_model=list[CrmReportItem])
+@router.get("/reports")
 def crm_reports(
     request: Request,
     principal: CurrentPrincipal,
@@ -108,7 +108,7 @@ def crm_reports(
         raise _error(exc) from exc
 
 
-@router.get("/leads", response_model=list[LeadView])
+@router.get("/leads")
 def leads(
     request: Request,
     principal: CurrentPrincipal,
@@ -121,7 +121,7 @@ def leads(
     return list_leads(db, principal, search=search, stage=stage, owner_id=owner_id)
 
 
-@router.post("/leads", response_model=LeadView, status_code=status.HTTP_201_CREATED)
+@router.post("/leads", status_code=status.HTTP_201_CREATED)
 def create_lead(
     payload: LeadPayload, request: Request, principal: CurrentPrincipal, db: DatabaseSession
 ) -> LeadView:
@@ -135,7 +135,7 @@ def create_lead(
         raise _error(exc) from exc
 
 
-@router.put("/leads/{lead_id}", response_model=LeadView)
+@router.put("/leads/{lead_id}")
 def update_lead(
     lead_id: UUID,
     payload: LeadPayload,
@@ -159,7 +159,7 @@ def update_lead(
         raise _error(exc) from exc
 
 
-@router.post("/leads/{lead_id}/stage", response_model=LeadView)
+@router.post("/leads/{lead_id}/stage")
 def change_stage(
     lead_id: UUID,
     payload: StageRequest,
@@ -177,7 +177,7 @@ def change_stage(
         raise _error(exc) from exc
 
 
-@router.post("/leads/{lead_id}/notes", response_model=ActivityView, status_code=201)
+@router.post("/leads/{lead_id}/notes", status_code=201)
 def lead_note(
     lead_id: UUID,
     payload: NoteRequest,
@@ -197,7 +197,7 @@ def lead_note(
         raise _error(exc) from exc
 
 
-@router.post("/leads/{lead_id}/activities", response_model=ActivityView, status_code=201)
+@router.post("/leads/{lead_id}/activities", status_code=201)
 def create_activity(
     lead_id: UUID,
     payload: ScheduleActivityRequest,
@@ -217,7 +217,7 @@ def create_activity(
         raise _error(exc) from exc
 
 
-@router.get("/activities", response_model=list[ActivityView])
+@router.get("/activities")
 def activities(
     request: Request,
     principal: CurrentPrincipal,
@@ -228,7 +228,7 @@ def activities(
     return list_activities(db, principal, activity_status)
 
 
-@router.post("/activities/{activity_id}/completion", response_model=ActivityView)
+@router.post("/activities/{activity_id}/completion")
 def activity_completion(
     activity_id: UUID,
     payload: CompleteActivityRequest,
@@ -264,7 +264,7 @@ def activity_reschedule(
         raise _error(exc) from exc
 
 
-@router.post("/activities/{activity_id}/cancellation", response_model=ActivityView)
+@router.post("/activities/{activity_id}/cancellation")
 def activity_cancellation(
     activity_id: UUID, request: Request, principal: CurrentPrincipal, db: DatabaseSession
 ) -> ActivityView:

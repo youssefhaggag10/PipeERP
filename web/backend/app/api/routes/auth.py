@@ -105,7 +105,7 @@ def _access_token(result_user_id: UUID, result_session_id: UUID, version: int) -
     )
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post("/login")
 def login(
     payload: LoginRequest,
     request: Request,
@@ -149,12 +149,12 @@ def login(
     return LoginResponse(user=view)
 
 
-@router.get("/me", response_model=LoginResponse)
+@router.get("/me")
 def me(principal: CurrentPrincipal, db: DatabaseSession) -> LoginResponse:
     return LoginResponse(user=user_view(db, principal.user))
 
 
-@router.post("/refresh", response_model=LoginResponse)
+@router.post("/refresh")
 def refresh(
     request: Request,
     response: Response,
@@ -197,7 +197,7 @@ def refresh(
     return LoginResponse(user=view)
 
 
-@router.post("/logout", response_model=MessageResponse)
+@router.post("/logout")
 def logout(request: Request, response: Response, db: DatabaseSession) -> MessageResponse:
     refresh_token = request.cookies.get(REFRESH_COOKIE)
     header_csrf = request.headers.get("x-csrf-token")
@@ -224,7 +224,7 @@ def logout(request: Request, response: Response, db: DatabaseSession) -> Message
     return MessageResponse(message="تم تسجيل الخروج")
 
 
-@router.post("/change-password", response_model=MessageResponse)
+@router.post("/change-password")
 def change_password(
     payload: ChangePasswordRequest,
     request: Request,

@@ -262,7 +262,8 @@ def test_material_availability_previews_and_atomically_blocks_basic_shortage() -
                     InventoryLayer.product_id == UUID(ids["raw_a"])
                 )
             )
-            assert balance is not None and layer is not None
+            assert balance is not None
+            assert layer is not None
             balance.quantity_on_hand = Decimal("100")
             layer.quantity_remaining = Decimal("100")
 
@@ -288,7 +289,8 @@ def test_material_availability_previews_and_atomically_blocks_basic_shortage() -
 
     with factory() as db:
         stored = db.get(ManufacturingOrder, UUID(order["id"]))
-        assert stored is not None and stored.status == "draft"
+        assert stored is not None
+        assert stored.status == "draft"
         assert db.scalar(select(ManufacturingMaterialIssue.id)) is None
 
 
@@ -366,7 +368,8 @@ def test_cancelling_in_progress_order_returns_every_issued_material() -> None:
 
     with factory() as db:
         order_row = db.scalar(select(ManufacturingOrder))
-        assert order_row is not None and order_row.status == "cancelled"
+        assert order_row is not None
+        assert order_row.status == "cancelled"
         for product_id, expected in ((ids["raw_a"], "500"), (ids["raw_b"], "100")):
             balance = db.get(
                 InventoryBalance, (UUID(product_id), UUID(ids["warehouse"]))
@@ -374,7 +377,8 @@ def test_cancelling_in_progress_order_returns_every_issued_material() -> None:
             assert balance is not None
             assert balance.quantity_on_hand == Decimal(expected)
         issues = list(db.scalars(select(ManufacturingMaterialIssue)))
-        assert issues and all(item.reversal_transaction_id is not None for item in issues)
+        assert issues
+        assert all(item.reversal_transaction_id is not None for item in issues)
 
 
 def test_start_is_idempotent_and_rejects_a_different_version_for_same_key() -> None:

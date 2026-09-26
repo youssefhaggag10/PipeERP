@@ -10,9 +10,11 @@ retention_days=${BACKUP_RETENTION_DAYS:-14}
 
 case "$backup_dir" in
   /|"") echo "BACKUP_DIR غير آمن" >&2; exit 1 ;;
+  *) ;;
 esac
 case "$retention_days" in
   *[!0-9]*|"") echo "BACKUP_RETENTION_DAYS يجب أن يكون عددًا صحيحًا" >&2; exit 1 ;;
+  *) ;;
 esac
 [ -r "$database_url_file" ] || { echo "ملف اتصال قاعدة البيانات غير مقروء" >&2; exit 1; }
 [ -r "$encryption_key_file" ] || { echo "ملف مفتاح تشفير النسخة غير مقروء" >&2; exit 1; }

@@ -41,7 +41,8 @@ def test_five_concurrent_receipts_cannot_over_receive_purchase_order() -> None:
             )
         unit = db.scalar(select(UnitOfMeasure).where(UnitOfMeasure.code == "KG"))
         warehouse = db.scalar(select(Warehouse).where(Warehouse.code == "MAIN"))
-        assert unit is not None and warehouse is not None
+        assert unit is not None
+        assert warehouse is not None
         supplier = Partner(
             code=f"SUP-{suffix}",
             normalized_code=f"SUP-{suffix}",
@@ -139,8 +140,10 @@ def test_five_concurrent_receipts_cannot_over_receive_purchase_order() -> None:
     with Session(engine) as db:
         stored_line = db.get(PurchaseOrderLine, line_id)
         balance = db.get(InventoryBalance, (product_id, warehouse_id))
-        assert stored_line is not None and stored_line.received_quantity == Decimal("9.000000")
-        assert balance is not None and balance.quantity_on_hand == Decimal("9.000000")
+        assert stored_line is not None
+        assert stored_line.received_quantity == Decimal("9.000000")
+        assert balance is not None
+        assert balance.quantity_on_hand == Decimal("9.000000")
         assert (
             db.scalar(
                 select(func.count(PurchaseReceipt.id)).where(

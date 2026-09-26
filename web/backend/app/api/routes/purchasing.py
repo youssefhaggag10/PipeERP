@@ -49,7 +49,7 @@ def _translate_error(exc: Exception) -> HTTPException:
     return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
 
 
-@router.get("/options", response_model=PurchaseOptionsView)
+@router.get("/options")
 def options(
     request: Request,
     principal: CurrentPrincipal,
@@ -59,7 +59,7 @@ def options(
     return purchase_options(db)
 
 
-@router.get("/orders", response_model=list[PurchaseOrderView])
+@router.get("/orders")
 def orders(
     request: Request,
     principal: CurrentPrincipal,
@@ -70,7 +70,7 @@ def orders(
     return list_purchase_orders(db, limit=limit)
 
 
-@router.get("/orders/{order_id}", response_model=PurchaseOrderView)
+@router.get("/orders/{order_id}")
 def order(
     order_id: UUID,
     request: Request,
@@ -84,7 +84,7 @@ def order(
         raise _translate_error(exc) from exc
 
 
-@router.get("/orders/{order_id}/receipts", response_model=list[PurchaseReceiptView])
+@router.get("/orders/{order_id}/receipts")
 def receipts(
     order_id: UUID,
     request: Request,
@@ -98,7 +98,7 @@ def receipts(
         raise _translate_error(exc) from exc
 
 
-@router.post("/orders", response_model=PurchaseOrderView, status_code=status.HTTP_201_CREATED)
+@router.post("/orders", status_code=status.HTTP_201_CREATED)
 def create_order(
     payload: CreatePurchaseOrderRequest,
     request: Request,
@@ -118,7 +118,7 @@ def create_order(
         raise _translate_error(exc) from exc
 
 
-@router.post("/orders/{order_id}/receive", response_model=PurchaseOrderView)
+@router.post("/orders/{order_id}/receive")
 def receive_full_order(
     order_id: UUID,
     payload: ReceivePurchaseOrderRequest,
@@ -145,7 +145,7 @@ def receive_full_order(
         raise _translate_error(exc) from exc
 
 
-@router.post("/receipts/{receipt_id}/reversal", response_model=PurchaseReceiptView)
+@router.post("/receipts/{receipt_id}/reversal")
 def reverse_receipt(
     receipt_id: UUID,
     payload: ReversePurchaseReceiptRequest,
@@ -174,7 +174,6 @@ def reverse_receipt(
 
 @router.post(
     "/supplier-invoices/{invoice_id}/reversal",
-    response_model=SupplierInvoiceView,
 )
 def supplier_invoice_reversal(
     invoice_id: UUID,

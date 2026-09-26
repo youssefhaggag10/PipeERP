@@ -390,7 +390,9 @@ def test_reports_exports_and_a4_print_data() -> None:
         actor_id = db.scalar(select(User.id).where(User.normalized_username == "admin"))
         customer_id = db.scalar(select(Partner.id).where(Partner.code == "CUS-RPT"))
         warehouse_id = db.scalar(select(Warehouse.id).where(Warehouse.code == "MAIN"))
-        assert actor_id is not None and customer_id is not None and warehouse_id is not None
+        assert actor_id is not None
+        assert customer_id is not None
+        assert warehouse_id is not None
         db.add(
             SalesOrder(
                 order_number="SO-DRAFT-RPT",

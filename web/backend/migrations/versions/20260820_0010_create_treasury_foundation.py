@@ -17,6 +17,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 PARTNERS_ID = "partners.id"
+POSITIVE_AMOUNT = "amount > 0"
 
 
 def _timestamps() -> list[sa.Column]:
@@ -95,7 +96,7 @@ def upgrade() -> None:
         sa.Column("reversed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("reversal_reason", sa.Text(), nullable=False),
         *_timestamps(),
-        sa.CheckConstraint("amount > 0", name=op.f("ck_payment_transactions_amount_positive")),
+        sa.CheckConstraint(POSITIVE_AMOUNT, name=op.f("ck_payment_transactions_amount_positive")),
         sa.CheckConstraint(
             "payment_method IN ('cash','bank_transfer','cheque','wallet')",
             name=op.f("ck_payment_transactions_payment_method_valid"),
@@ -152,7 +153,7 @@ def upgrade() -> None:
         sa.Column("supplier_invoice_id", sa.Uuid(), nullable=True),
         sa.Column("amount", sa.Numeric(20, 2), nullable=False),
         *_timestamps(),
-        sa.CheckConstraint("amount > 0", name=op.f("ck_payment_allocations_amount_positive")),
+        sa.CheckConstraint(POSITIVE_AMOUNT, name=op.f("ck_payment_allocations_amount_positive")),
         sa.CheckConstraint(
             "(customer_invoice_id IS NOT NULL AND supplier_invoice_id IS NULL) OR "
             "(customer_invoice_id IS NULL AND supplier_invoice_id IS NOT NULL)",
@@ -213,7 +214,7 @@ def upgrade() -> None:
         sa.Column("reversal_reason", sa.Text(), nullable=False),
         *_timestamps(),
         sa.CheckConstraint(
-            "amount > 0", name=op.f("ck_financial_account_transfers_amount_positive")
+            POSITIVE_AMOUNT, name=op.f("ck_financial_account_transfers_amount_positive")
         ),
         sa.CheckConstraint(
             "from_account_id <> to_account_id",
@@ -303,7 +304,7 @@ def upgrade() -> None:
         sa.Column("created_by_id", sa.Uuid(), nullable=False),
         *_timestamps(),
         sa.CheckConstraint(
-            "amount > 0", name=op.f("ck_partner_opening_balance_entries_amount_positive")
+            POSITIVE_AMOUNT, name=op.f("ck_partner_opening_balance_entries_amount_positive")
         ),
         sa.CheckConstraint(
             "nature IN ('debit','credit')",
@@ -352,7 +353,7 @@ def upgrade() -> None:
             name=op.f("ck_customer_account_adjustments_type_valid"),
         ),
         sa.CheckConstraint(
-            "amount > 0", name=op.f("ck_customer_account_adjustments_amount_positive")
+            POSITIVE_AMOUNT, name=op.f("ck_customer_account_adjustments_amount_positive")
         ),
         sa.CheckConstraint(
             "status IN ('posted','reversed')",

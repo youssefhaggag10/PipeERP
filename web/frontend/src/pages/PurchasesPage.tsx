@@ -279,7 +279,7 @@ export function PurchasesPage() {
           })}</div>
           <label>ملاحظات<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="ملاحظات أمر الشراء" /></label>
           <div className="purchase-form-total"><span>إجمالي مستحق المورد</span><strong>{currency.format(draftTotal)} ج.م</strong></div>
-          <button className="primary-button" disabled={submitting}><FilePlus2 size={17} /> حفظ أمر الشراء كمسودة</button>
+          <button type="submit" className="primary-button" disabled={submitting}><FilePlus2 size={17} /> حفظ أمر الشراء كمسودة</button>
         </form> : <div className="setup-note"><PackageCheck size={20} /><div><strong>أكمل البيانات الأساسية أولًا</strong><p>يلزم وجود مورد وصنف ومخزن مصنع نشط.</p></div></div>}
       </section> : null}
 

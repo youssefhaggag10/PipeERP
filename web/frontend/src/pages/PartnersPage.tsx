@@ -68,7 +68,7 @@ function PartnerList({
   onSelect,
   onEdit,
   onSearch,
-}: {
+}: Readonly<{
   partners: Partner[];
   totalCount: number;
   selectedId: string;
@@ -79,7 +79,7 @@ function PartnerList({
   onSelect: (id: string) => void;
   onEdit: (partner: Partner) => void;
   onSearch: (value: string) => void;
-}) {
+}>) {
   const activeCount = partners.filter((item) => item.is_active).length;
   return (
     <article className="panel">
@@ -101,9 +101,17 @@ function PartnerList({
         <div className="partner-cards">
           {partners.map((partner) => (
             <article
+              role="button"
+              tabIndex={0}
               className={`partner-card ${partner.is_active ? "" : "partner-card--inactive"} ${selectedId === partner.id ? "partner-card--selected" : ""}`}
               key={partner.id}
               onClick={() => onSelect(partner.id)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelect(partner.id);
+                }
+              }}
             >
               <span className="partner-card__avatar">
                 {partner.name_ar.charAt(0)}
@@ -171,8 +179,8 @@ function LinkedMovementsPanel({ data }: { data: LinkedMovements }) {
             </tr>
           </thead>
           <tbody>
-            {data.lines.map((line, index) => (
-              <tr key={`${line.document_number}-${index}`}>
+            {data.lines.map((line) => (
+              <tr key={`${line.document_number}-${line.movement_date}-${line.movement_type}`}>
                 <td>{new Date(line.movement_date).toLocaleDateString("ar-EG")}</td>
                 <td dir="ltr">{line.document_number}</td>
                 <td>{line.movement_type}</td>

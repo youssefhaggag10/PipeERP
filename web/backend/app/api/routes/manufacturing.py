@@ -75,7 +75,7 @@ def _manage(request: Request, db: DatabaseSession, principal: CurrentPrincipal) 
     enforce_csrf(request, db, principal)
 
 
-@router.get("/options", response_model=ManufacturingOptionsView)
+@router.get("/options")
 def options(
     request: Request, principal: CurrentPrincipal, db: DatabaseSession
 ) -> ManufacturingOptionsView:
@@ -83,7 +83,7 @@ def options(
     return manufacturing_options(db)
 
 
-@router.get("/recipes", response_model=list[RecipeView])
+@router.get("/recipes")
 def recipes(
     request: Request,
     principal: CurrentPrincipal,
@@ -108,7 +108,7 @@ def recipe(
         raise _translate_error(exc) from exc
 
 
-@router.post("/recipes", response_model=RecipeView, status_code=status.HTTP_201_CREATED)
+@router.post("/recipes", status_code=status.HTTP_201_CREATED)
 def add_recipe(
     payload: CreateRecipeRequest,
     request: Request,
@@ -125,7 +125,7 @@ def add_recipe(
         raise _translate_error(exc) from exc
 
 
-@router.put("/recipes/{recipe_id}", response_model=RecipeView)
+@router.put("/recipes/{recipe_id}")
 def edit_recipe(
     recipe_id: UUID,
     payload: UpdateRecipeRequest,
@@ -149,7 +149,7 @@ def edit_recipe(
         raise _translate_error(exc) from exc
 
 
-@router.get("/orders", response_model=list[ManufacturingOrderView])
+@router.get("/orders")
 def orders(
     request: Request,
     principal: CurrentPrincipal,
@@ -160,7 +160,7 @@ def orders(
     return list_orders(db, limit=limit)
 
 
-@router.get("/orders/{order_id}", response_model=ManufacturingOrderView)
+@router.get("/orders/{order_id}")
 def order(
     order_id: UUID,
     request: Request,
@@ -174,7 +174,7 @@ def order(
         raise _translate_error(exc) from exc
 
 
-@router.post("/orders", response_model=ManufacturingOrderView, status_code=status.HTTP_201_CREATED)
+@router.post("/orders", status_code=status.HTTP_201_CREATED)
 def add_order(
     payload: CreateManufacturingOrderRequest,
     request: Request,
@@ -198,7 +198,7 @@ def add_order(
         raise _translate_error(exc) from exc
 
 
-@router.put("/orders/{order_id}", response_model=ManufacturingOrderView)
+@router.put("/orders/{order_id}")
 def edit_order(
     order_id: UUID,
     payload: UpdateManufacturingOrderRequest,
@@ -246,7 +246,7 @@ def remove_order(
         raise _translate_error(exc) from exc
 
 
-@router.get("/orders/{order_id}/replan-preview", response_model=ReplanView)
+@router.get("/orders/{order_id}/replan-preview")
 def replan_preview(
     order_id: UUID,
     request: Request,
@@ -276,7 +276,7 @@ def material_availability_preview(
         raise _translate_error(exc) from exc
 
 
-@router.post("/orders/{order_id}/replan", response_model=ManufacturingOrderView)
+@router.post("/orders/{order_id}/replan")
 def replan_order(
     order_id: UUID,
     payload: TransitionRequest,
@@ -300,7 +300,7 @@ def replan_order(
         raise _translate_error(exc) from exc
 
 
-@router.post("/orders/{order_id}/start", response_model=ManufacturingOrderView)
+@router.post("/orders/{order_id}/start")
 def begin_order(
     order_id: UUID,
     payload: TransitionRequest,
@@ -333,7 +333,7 @@ def begin_order(
         raise _translate_error(exc) from exc
 
 
-@router.post("/orders/{order_id}/complete", response_model=ManufacturingOrderView)
+@router.post("/orders/{order_id}/complete")
 def finish_order(
     order_id: UUID,
     payload: CompleteManufacturingOrderRequest,
@@ -366,7 +366,7 @@ def finish_order(
         raise _translate_error(exc) from exc
 
 
-@router.post("/orders/{order_id}/cancel", response_model=ManufacturingOrderView)
+@router.post("/orders/{order_id}/cancel")
 def undo_order(
     order_id: UUID,
     payload: CancelManufacturingOrderRequest,

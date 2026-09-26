@@ -77,7 +77,7 @@ HandledReturnsError = (
 )
 
 
-@router.get("/options", response_model=ReturnOptionsView)
+@router.get("/options")
 def options(
     request: Request, principal: CurrentPrincipal, db: DatabaseSession
 ) -> ReturnOptionsView:
@@ -99,7 +99,6 @@ def invoices(
 
 @router.get(
     "/invoices/{return_type}/{invoice_id}/lines",
-    response_model=list[ReturnableLineView],
 )
 def invoice_lines(
     return_type: str,
@@ -126,7 +125,7 @@ def documents(
     return list_returns(db, limit=limit)
 
 
-@router.post("/documents", response_model=InvoiceReturnView, status_code=status.HTTP_201_CREATED)
+@router.post("/documents", status_code=status.HTTP_201_CREATED)
 def add_document(
     payload: CreateInvoiceReturnRequest,
     request: Request,
@@ -150,7 +149,7 @@ def add_document(
         raise _translate(exc) from exc
 
 
-@router.post("/documents/{return_id}/reverse", response_model=InvoiceReturnView)
+@router.post("/documents/{return_id}/reverse")
 def reverse_document(
     return_id: UUID,
     payload: ReverseRequest,
@@ -176,7 +175,7 @@ def reverse_document(
         raise _translate(exc) from exc
 
 
-@router.get("/refunds", response_model=list[RefundView])
+@router.get("/refunds")
 def refunds(
     request: Request,
     principal: CurrentPrincipal,
@@ -187,7 +186,7 @@ def refunds(
     return list_refunds(db, limit=limit)
 
 
-@router.post("/refunds", response_model=RefundView, status_code=status.HTTP_201_CREATED)
+@router.post("/refunds", status_code=status.HTTP_201_CREATED)
 def add_refund(
     payload: CreateRefundRequest,
     request: Request,
@@ -211,7 +210,7 @@ def add_refund(
         raise _translate(exc) from exc
 
 
-@router.post("/refunds/{refund_id}/reverse", response_model=RefundView)
+@router.post("/refunds/{refund_id}/reverse")
 def reverse_refund_document(
     refund_id: UUID,
     payload: ReverseRequest,

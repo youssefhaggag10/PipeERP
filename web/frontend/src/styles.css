@@ -321,7 +321,7 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .data-table tbody tr:nth-child(even) { background: #fbfcfd; }
 .data-table tbody tr:hover { background: #eef8f6; }
 .partner-cards { padding: 12px 18px 20px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 11px; }
-.partner-card { min-width: 0; padding: 15px; display: grid; grid-template-columns: 42px minmax(0,1fr) auto; gap: 11px; border: 1px solid #dbe5e9; border-radius: 13px; background: linear-gradient(145deg, #fff, #f8fafb); box-shadow: 0 3px 12px rgba(13,34,52,.035); transition: .16s ease; }
+.partner-card { min-width: 0; padding: 15px; display: grid; grid-template-columns: 42px minmax(0,1fr) auto; gap: 11px; border: 1px solid #dbe5e9; border-radius: 13px; background: linear-gradient(145deg, #fff, #f8fafb); box-shadow: 0 3px 12px rgba(13,34,52,.035); color: inherit; font: inherit; text-align: right; transition: .16s ease; }
 .partner-card:hover { border-color: #b8d9d3; transform: translateY(-1px); box-shadow: var(--shadow-soft); }
 .partner-card--inactive { opacity: .62; }
 .partner-card__edit { grid-column: 3; grid-row: 1; }
@@ -644,7 +644,7 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .manufacturing-line select, .manufacturing-line input, .manufacturing-completion input, .manufacturing-completion select { min-width: 0; min-height: 40px; padding: 0 10px; border: 1px solid #d5dfe5; border-radius: 9px; background: #fff; outline: 0; }
 .manufacturing-recipe-grid { padding: 14px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 11px; }
 .manufacturing-recipe-card { min-width: 0; padding: 15px; display: grid; grid-template-columns: 40px minmax(0,1fr); gap: 11px; border: 1px solid #dbe5e9; border-radius: 13px; background: linear-gradient(145deg,#fff,#f7fafb); text-align: right; }
-.manufacturing-recipe-card > span { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 11px; color: #9b6715; background: #fff1d5; }
+.manufacturing-recipe-card > span { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 11px; color: #754800; background: #fff1d5; }
 .manufacturing-recipe-card strong, .manufacturing-recipe-card small { display: block; }
 .manufacturing-recipe-card strong { font-size: 11px; }
 .manufacturing-recipe-card small { margin-top: 4px; overflow: hidden; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }

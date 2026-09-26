@@ -33,7 +33,7 @@ class DashboardSummary(BaseModel):
     activity: list[DashboardActivity]
 
 
-@router.get("/summary", response_model=DashboardSummary)
+@router.get("/summary")
 def summary(request: Request, principal: CurrentPrincipal, db: DatabaseSession) -> DashboardSummary:
     del request
     permissions = principal.permissions

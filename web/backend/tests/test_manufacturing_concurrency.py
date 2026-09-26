@@ -47,7 +47,8 @@ def test_five_concurrent_starts_issue_the_same_plan_only_once() -> None:
             )
         unit = db.scalar(select(UnitOfMeasure).where(UnitOfMeasure.code == "KG"))
         warehouse = db.scalar(select(Warehouse).where(Warehouse.code == "MAIN"))
-        assert unit is not None and warehouse is not None
+        assert unit is not None
+        assert warehouse is not None
         raw = Product(
             code=f"MFG-RAW-{suffix}",
             normalized_code=f"MFG-RAW-{suffix}",
@@ -226,8 +227,10 @@ def test_five_concurrent_starts_issue_the_same_plan_only_once() -> None:
     with Session(engine) as db:
         stored_order = db.get(ManufacturingOrder, order_id)
         balance = db.get(InventoryBalance, (raw_id, warehouse_id))
-        assert stored_order is not None and stored_order.issued_batches == 1
-        assert balance is not None and balance.quantity_on_hand == Decimal("90.000000")
+        assert stored_order is not None
+        assert stored_order.issued_batches == 1
+        assert balance is not None
+        assert balance.quantity_on_hand == Decimal("90.000000")
         assert (
             db.scalar(
                 select(func.count(ManufacturingMaterialIssue.id)).where(

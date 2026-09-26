@@ -94,6 +94,23 @@ const currency = new Intl.NumberFormat("ar-EG", {
   maximumFractionDigits: 2,
 });
 
+const ACTIVITY_STATUS_META: Record<
+  Activity["status"],
+  { className: string; label: string }
+> = {
+  scheduled: { className: "purchase-status--approved", label: "مجدول" },
+  done: { className: "purchase-status--received", label: "مكتمل" },
+  cancelled: { className: "purchase-status--cancelled", label: "ملغي" },
+};
+
+function activityStatusClass(status: Activity["status"]): string {
+  return ACTIVITY_STATUS_META[status].className;
+}
+
+function activityStatusLabel(status: Activity["status"]): string {
+  return ACTIVITY_STATUS_META[status].label;
+}
+
 export function CrmPage() {
   const { user } = useAuth();
   const location = useLocation();
@@ -917,7 +934,7 @@ export function CrmPage() {
                         required
                       />
                     </label>
-                    <button className="primary-button">
+                    <button type="submit" className="primary-button">
                       <Clock3 size={16} /> جدولة
                     </button>
                     </form>
@@ -988,14 +1005,8 @@ export function CrmPage() {
                       : "بلا موعد"}
                   </small>
                 </span>
-                <span
-                  className={`purchase-status ${item.status === "done" ? "purchase-status--received" : item.status === "cancelled" ? "purchase-status--cancelled" : "purchase-status--approved"}`}
-                >
-                  {item.status === "scheduled"
-                    ? "مجدول"
-                    : item.status === "done"
-                      ? "مكتمل"
-                      : "ملغي"}
+                <span className={`purchase-status ${activityStatusClass(item.status)}`}>
+                  {activityStatusLabel(item.status)}
                 </span>
                 {canManage && item.status === "scheduled" ? (
                   <span className="crm-activity-actions">

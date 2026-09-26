@@ -51,7 +51,7 @@ def _translate_error(exc: Exception) -> HTTPException:
     return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
 
 
-@router.get("/balances", response_model=list[BalanceView])
+@router.get("/balances")
 def balances(
     request: Request,
     principal: CurrentPrincipal,
@@ -61,7 +61,7 @@ def balances(
     return list_balances(db)
 
 
-@router.get("/lot-balances", response_model=list[LotBalanceView])
+@router.get("/lot-balances")
 def lot_balances(
     request: Request,
     principal: CurrentPrincipal,
@@ -71,7 +71,7 @@ def lot_balances(
     return list_lot_balances(db)
 
 
-@router.get("/options", response_model=InventoryOptionsView)
+@router.get("/options")
 def options(
     request: Request,
     principal: CurrentPrincipal,
@@ -81,7 +81,7 @@ def options(
     return inventory_options(db)
 
 
-@router.get("/transactions", response_model=list[TransactionView])
+@router.get("/transactions")
 def transactions(
     request: Request,
     principal: CurrentPrincipal,
@@ -92,7 +92,7 @@ def transactions(
     return list_transactions(db, limit=limit)
 
 
-@router.get("/stock-card", response_model=list[StockCardLineView])
+@router.get("/stock-card")
 def stock_card(
     request: Request,
     principal: CurrentPrincipal,
@@ -136,7 +136,7 @@ def receipt(
     return view
 
 
-@router.post("/issues", response_model=TransactionView, status_code=status.HTTP_201_CREATED)
+@router.post("/issues", status_code=status.HTTP_201_CREATED)
 def issue(
     payload: IssueRequest,
     request: Request,
@@ -168,7 +168,7 @@ def issue(
     return view
 
 
-@router.post("/adjustments", response_model=TransactionView, status_code=status.HTTP_201_CREATED)
+@router.post("/adjustments", status_code=status.HTTP_201_CREATED)
 def adjustment(
     payload: AdjustmentRequest,
     request: Request,
@@ -202,7 +202,6 @@ def adjustment(
 
 @router.post(
     "/transactions/{transaction_id}/reversal",
-    response_model=TransactionView,
     status_code=status.HTTP_201_CREATED,
 )
 def reversal(
