@@ -107,15 +107,18 @@ const costFormat = new Intl.NumberFormat("ar-EG", {
 });
 const number = (value: string | number) => numberFormat.format(Number(value));
 
+function inventoryView(search: string): InventoryView {
+  const requested = new URLSearchParams(search).get("view");
+  return requested === "lots" || requested === "stock-card"
+    ? requested
+    : "balances";
+}
+
 export function InventoryPage() {
   const { user } = useAuth();
   const location = useLocation();
   const canManage = user?.permissions.includes("inventory.manage") ?? false;
-  const requestedView = new URLSearchParams(location.search).get("view");
-  const view: InventoryView =
-    requestedView === "lots" || requestedView === "stock-card"
-      ? requestedView
-      : "balances";
+  const view = inventoryView(location.search);
   const [balances, setBalances] = useState<Balance[]>([]);
   const [lots, setLots] = useState<LotBalance[]>([]);
   const [stockCard, setStockCard] = useState<StockCardLine[]>([]);

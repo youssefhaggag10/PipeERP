@@ -273,9 +273,7 @@ def authenticate(
         raise RateLimitExceeded
 
     normalized = normalize_username(username)
-    user = db.scalar(
-        select(User).where(User.normalized_username == normalized).with_for_update()
-    )
+    user = db.scalar(select(User).where(User.normalized_username == normalized).with_for_update())
     if user is None:
         verify_password(password, _DUMMY_PASSWORD_HASH)
         add_audit(
@@ -517,7 +515,6 @@ def create_user(
     display_name: str,
     password: str,
     role_codes: set[str],
-    must_change_password: bool,
     actor: Principal,
     client: ClientContext,
 ) -> User:
@@ -754,11 +751,7 @@ def update_role_permissions(
     db.add_all(RolePermission(role_id=role.id, permission_id=row.id) for row in rows)
     affected_users = list(db.scalars(select(UserRole.user_id).where(UserRole.role_id == role.id)))
     if affected_users:
-        db.execute(
-            update(User)
-            .where(User.id.in_(affected_users))
-            .values(version=User.version + 1)
-        )
+        db.execute(update(User).where(User.id.in_(affected_users)).values(version=User.version + 1))
         db.execute(
             update(AuthSession)
             .where(AuthSession.user_id.in_(affected_users), AuthSession.revoked_at.is_(None))

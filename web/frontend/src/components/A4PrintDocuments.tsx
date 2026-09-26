@@ -118,6 +118,17 @@ function dateParts(value: string) {
   };
 }
 
+function lineUnitPrice(line: DocumentLine | null, isWeight: boolean): string {
+  if (!line) return "";
+  if (isWeight) {
+    return Number(line.actual_weight_kg || 0).toLocaleString("ar-EG", {
+      minimumFractionDigits: 3,
+      maximumFractionDigits: 3,
+    });
+  }
+  return money.format(Number(line.unit_price));
+}
+
 function Background({
   company,
   page,
@@ -217,7 +228,7 @@ export function BrandedDocumentPreview({
                   <div className="a4-item-row" dir="ltr" key={key}>
                     <span className="a4-col-notes" dir="rtl">{line?.notes || ""}</span>
                     <span className="a4-col-total">{line ? money.format(Number(line.line_total)) : ""}</span>
-                    <span className="a4-col-price">{line ? (isWeight ? Number(line.actual_weight_kg || 0).toLocaleString("ar-EG", { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : money.format(Number(line.unit_price))) : ""}</span>
+                    <span className="a4-col-price">{lineUnitPrice(line, isWeight)}</span>
                     <span className="a4-col-qty">{line ? Number(line.quantity).toLocaleString("ar-EG") : ""}</span>
                     <span className="a4-col-unit" dir="rtl">{line?.unit || ""}</span>
                     <span className="a4-col-name" dir="rtl">{line ? <><strong>{line.name}</strong><small>{line.code}</small></> : null}</span>

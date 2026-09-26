@@ -9,7 +9,7 @@ type ProtectedRouteProps = {
   requiredPermissions?: readonly Permission[];
 };
 
-export function ProtectedRoute({ children, requiredPermissions = [] }: ProtectedRouteProps) {
+export function ProtectedRoute({ children, requiredPermissions = [] }: Readonly<ProtectedRouteProps>) {
   const { user, loading } = useAuth();
   const location = useLocation();
   if (loading) return <main className="route-loading">جارٍ تجهيز مساحة العمل…</main>;

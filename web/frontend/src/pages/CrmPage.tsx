@@ -16,6 +16,7 @@ import {
   useMemo,
   useState,
   type FormEvent,
+  type ReactNode,
 } from "react";
 import { useLocation } from "react-router-dom";
 
@@ -111,16 +112,38 @@ function activityStatusLabel(status: Activity["status"]): string {
   return ACTIVITY_STATUS_META[status].label;
 }
 
+function initialTab(search: string): Tab {
+  return new URLSearchParams(search).get("tab") === "activities"
+    ? "activities"
+    : "dashboard";
+}
+
+function crmError(reason: unknown, fallback: string): string {
+  return reason instanceof ApiError ? reason.message : fallback;
+}
+
+function when(condition: boolean, content: ReactNode): ReactNode {
+  return condition ? content : null;
+}
+
+function tabClass(current: Tab, candidate: Tab): string {
+  return current === candidate ? "active" : "";
+}
+
+function temperatureLabel(temperature: Lead["temperature"]): string {
+  return { hot: "ساخن", warm: "دافئ", cold: "بارد" }[temperature];
+}
+
+function dueLabel(value: string | null): string {
+  return value ? new Date(value).toLocaleString("ar-EG") : "بلا موعد";
+}
+
 export function CrmPage() {
   const { user } = useAuth();
   const location = useLocation();
   const canManage = user?.permissions.includes("crm.manage") ?? false;
   const canSchedule = user?.roles.includes("system_admin") ?? false;
-  const [tab, setTab] = useState<Tab>(
-    new URLSearchParams(location.search).get("tab") === "activities"
-      ? "activities"
-      : "dashboard",
-  );
+  const [tab, setTab] = useState<Tab>(initialTab(location.search));
   const [options, setOptions] = useState<Options>({
     sources: [],
     stages: [],
@@ -190,18 +213,13 @@ export function CrmPage() {
       setSummary(summaryRow);
       setPipeline(pipelineRows);
       setReportRows(crmReportRows);
-      setSelectedId((current) =>
-        leadRows.some((item) => item.id === current)
-          ? current
-          : leadRows[0]?.id || "",
-      );
+      setSelectedId((current) => {
+        if (leadRows.some((item) => item.id === current)) return current;
+        return leadRows[0]?.id || "";
+      });
       setOwnerId((current) => current || optionRows.owners[0]?.id || "");
     } catch (reason) {
-      setError(
-        reason instanceof ApiError
-          ? reason.message
-          : "تعذر تحميل متابعة العملاء",
-      );
+      setError(crmError(reason, "تعذر تحميل متابعة العملاء"));
     } finally {
       setLoading(false);
     }
@@ -219,10 +237,9 @@ export function CrmPage() {
     () => activities.filter((item) => item.lead_id === selectedId),
     [activities, selectedId],
   );
-  const visibleActivities =
-    activityStatus === "all"
-      ? activities
-      : activities.filter((item) => item.status === activityStatus);
+  const visibleActivities = activityStatus === "all"
+    ? activities
+    : activities.filter((item) => item.status === activityStatus);
 
   function resetLeadForm() {
     setEditingId("");
@@ -299,13 +316,10 @@ export function CrmPage() {
       );
       await load();
     } catch (reason) {
-      setError(
-        reason instanceof ApiError
-          ? reason.message
-          : editingId
-            ? "تعذر تحديث العميل المحتمل"
-            : "تعذر إنشاء العميل المحتمل",
-      );
+      const fallback = editingId
+        ? "تعذر تحديث العميل المحتمل"
+        : "تعذر إنشاء العميل المحتمل";
+      setError(crmError(reason, fallback));
     }
   }
   async function changeStage(stageCode: string) {
@@ -318,9 +332,7 @@ export function CrmPage() {
       setNotice("تم تغيير مرحلة العميل وتسجيلها في الخط الزمني.");
       await load();
     } catch (reason) {
-      setError(
-        reason instanceof ApiError ? reason.message : "تعذر تغيير المرحلة",
-      );
+      setError(crmError(reason, "تعذر تغيير المرحلة"));
     }
   }
   async function addNote(event: FormEvent) {
@@ -335,9 +347,7 @@ export function CrmPage() {
       setNotice("تمت إضافة ملاحظة المتابعة.");
       await load();
     } catch (reason) {
-      setError(
-        reason instanceof ApiError ? reason.message : "تعذر حفظ الملاحظة",
-      );
+      setError(crmError(reason, "تعذر حفظ الملاحظة"));
     }
   }
   async function schedule(event: FormEvent<HTMLFormElement>) {
@@ -361,9 +371,7 @@ export function CrmPage() {
       setNotice("تمت جدولة نشاط المتابعة.");
       await load();
     } catch (reason) {
-      setError(
-        reason instanceof ApiError ? reason.message : "تعذر جدولة النشاط",
-      );
+      setError(crmError(reason, "تعذر جدولة النشاط"));
     }
   }
   async function complete(activity: Activity) {
@@ -376,9 +384,7 @@ export function CrmPage() {
       });
       await load();
     } catch (reason) {
-      setError(
-        reason instanceof ApiError ? reason.message : "تعذر إكمال النشاط",
-      );
+      setError(crmError(reason, "تعذر إكمال النشاط"));
     }
   }
   async function cancel(activity: Activity) {
@@ -388,9 +394,7 @@ export function CrmPage() {
       });
       await load();
     } catch (reason) {
-      setError(
-        reason instanceof ApiError ? reason.message : "تعذر إلغاء النشاط",
-      );
+      setError(crmError(reason, "تعذر إلغاء النشاط"));
     }
   }
   async function reschedule(activity: Activity) {
@@ -412,9 +416,7 @@ export function CrmPage() {
       setNotice("تمت إعادة جدولة النشاط.");
       await load();
     } catch (reason) {
-      setError(
-        reason instanceof ApiError ? reason.message : "تعذر إعادة جدولة النشاط",
-      );
+      setError(crmError(reason, "تعذر إعادة جدولة النشاط"));
     }
   }
   async function convert() {
@@ -424,9 +426,7 @@ export function CrmPage() {
       setNotice("تم تحويل العميل المحتمل إلى عميل وربطه بدليل العملاء.");
       await load();
     } catch (reason) {
-      setError(
-        reason instanceof ApiError ? reason.message : "تعذر تحويل العميل",
-      );
+      setError(crmError(reason, "تعذر تحويل العميل"));
     }
   }
 
@@ -438,7 +438,7 @@ export function CrmPage() {
           <p>العملاء المحتملون، دورة المبيعات، الأنشطة المجدولة والتذكيرات.</p>
         </div>
         <div className="page-heading__actions">
-          {canManage ? (
+          {when(canManage, (
             <button
               className="secondary-button"
               onClick={() => {
@@ -448,7 +448,7 @@ export function CrmPage() {
             >
               <Plus size={17} /> عميل محتمل جديد
             </button>
-          ) : null}
+          ))}
           <button
             className="secondary-button"
             onClick={() => void load()}
@@ -458,46 +458,46 @@ export function CrmPage() {
           </button>
         </div>
       </section>
-      {error ? <div className="alert alert--error">{error}</div> : null}
-      {notice ? (
+      {when(Boolean(error), <div className="alert alert--error">{error}</div>)}
+      {when(Boolean(notice), (
         <div className="alert alert--success">
           <Check size={17} />
           {notice}
         </div>
-      ) : null}
+      ))}
       <div className="sales-tabs">
         <button
-          className={tab === "dashboard" ? "active" : ""}
+          className={tabClass(tab, "dashboard")}
           onClick={() => setTab("dashboard")}
         >
           <UserRoundCheck size={17} /> لوحة المتابعة
         </button>
         <button
-          className={tab === "leads" ? "active" : ""}
+          className={tabClass(tab, "leads")}
           onClick={() => setTab("leads")}
         >
           <UsersRound size={17} /> العملاء المحتملون
         </button>
         <button
-          className={tab === "activities" ? "active" : ""}
+          className={tabClass(tab, "activities")}
           onClick={() => setTab("activities")}
         >
           <Clock3 size={17} /> الأنشطة
         </button>
         <button
-          className={tab === "pipeline" ? "active" : ""}
+          className={tabClass(tab, "pipeline")}
           onClick={() => setTab("pipeline")}
         >
           <Flame size={17} /> مراحل المبيعات
         </button>
         <button
-          className={tab === "reports" ? "active" : ""}
+          className={tabClass(tab, "reports")}
           onClick={() => setTab("reports")}
         >
           <UsersRound size={17} /> تقارير CRM
         </button>
       </div>
-      {tab === "dashboard" ? (
+      {when(tab === "dashboard", (
         <>
           <section className="inventory-stats">
             <article>
@@ -563,9 +563,7 @@ export function CrmPage() {
                       <strong>{item.subject}</strong>
                       <small>
                         {item.lead_name} · {item.phone} ·{" "}
-                        {item.due_at
-                          ? new Date(item.due_at).toLocaleString("ar-EG")
-                          : "بلا موعد"}
+                        {dueLabel(item.due_at)}
                       </small>
                     </span>
                     <span className="purchase-status purchase-status--approved">
@@ -576,8 +574,8 @@ export function CrmPage() {
             </div>
           </section>
         </>
-      ) : null}
-      {showCreate && canManage ? (
+      ))}
+      {when(showCreate && canManage, (
         <section className="panel crm-create">
           <header className="panel__head">
             <div>
@@ -753,8 +751,8 @@ export function CrmPage() {
             </button>
           </form>
         </section>
-      ) : null}
-      {tab === "leads" ? (
+      ))}
+      {when(tab === "leads", (
         <section className="master-layout crm-layout">
           <article className="panel">
             <header className="panel__head">
@@ -830,11 +828,7 @@ export function CrmPage() {
                   </p>
                 </div>
                 <span className="status-badge status-badge--active">
-                  {selected.temperature === "hot"
-                    ? "ساخن"
-                    : selected.temperature === "warm"
-                      ? "دافئ"
-                      : "بارد"}
+                  {temperatureLabel(selected.temperature)}
                 </span>
               </header>
               <div className="crm-contact">
@@ -968,8 +962,8 @@ export function CrmPage() {
             </article>
           ) : null}
         </section>
-      ) : null}
-      {tab === "activities" ? (
+      ))}
+      {when(tab === "activities", (
         <section className="panel">
           <header className="panel__head">
             <div>
@@ -1000,9 +994,7 @@ export function CrmPage() {
                   <strong>{item.subject}</strong>
                   <small>
                     {item.lead_name} · {item.owner_name} ·{" "}
-                    {item.due_at
-                      ? new Date(item.due_at).toLocaleString("ar-EG")
-                      : "بلا موعد"}
+                    {dueLabel(item.due_at)}
                   </small>
                 </span>
                 <span className={`purchase-status ${activityStatusClass(item.status)}`}>
@@ -1034,8 +1026,8 @@ export function CrmPage() {
             ))}
           </div>
         </section>
-      ) : null}
-      {tab === "pipeline" ? (
+      ))}
+      {when(tab === "pipeline", (
         <section className="crm-pipeline">
           {pipeline.map((item) => (
             <article className="panel" key={item.code}>
@@ -1045,8 +1037,8 @@ export function CrmPage() {
             </article>
           ))}
         </section>
-      ) : null}
-      {tab === "reports" ? (
+      ))}
+      {when(tab === "reports", (
         <section className="panel">
           <header className="panel__head">
             <div>
@@ -1098,7 +1090,7 @@ export function CrmPage() {
             </div>
           ) : null}
         </section>
-      ) : null}
+      ))}
     </AppShell>
   );
 }

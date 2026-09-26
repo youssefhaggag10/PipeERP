@@ -17,6 +17,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.base import Base, TimestampMixin
 
+USERS_ID = "users.id"
+
 
 class CrmLead(TimestampMixin, Base):
     __tablename__ = "crm_leads"
@@ -40,7 +42,7 @@ class CrmLead(TimestampMixin, Base):
     temperature: Mapped[str] = mapped_column(String(12), nullable=False, default="warm")
     stage_code: Mapped[str] = mapped_column(String(40), nullable=False, default="new")
     assigned_user_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT"), nullable=False
     )
     interested_products: Mapped[str] = mapped_column(Text, nullable=False, default="")
     tags: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -51,7 +53,7 @@ class CrmLead(TimestampMixin, Base):
         Uuid, ForeignKey("partners.id", ondelete="RESTRICT")
     )
     created_by_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT"), nullable=False
     )
     last_contact_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
@@ -76,11 +78,11 @@ class CrmActivity(TimestampMixin, Base):
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     priority: Mapped[str] = mapped_column(String(12), nullable=False, default="normal")
     assigned_user_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT"), nullable=False
     )
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="scheduled")
     outcome: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_by_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT"), nullable=False
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

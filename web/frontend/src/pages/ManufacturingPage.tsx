@@ -1142,6 +1142,7 @@ export function ManufacturingPage() {
                     />
                   </label>
                   <button
+                    type="submit"
                     className="primary-button"
                     disabled={submitting || !orderForm.recipe_id}
                   >

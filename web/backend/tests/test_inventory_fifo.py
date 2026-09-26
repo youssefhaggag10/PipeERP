@@ -56,12 +56,16 @@ def test_weight_fifo_allocates_quantity_proportionally() -> None:
 
 def test_fifo_rejects_insufficient_stock_and_invalid_layers() -> None:
     valid = layer("only", day=1, sequence=1, quantity="3", weight="0", unit_cost="4")
+    quantity_basis = "quantity"
+    excessive_amount = Decimal("4")
     with pytest.raises(ValueError, match="الرصيد غير كافٍ"):
-        allocate_fifo(layers=[valid], amount=Decimal("4"), cost_basis="quantity")
+        allocate_fifo(layers=[valid], amount=excessive_amount, cost_basis=quantity_basis)
 
     invalid = layer("negative", day=1, sequence=1, quantity="-1", weight="0", unit_cost="4")
+    unit_amount = Decimal("1")
     with pytest.raises(ValueError, match="قيمة سالبة"):
-        allocate_fifo(layers=[invalid], amount=Decimal("1"), cost_basis="quantity")
+        allocate_fifo(layers=[invalid], amount=unit_amount, cost_basis=quantity_basis)
 
+    zero_amount = Decimal("0")
     with pytest.raises(ValueError, match="أكبر من صفر"):
-        allocate_fifo(layers=[valid], amount=Decimal("0"), cost_basis="quantity")
+        allocate_fifo(layers=[valid], amount=zero_amount, cost_basis=quantity_basis)

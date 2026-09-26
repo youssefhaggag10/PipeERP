@@ -603,6 +603,59 @@ def list_open_orders(
     return result
 
 
+def _locked_invoices(
+    db: Session,
+    *,
+    transaction_type: str,
+    ids: set[UUID],
+) -> list[CustomerInvoice | SupplierInvoice]:
+    if transaction_type == "customer_receipt":
+        return list(
+            db.scalars(
+                select(CustomerInvoice)
+                .where(CustomerInvoice.id.in_(ids))
+                .order_by(CustomerInvoice.id)
+                .with_for_update()
+            )
+        )
+    return list(
+        db.scalars(
+            select(SupplierInvoice)
+            .where(SupplierInvoice.id.in_(ids))
+            .order_by(SupplierInvoice.id)
+            .with_for_update()
+        )
+    )
+
+
+def _validate_invoice_allocation(
+    db: Session,
+    *,
+    invoice: CustomerInvoice | SupplierInvoice,
+    allocation: InvoiceAllocationRequest,
+    partner_id: UUID,
+) -> Decimal:
+    customer_invoice = isinstance(invoice, CustomerInvoice)
+    expected_partner_id = (
+        invoice.customer_id if isinstance(invoice, CustomerInvoice) else invoice.supplier_id
+    )
+    if expected_partner_id != partner_id or invoice.status != "posted":
+        raise TreasuryConflict("إحدى الفواتير لا تخص الطرف المحدد أو غير معتمدة")
+    paid = (
+        _allocated_to_customer_invoice(db, invoice.id)
+        if customer_invoice
+        else _allocated_to_supplier_invoice(db, invoice.id)
+    )
+    invoice_kind = "sales" if customer_invoice else "purchase"
+    returned = _invoice_returned_total(db, invoice_kind=invoice_kind, invoice_id=invoice.id)
+    refunded = _invoice_refunded_total(db, invoice_kind=invoice_kind, invoice_id=invoice.id)
+    remaining = money(max(ZERO, invoice.total - returned) - max(ZERO, paid - refunded))
+    amount = money(allocation.amount)
+    if amount > remaining:
+        raise TreasuryConflict(f"التوزيع على الفاتورة {invoice.invoice_number} أكبر من المتبقي")
+    return amount
+
+
 def _lock_payment_invoices(
     db: Session,
     *,
@@ -613,50 +666,24 @@ def _lock_payment_invoices(
     ids = {item.invoice_id for item in allocations}
     if not ids:
         return {}, ZERO
-    if transaction_type == "customer_receipt":
-        invoices = list(
-            db.scalars(
-                select(CustomerInvoice)
-                .where(CustomerInvoice.id.in_(ids))
-                .order_by(CustomerInvoice.id)
-                .with_for_update()
-            )
-        )
-    else:
-        invoices = list(
-            db.scalars(
-                select(SupplierInvoice)
-                .where(SupplierInvoice.id.in_(ids))
-                .order_by(SupplierInvoice.id)
-                .with_for_update()
-            )
-        )
+    invoices = _locked_invoices(db, transaction_type=transaction_type, ids=ids)
     if len(invoices) != len(ids):
         raise TreasuryNotFound("إحدى الفواتير المحددة غير موجودة")
     invoice_map: dict[UUID, CustomerInvoice | SupplierInvoice] = {
         item.id: item for item in invoices
     }
-    allocated_total = ZERO
-    for allocation in allocations:
-        invoice = invoice_map[allocation.invoice_id]
-        expected_partner_id = (
-            invoice.customer_id if isinstance(invoice, CustomerInvoice) else invoice.supplier_id
-        )
-        if expected_partner_id != partner_id or invoice.status != "posted":
-            raise TreasuryConflict("إحدى الفواتير لا تخص الطرف المحدد أو غير معتمدة")
-        paid = (
-            _allocated_to_customer_invoice(db, invoice.id)
-            if isinstance(invoice, CustomerInvoice)
-            else _allocated_to_supplier_invoice(db, invoice.id)
-        )
-        invoice_kind = "sales" if isinstance(invoice, CustomerInvoice) else "purchase"
-        returned = _invoice_returned_total(db, invoice_kind=invoice_kind, invoice_id=invoice.id)
-        refunded = _invoice_refunded_total(db, invoice_kind=invoice_kind, invoice_id=invoice.id)
-        net_total = money(max(ZERO, invoice.total - returned))
-        effective_paid = money(max(ZERO, paid - refunded))
-        if money(allocation.amount) > money(net_total - effective_paid):
-            raise TreasuryConflict(f"التوزيع على الفاتورة {invoice.invoice_number} أكبر من المتبقي")
-        allocated_total += money(allocation.amount)
+    allocated_total = sum(
+        (
+            _validate_invoice_allocation(
+                db,
+                invoice=invoice_map[allocation.invoice_id],
+                allocation=allocation,
+                partner_id=partner_id,
+            )
+            for allocation in allocations
+        ),
+        ZERO,
+    )
     return invoice_map, money(allocated_total)
 
 

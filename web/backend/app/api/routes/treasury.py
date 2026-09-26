@@ -270,6 +270,11 @@ def _invoice_payment_methods(
     )
 
 
+def _delivery_return_status(*, return_status: str, invoice_type: str) -> str:
+    labels = {"full": "مرتجع كلي", "partial": "مرتجع جزئي"}
+    return labels.get(return_status, "مُسلَّمة" if invoice_type == "sales" else "مستلمة")
+
+
 @router.get("/invoices")
 def all_invoices(
     invoice_type: Annotated[str, Query(pattern="^(sales|purchase)$")],
@@ -300,14 +305,9 @@ def all_invoices(
                     invoice_id=row.id,
                 ),
                 invoice_status="posted",
-                delivery_return_status=(
-                    "مرتجع كلي"
-                    if row.return_status == "full"
-                    else "مرتجع جزئي"
-                    if row.return_status == "partial"
-                    else "مُسلَّمة"
-                    if invoice_type == "sales"
-                    else "مستلمة"
+                delivery_return_status=_delivery_return_status(
+                    return_status=row.return_status,
+                    invoice_type=invoice_type,
                 ),
                 payment_status=payment_status,
             )

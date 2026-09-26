@@ -17,6 +17,7 @@ depends_on: str | Sequence[str] | None = None
 
 USERS_ID = "users.id"
 MANUFACTURING_RECIPES_ID = "manufacturing_recipes.id"
+MANUFACTURING_ORDERS_ID = "manufacturing_orders.id"
 
 
 def upgrade() -> None:
@@ -399,7 +400,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["manufacturing_order_id"],
-            ["manufacturing_orders.id"],
+            [MANUFACTURING_ORDERS_ID],
             name=op.f("fk_manufacturing_completions_manufacturing_order_id_manufacturing_orders"),
             ondelete="RESTRICT",
         ),

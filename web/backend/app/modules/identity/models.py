@@ -19,6 +19,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.base import Base, TimestampMixin
 
+USERS_ID = "users.id"
+
 
 class User(TimestampMixin, Base):
     __tablename__ = "users"
@@ -68,7 +70,7 @@ class UserRole(Base):
 
     user_id: Mapped[UUID] = mapped_column(
         Uuid,
-        ForeignKey("users.id", ondelete="CASCADE"),
+        ForeignKey(USERS_ID, ondelete="CASCADE"),
         primary_key=True,
     )
     role_id: Mapped[UUID] = mapped_column(
@@ -82,7 +84,7 @@ class UserRole(Base):
     )
     assigned_by_user_id: Mapped[UUID | None] = mapped_column(
         Uuid,
-        ForeignKey("users.id", ondelete="SET NULL"),
+        ForeignKey(USERS_ID, ondelete="SET NULL"),
     )
 
 
@@ -111,7 +113,7 @@ class AuthSession(Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(
         Uuid,
-        ForeignKey("users.id", ondelete="CASCADE"),
+        ForeignKey(USERS_ID, ondelete="CASCADE"),
         nullable=False,
     )
     refresh_token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -136,7 +138,7 @@ class AuditLog(Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     actor_user_id: Mapped[UUID | None] = mapped_column(
         Uuid,
-        ForeignKey("users.id", ondelete="SET NULL"),
+        ForeignKey(USERS_ID, ondelete="SET NULL"),
     )
     event_type: Mapped[str] = mapped_column(String(120), nullable=False)
     entity_type: Mapped[str] = mapped_column(String(80), nullable=False)

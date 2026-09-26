@@ -15,6 +15,7 @@ down_revision: str | None = "20260818_0007"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 VERSION_POSITIVE = "version > 0"
+PURCHASE_ORDERS_ID = "purchase_orders.id"
 
 
 def upgrade() -> None:
@@ -158,7 +159,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["purchase_order_id"],
-            ["purchase_orders.id"],
+            [PURCHASE_ORDERS_ID],
             name=op.f("fk_purchase_order_lines_purchase_order_id_purchase_orders"),
             ondelete="CASCADE",
         ),
@@ -204,7 +205,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["purchase_order_id"],
-            ["purchase_orders.id"],
+            [PURCHASE_ORDERS_ID],
             name=op.f("fk_purchase_receipts_purchase_order_id_purchase_orders"),
             ondelete="RESTRICT",
         ),

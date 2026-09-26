@@ -188,7 +188,7 @@ export function IdentityPage() {
                 <span className="profile-chip__avatar">{item.display_name.charAt(0)}</span>
                 <span><strong>{item.display_name}</strong><small>@{item.username} · {item.roles.join("، ")}</small></span>
                 <span className={`status-badge ${item.is_active ? "status-badge--active" : ""}`}>{item.is_active ? "نشط" : "معطل"}</span>
-                {canManageUsers ? <button className="icon-button" aria-label={item.is_active ? "تعطيل المستخدم" : "تفعيل المستخدم"} onClick={() => void toggleUser(item)}>{item.is_active ? <UserRoundX size={18} /> : <UserRoundCheck size={18} />}</button> : null}
+                {canManageUsers ? <button type="button" className="icon-button" aria-label={item.is_active ? "تعطيل المستخدم" : "تفعيل المستخدم"} onClick={() => void toggleUser(item)}>{item.is_active ? <UserRoundX size={18} /> : <UserRoundCheck size={18} />}</button> : null}
               </div>
             ))}
           </div>

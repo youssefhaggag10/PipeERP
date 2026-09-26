@@ -23,6 +23,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.infrastructure.database.base import Base, TimestampMixin
 
 FINANCIAL_ACCOUNTS_ID = "financial_accounts.id"
+POSITIVE_AMOUNT = "amount > 0"
 
 
 class FinancialAccount(TimestampMixin, Base):
@@ -73,7 +74,7 @@ class PaymentTransaction(TimestampMixin, Base):
             name="reference_type_valid",
         ),
         CheckConstraint("status IN ('posted','reversed')", name="status_valid"),
-        CheckConstraint("amount > 0", name="amount_positive"),
+        CheckConstraint(POSITIVE_AMOUNT, name="amount_positive"),
         CheckConstraint(
             "(transaction_type = 'customer_receipt' AND supplier_invoice_id IS NULL) OR "
             "(transaction_type = 'supplier_payment' AND customer_invoice_id IS NULL)",
@@ -133,7 +134,7 @@ class PaymentAllocation(TimestampMixin, Base):
             "supplier_invoice_id",
             name="uq_payment_allocations_payment_supplier_invoice",
         ),
-        CheckConstraint("amount > 0", name="amount_positive"),
+        CheckConstraint(POSITIVE_AMOUNT, name="amount_positive"),
         CheckConstraint(
             "(customer_invoice_id IS NOT NULL AND supplier_invoice_id IS NULL) OR "
             "(customer_invoice_id IS NULL AND supplier_invoice_id IS NOT NULL)",
@@ -163,7 +164,7 @@ class FinancialTransfer(TimestampMixin, Base):
         UniqueConstraint("idempotency_key"),
         UniqueConstraint("reversal_idempotency_key"),
         CheckConstraint("from_account_id <> to_account_id", name="different_accounts"),
-        CheckConstraint("amount > 0", name="amount_positive"),
+        CheckConstraint(POSITIVE_AMOUNT, name="amount_positive"),
         CheckConstraint("status IN ('posted','reversed')", name="status_valid"),
         Index("ix_financial_transfers_from_date", "from_account_id", "transfer_date"),
         Index("ix_financial_transfers_to_date", "to_account_id", "transfer_date"),
@@ -239,7 +240,7 @@ class PartnerOpeningBalance(TimestampMixin, Base):
         UniqueConstraint("reversal_of_id"),
         CheckConstraint("nature IN ('debit','credit')", name="nature_valid"),
         CheckConstraint("source IN ('manual','reversal')", name="source_valid"),
-        CheckConstraint("amount > 0", name="amount_positive"),
+        CheckConstraint(POSITIVE_AMOUNT, name="amount_positive"),
         Index("ix_partner_opening_entries_partner_date", "partner_id", "entry_date"),
     )
 
@@ -266,7 +267,7 @@ class CustomerAccountAdjustment(TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("adjustment_number"),
         CheckConstraint("adjustment_type IN ('debit','credit')", name="type_valid"),
-        CheckConstraint("amount > 0", name="amount_positive"),
+        CheckConstraint(POSITIVE_AMOUNT, name="amount_positive"),
         CheckConstraint("status IN ('posted','reversed')", name="status_valid"),
         Index("ix_customer_adjustments_customer_date", "customer_id", "adjustment_date"),
     )

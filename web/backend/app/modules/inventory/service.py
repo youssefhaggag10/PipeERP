@@ -1296,10 +1296,86 @@ def list_transactions(db: Session, *, limit: int = 100) -> list[TransactionView]
     ]
 
 
+ReferenceCache = dict[tuple[str, str], tuple[str, str]]
+AllocationRow = tuple[InventoryAllocation, InventoryLayer, str | None]
+
+
+def _purchase_reference_context(db: Session, reference_uuid: UUID) -> tuple[str, str] | None:
+    from app.modules.purchasing.models import PurchaseOrder, PurchaseReceipt
+
+    row = db.execute(
+        select(PurchaseReceipt.receipt_number, Partner.name_ar)
+        .join(PurchaseOrder, PurchaseOrder.id == PurchaseReceipt.purchase_order_id)
+        .join(Partner, Partner.id == PurchaseOrder.supplier_id)
+        .where(PurchaseReceipt.id == reference_uuid)
+    ).one_or_none()
+    return (row[0], row[1]) if row else None
+
+
+def _delivery_reference_context(db: Session, reference_uuid: UUID) -> tuple[str, str] | None:
+    from app.modules.sales.models import SalesDelivery, SalesOrder
+
+    row = db.execute(
+        select(SalesDelivery.delivery_number, Partner.name_ar)
+        .join(SalesOrder, SalesOrder.id == SalesDelivery.sales_order_id)
+        .join(Partner, Partner.id == SalesOrder.customer_id)
+        .where(SalesDelivery.id == reference_uuid)
+    ).one_or_none()
+    return (row[0], row[1]) if row else None
+
+
+def _return_reference_context(db: Session, reference_uuid: UUID) -> tuple[str, str] | None:
+    from app.modules.returns.models import InvoiceReturn
+
+    row = db.execute(
+        select(InvoiceReturn.return_number, Partner.name_ar)
+        .join(Partner, Partner.id == InvoiceReturn.partner_id)
+        .where(InvoiceReturn.id == reference_uuid)
+    ).one_or_none()
+    return (row[0], row[1]) if row else None
+
+
+def _manufacturing_reference_context(
+    db: Session, reference_uuid: UUID
+) -> tuple[str, str] | None:
+    from app.modules.manufacturing.models import ManufacturingOrder
+
+    number = db.scalar(
+        select(ManufacturingOrder.order_number).where(ManufacturingOrder.id == reference_uuid)
+    )
+    return (number, "") if number else None
+
+
+def _resolved_reference_context(
+    db: Session,
+    transaction: InventoryTransaction,
+    reference_uuid: UUID,
+    cache: ReferenceCache,
+) -> tuple[str, str] | None:
+    reference_type = transaction.reference_type
+    if reference_type in {"purchase_receipt", "purchase_receipt_reversal"}:
+        return _purchase_reference_context(db, reference_uuid)
+    if reference_type == "sales_delivery":
+        return _delivery_reference_context(db, reference_uuid)
+    if reference_type in {
+        "sales_return",
+        "purchase_return",
+        "sales_return_reversal",
+        "purchase_return_reversal",
+    }:
+        return _return_reference_context(db, reference_uuid)
+    if reference_type.startswith("manufacturing_"):
+        return _manufacturing_reference_context(db, reference_uuid)
+    if reference_type == "movement_reversal":
+        original = db.get(InventoryTransaction, reference_uuid)
+        return _reference_context(db, original, cache) if original is not None else None
+    return None
+
+
 def _reference_context(
     db: Session,
     transaction: InventoryTransaction,
-    cache: dict[tuple[str, str], tuple[str, str]],
+    cache: ReferenceCache,
 ) -> tuple[str, str]:
     reference_id = transaction.reference_id or ""
     key = (transaction.reference_type, reference_id)
@@ -1314,72 +1390,15 @@ def _reference_context(
         cache[key] = (reference_id, "")
         return cache[key]
 
-    result: tuple[str, str] | None = None
-    if transaction.reference_type in {"purchase_receipt", "purchase_receipt_reversal"}:
-        from app.modules.purchasing.models import PurchaseOrder, PurchaseReceipt
-
-        row = db.execute(
-            select(PurchaseReceipt.receipt_number, Partner.name_ar)
-            .join(PurchaseOrder, PurchaseOrder.id == PurchaseReceipt.purchase_order_id)
-            .join(Partner, Partner.id == PurchaseOrder.supplier_id)
-            .where(PurchaseReceipt.id == reference_uuid)
-        ).one_or_none()
-        result = (row[0], row[1]) if row else None
-    elif transaction.reference_type == "sales_delivery":
-        from app.modules.sales.models import SalesDelivery, SalesOrder
-
-        row = db.execute(
-            select(SalesDelivery.delivery_number, Partner.name_ar)
-            .join(SalesOrder, SalesOrder.id == SalesDelivery.sales_order_id)
-            .join(Partner, Partner.id == SalesOrder.customer_id)
-            .where(SalesDelivery.id == reference_uuid)
-        ).one_or_none()
-        result = (row[0], row[1]) if row else None
-    elif transaction.reference_type in {
-        "sales_return",
-        "purchase_return",
-        "sales_return_reversal",
-        "purchase_return_reversal",
-    }:
-        from app.modules.returns.models import InvoiceReturn
-
-        row = db.execute(
-            select(InvoiceReturn.return_number, Partner.name_ar)
-            .join(Partner, Partner.id == InvoiceReturn.partner_id)
-            .where(InvoiceReturn.id == reference_uuid)
-        ).one_or_none()
-        result = (row[0], row[1]) if row else None
-    elif transaction.reference_type.startswith("manufacturing_"):
-        from app.modules.manufacturing.models import ManufacturingOrder
-
-        number = db.scalar(
-            select(ManufacturingOrder.order_number).where(ManufacturingOrder.id == reference_uuid)
-        )
-        result = (number, "") if number else None
-    elif transaction.reference_type == "movement_reversal":
-        original = db.get(InventoryTransaction, reference_uuid)
-        if original is not None:
-            result = _reference_context(db, original, cache)
-
-    cache[key] = result if result is not None else (reference_id, "")
+    resolved = _resolved_reference_context(db, transaction, reference_uuid, cache)
+    cache[key] = resolved if resolved is not None else (reference_id, "")
     return cache[key]
 
 
-def list_stock_card(
+def _stock_card_allocation_maps(
     db: Session,
-    *,
-    product_id: UUID | None = None,
-    limit: int = 500,
-) -> list[StockCardLineView]:
-    statement = (
-        select(InventoryTransaction, Product, Warehouse)
-        .join(Product, Product.id == InventoryTransaction.product_id)
-        .join(Warehouse, Warehouse.id == InventoryTransaction.warehouse_id)
-        .order_by(InventoryTransaction.posted_at.desc(), InventoryTransaction.id.desc())
-    )
-    if product_id is not None:
-        statement = statement.where(InventoryTransaction.product_id == product_id)
-    rows = db.execute(statement.limit(limit)).all()
+    rows: list[tuple[InventoryTransaction, Product, Warehouse]],
+) -> tuple[dict[str, UUID], dict[UUID, list[AllocationRow]]]:
     transaction_ids = [transaction.id for transaction, _, _ in rows]
     transfer_references = {
         transaction.reference_id
@@ -1415,13 +1434,103 @@ def list_stock_card(
         if allocation_transaction_ids
         else []
     )
-    allocations_by_transaction: dict[
-        UUID, list[tuple[InventoryAllocation, InventoryLayer, str | None]]
-    ] = {}
+    allocations_by_transaction: dict[UUID, list[AllocationRow]] = {}
     for allocation, layer, lot_number in allocation_rows:
         allocations_by_transaction.setdefault(allocation.outbound_transaction_id, []).append(
             (allocation, layer, lot_number)
         )
+    return transfer_out_by_reference, allocations_by_transaction
+
+
+def _allocation_stock_card_line(
+    transaction: InventoryTransaction,
+    product: Product,
+    warehouse: Warehouse,
+    allocations: list[AllocationRow],
+    reference_number: str,
+    partner_name: str,
+    *,
+    inbound_transfer: bool,
+) -> StockCardLineView:
+    allocated_quantity = sum((item[0].quantity for item in allocations), Decimal("0"))
+    total_cost = sum((item[0].total_cost for item in allocations), Decimal("0"))
+    zero = Decimal("0")
+    return StockCardLineView(
+        id=(
+            uuid5(NAMESPACE_URL, f"pipeerp-stock-card:{transaction.id}")
+            if inbound_transfer
+            else transaction.id
+        ),
+        transaction_id=transaction.id,
+        product_id=transaction.product_id,
+        warehouse_id=transaction.warehouse_id,
+        product_code=product.code,
+        product_name_ar=product.name_ar,
+        warehouse_name_ar=warehouse.name_ar,
+        lot_number="، ".join(dict.fromkeys(item[2] for item in allocations if item[2])),
+        quantity_in=allocated_quantity if inbound_transfer else zero,
+        quantity_out=zero if inbound_transfer else allocated_quantity,
+        unit_cost=(total_cost / allocated_quantity if allocated_quantity > 0 else zero),
+        total_cost=total_cost,
+        reference_type=transaction.reference_type,
+        reference_number=reference_number,
+        partner_name_ar=partner_name,
+        notes=transaction.notes,
+        posted_at=transaction.posted_at,
+    )
+
+
+def _plain_stock_card_line(
+    db: Session,
+    transaction: InventoryTransaction,
+    product: Product,
+    warehouse: Warehouse,
+    reference_number: str,
+    partner_name: str,
+) -> StockCardLineView:
+    inbound = transaction.quantity_delta > 0 or transaction.weight_delta_kg > 0
+    lot = db.get(InventoryLot, transaction.lot_id) if transaction.lot_id is not None else None
+    zero = Decimal("0")
+    return StockCardLineView(
+        id=transaction.id,
+        transaction_id=transaction.id,
+        product_id=transaction.product_id,
+        warehouse_id=transaction.warehouse_id,
+        product_code=product.code,
+        product_name_ar=product.name_ar,
+        warehouse_name_ar=warehouse.name_ar,
+        lot_number=lot.lot_number if lot else "",
+        quantity_in=transaction.quantity_delta if inbound else zero,
+        quantity_out=-transaction.quantity_delta if not inbound else zero,
+        unit_cost=transaction.unit_cost,
+        total_cost=transaction.total_cost,
+        reference_type=transaction.reference_type,
+        reference_number=reference_number,
+        partner_name_ar=partner_name,
+        notes=transaction.notes,
+        posted_at=transaction.posted_at,
+    )
+
+
+def list_stock_card(
+    db: Session,
+    *,
+    product_id: UUID | None = None,
+    limit: int = 500,
+) -> list[StockCardLineView]:
+    statement = (
+        select(InventoryTransaction, Product, Warehouse)
+        .join(Product, Product.id == InventoryTransaction.product_id)
+        .join(Warehouse, Warehouse.id == InventoryTransaction.warehouse_id)
+        .order_by(InventoryTransaction.posted_at.desc(), InventoryTransaction.id.desc())
+    )
+    if product_id is not None:
+        statement = statement.where(InventoryTransaction.product_id == product_id)
+    rows = [
+        (transaction, product, warehouse)
+        for transaction, product, warehouse in db.execute(statement.limit(limit))
+    ]
+    transfer_out_by_reference, allocations_by_transaction = _stock_card_allocation_maps(db, rows)
 
     reference_cache: dict[tuple[str, str], tuple[str, str]] = {}
     result: list[StockCardLineView] = []
@@ -1436,81 +1545,34 @@ def list_stock_card(
                 else []
             )
             if source_allocations:
-                quantity_in = sum((item[0].quantity for item in source_allocations), Decimal("0"))
-                total_cost = sum((item[0].total_cost for item in source_allocations), Decimal("0"))
                 result.append(
-                    StockCardLineView(
-                        id=uuid5(NAMESPACE_URL, f"pipeerp-stock-card:{transaction.id}"),
-                        transaction_id=transaction.id,
-                        product_id=transaction.product_id,
-                        warehouse_id=transaction.warehouse_id,
-                        product_code=product.code,
-                        product_name_ar=product.name_ar,
-                        warehouse_name_ar=warehouse.name_ar,
-                        lot_number="، ".join(
-                            dict.fromkeys(item[2] for item in source_allocations if item[2])
-                        ),
-                        quantity_in=quantity_in,
-                        quantity_out=Decimal("0"),
-                        unit_cost=(total_cost / quantity_in if quantity_in > 0 else Decimal("0")),
-                        total_cost=total_cost,
-                        reference_type=transaction.reference_type,
-                        reference_number=reference_number,
-                        partner_name_ar=partner_name,
-                        notes=transaction.notes,
-                        posted_at=transaction.posted_at,
+                    _allocation_stock_card_line(
+                        transaction,
+                        product,
+                        warehouse,
+                        source_allocations,
+                        reference_number,
+                        partner_name,
+                        inbound_transfer=True,
                     )
                 )
                 continue
         if allocations:
-            quantity_out = sum((item[0].quantity for item in allocations), Decimal("0"))
-            total_cost = sum((item[0].total_cost for item in allocations), Decimal("0"))
             result.append(
-                StockCardLineView(
-                    id=transaction.id,
-                    transaction_id=transaction.id,
-                    product_id=transaction.product_id,
-                    warehouse_id=transaction.warehouse_id,
-                    product_code=product.code,
-                    product_name_ar=product.name_ar,
-                    warehouse_name_ar=warehouse.name_ar,
-                    lot_number="، ".join(dict.fromkeys(item[2] for item in allocations if item[2])),
-                    quantity_in=Decimal("0"),
-                    quantity_out=quantity_out,
-                    unit_cost=(total_cost / quantity_out if quantity_out > 0 else Decimal("0")),
-                    total_cost=total_cost,
-                    reference_type=transaction.reference_type,
-                    reference_number=reference_number,
-                    partner_name_ar=partner_name,
-                    notes=transaction.notes,
-                    posted_at=transaction.posted_at,
+                _allocation_stock_card_line(
+                    transaction,
+                    product,
+                    warehouse,
+                    allocations,
+                    reference_number,
+                    partner_name,
+                    inbound_transfer=False,
                 )
             )
             continue
-        inbound = transaction.quantity_delta > 0 or transaction.weight_delta_kg > 0
-        lot_number = ""
-        if transaction.lot_id is not None:
-            lot = db.get(InventoryLot, transaction.lot_id)
-            lot_number = lot.lot_number if lot else ""
         result.append(
-            StockCardLineView(
-                id=transaction.id,
-                transaction_id=transaction.id,
-                product_id=transaction.product_id,
-                warehouse_id=transaction.warehouse_id,
-                product_code=product.code,
-                product_name_ar=product.name_ar,
-                warehouse_name_ar=warehouse.name_ar,
-                lot_number=lot_number,
-                quantity_in=transaction.quantity_delta if inbound else Decimal("0"),
-                quantity_out=-transaction.quantity_delta if not inbound else Decimal("0"),
-                unit_cost=transaction.unit_cost,
-                total_cost=transaction.total_cost,
-                reference_type=transaction.reference_type,
-                reference_number=reference_number,
-                partner_name_ar=partner_name,
-                notes=transaction.notes,
-                posted_at=transaction.posted_at,
+            _plain_stock_card_line(
+                db, transaction, product, warehouse, reference_number, partner_name
             )
         )
     return result

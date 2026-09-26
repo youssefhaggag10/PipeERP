@@ -19,6 +19,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.base import Base, TimestampMixin
 
+PURCHASE_ORDERS_ID = "purchase_orders.id"
+VERSION_POSITIVE = "version > 0"
+
 
 class PurchaseOrder(TimestampMixin, Base):
     __tablename__ = "purchase_orders"
@@ -29,7 +32,7 @@ class PurchaseOrder(TimestampMixin, Base):
             name="status_valid",
         ),
         CheckConstraint("total >= 0", name="total_nonnegative"),
-        CheckConstraint("version > 0", name="version_positive"),
+        CheckConstraint(VERSION_POSITIVE, name="version_positive"),
         Index("ix_purchase_orders_supplier_status", "supplier_id", "status"),
     )
 
@@ -80,13 +83,13 @@ class PurchaseOrderLine(TimestampMixin, Base):
         CheckConstraint(
             "received_weight_kg <= ordered_weight_kg", name="received_weight_within_order"
         ),
-        CheckConstraint("version > 0", name="version_positive"),
+        CheckConstraint(VERSION_POSITIVE, name="version_positive"),
         Index("ix_purchase_order_lines_order", "purchase_order_id", "id"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     purchase_order_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("purchase_orders.id", ondelete="CASCADE"), nullable=False
+        Uuid, ForeignKey(PURCHASE_ORDERS_ID, ondelete="CASCADE"), nullable=False
     )
     product_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
@@ -125,7 +128,7 @@ class PurchaseReceipt(Base):
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     reversal_idempotency_key: Mapped[str | None] = mapped_column(String(120), unique=True)
     purchase_order_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("purchase_orders.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PURCHASE_ORDERS_ID, ondelete="RESTRICT"), nullable=False
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="posted")
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -188,14 +191,14 @@ class SupplierInvoice(TimestampMixin, Base):
         UniqueConstraint("supplier_id", "supplier_invoice_number"),
         CheckConstraint("status IN ('draft', 'posted', 'reversed')", name="status_valid"),
         CheckConstraint("total >= 0", name="total_nonnegative"),
-        CheckConstraint("version > 0", name="version_positive"),
+        CheckConstraint(VERSION_POSITIVE, name="version_positive"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     invoice_number: Mapped[str] = mapped_column(String(40), nullable=False)
     supplier_invoice_number: Mapped[str] = mapped_column(String(80), nullable=False)
     purchase_order_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("purchase_orders.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PURCHASE_ORDERS_ID, ondelete="RESTRICT"), nullable=False
     )
     supplier_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey("partners.id", ondelete="RESTRICT"), nullable=False

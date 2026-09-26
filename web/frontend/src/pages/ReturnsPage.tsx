@@ -777,6 +777,7 @@ export function ReturnsWorkspace({
                   />
                 </label>
                 <button
+                  type="submit"
                   className="primary-button"
                   disabled={
                     submitting || !refundInvoiceId || !financialAccountId

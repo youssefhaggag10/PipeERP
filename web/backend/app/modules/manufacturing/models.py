@@ -19,6 +19,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.base import Base, TimestampMixin
 
+PRODUCTS_ID = "products.id"
+
 
 class ManufacturingRecipe(TimestampMixin, Base):
     __tablename__ = "manufacturing_recipes"
@@ -37,7 +39,7 @@ class ManufacturingRecipe(TimestampMixin, Base):
     name_ar: Mapped[str] = mapped_column(String(200), nullable=False)
     normalized_name: Mapped[str] = mapped_column(String(200), nullable=False)
     scrap_product_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PRODUCTS_ID, ondelete="RESTRICT"), nullable=False
     )
     suggested_scrap_per_batch: Mapped[Decimal] = mapped_column(
         Numeric(20, 6), nullable=False, default=0
@@ -62,7 +64,7 @@ class ManufacturingRecipeOutput(TimestampMixin, Base):
         Uuid, ForeignKey("manufacturing_recipes.id", ondelete="CASCADE"), nullable=False
     )
     product_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PRODUCTS_ID, ondelete="RESTRICT"), nullable=False
     )
 
 
@@ -80,7 +82,7 @@ class ManufacturingRecipeComponent(TimestampMixin, Base):
         Uuid, ForeignKey("manufacturing_recipes.id", ondelete="CASCADE"), nullable=False
     )
     product_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PRODUCTS_ID, ondelete="RESTRICT"), nullable=False
     )
     quantity_per_batch: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     display_order: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -177,7 +179,7 @@ class ManufacturingOrderOutput(TimestampMixin, Base):
         Uuid, ForeignKey("manufacturing_orders.id", ondelete="CASCADE"), nullable=False
     )
     product_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PRODUCTS_ID, ondelete="RESTRICT"), nullable=False
     )
     planned_quantity: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     standard_weight_kg: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
@@ -211,7 +213,7 @@ class ManufacturingOrderMaterial(TimestampMixin, Base):
         Uuid, ForeignKey("manufacturing_orders.id", ondelete="CASCADE"), nullable=False
     )
     product_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PRODUCTS_ID, ondelete="RESTRICT"), nullable=False
     )
     component_kind: Mapped[str] = mapped_column(String(16), nullable=False)
     quantity_per_batch: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
@@ -324,7 +326,7 @@ class ManufacturingCompletionOutput(TimestampMixin, Base):
         Uuid, ForeignKey("manufacturing_completions.id", ondelete="CASCADE"), nullable=False
     )
     product_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PRODUCTS_ID, ondelete="RESTRICT"), nullable=False
     )
     good_quantity: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     defective_quantity: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
@@ -349,7 +351,7 @@ class ManufacturingMixAdjustment(TimestampMixin, Base):
         Uuid, ForeignKey("manufacturing_completions.id", ondelete="CASCADE"), nullable=False
     )
     excluded_product_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PRODUCTS_ID, ondelete="RESTRICT"), nullable=False
     )
     batch_count: Mapped[int] = mapped_column(Integer, nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
@@ -368,6 +370,6 @@ class ManufacturingMixAdjustmentMaterial(TimestampMixin, Base):
         Uuid, ForeignKey("manufacturing_mix_adjustments.id", ondelete="CASCADE"), nullable=False
     )
     product_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PRODUCTS_ID, ondelete="RESTRICT"), nullable=False
     )
     actual_quantity: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)

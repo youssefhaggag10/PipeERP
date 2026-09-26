@@ -1,8 +1,8 @@
 import os
 from secrets import token_urlsafe
 
+import pytest
 from fastapi.testclient import TestClient
-from pytest import MonkeyPatch
 from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
@@ -14,7 +14,7 @@ os.environ.setdefault("APP_ENV", "test")
 from app.infrastructure.database.session import get_database_session
 
 
-def test_health_endpoint(monkeypatch: MonkeyPatch) -> None:
+def test_health_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SECRET_KEY", "0123456789abcdef0123456789abcdef")
     monkeypatch.setenv("APP_ENV", "test")
 
@@ -29,7 +29,7 @@ def test_health_endpoint(monkeypatch: MonkeyPatch) -> None:
 
 
 def test_request_id_accepts_safe_values_and_replaces_unsafe_values(
-    monkeypatch: MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("SECRET_KEY", "0123456789abcdef0123456789abcdef")
     monkeypatch.setenv("APP_ENV", "test")
@@ -43,7 +43,7 @@ def test_request_id_accepts_safe_values_and_replaces_unsafe_values(
     assert replaced.headers["x-request-id"] != "unsafe id"
 
 
-def test_readiness_checks_the_database(monkeypatch: MonkeyPatch) -> None:
+def test_readiness_checks_the_database(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SECRET_KEY", "0123456789abcdef0123456789abcdef")
     monkeypatch.setenv("APP_ENV", "test")
     engine = create_engine(
@@ -69,7 +69,7 @@ def test_readiness_checks_the_database(monkeypatch: MonkeyPatch) -> None:
 
 
 def test_readiness_fails_closed_when_the_database_is_unavailable(
-    monkeypatch: MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("SECRET_KEY", "0123456789abcdef0123456789abcdef")
     monkeypatch.setenv("APP_ENV", "test")

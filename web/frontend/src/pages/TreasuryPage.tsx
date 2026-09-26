@@ -1070,6 +1070,7 @@ export function TreasuryPage() {
                   />
                 </label>
                 <button
+                  type="submit"
                   className="primary-button"
                   disabled={submitting || !financialAccountId || !partnerId}
                 >
@@ -1476,7 +1477,7 @@ export function TreasuryPage() {
                     />
                   </label>
                 </div>
-                <button className="primary-button">
+                <button type="submit" className="primary-button">
                   <FileClock size={17} /> عرض الكشف
                 </button>
               </form>
@@ -1638,7 +1639,7 @@ export function TreasuryPage() {
                         }
                       />
                     </label>
-                    <button className="primary-button">تسجيل الرصيد</button>
+                    <button type="submit" className="primary-button">تسجيل الرصيد</button>
                   </form>
                   <div className="compact-history">
                     {openingBalances.slice(0, 6).map((item) => (

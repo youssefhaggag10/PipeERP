@@ -33,6 +33,31 @@ import { clientId } from "../lib/clientId";
 import { printA4 } from "../lib/printA4";
 
 type SalesTab = "piece" | "weight" | "quotation";
+
+const SALES_TAB_COPY: Record<SalesTab, { heading: string; subtitle: string }> = {
+  piece: {
+    heading: "المبيعات",
+    subtitle: "أوامر البيع والتسليم وفاتورة العميل.",
+  },
+  weight: {
+    heading: "فاتورة مبيعات بالوزن / الكارتة",
+    subtitle: "إنشاء واعتماد فواتير الوزن الفعلي.",
+  },
+  quotation: {
+    heading: "عروض الأسعار",
+    subtitle: "عروض أسعار دون تأثير على المخزون أو الحسابات.",
+  },
+};
+
+function orderStatusClass(status: Status): string {
+  const classes: Record<Status, string> = {
+    delivered: "received",
+    draft: "draft",
+    reversed: "cancelled",
+    cancelled: "cancelled",
+  };
+  return classes[status];
+}
 type Option = {
   id: string;
   code: string;
@@ -595,20 +620,8 @@ export function SalesPage() {
     <AppShell>
       <section className="page-heading sales-heading">
         <div>
-          <h2>
-            {tab === "weight"
-              ? "فاتورة مبيعات بالوزن / الكارتة"
-              : tab === "quotation"
-                ? "عروض الأسعار"
-                : "المبيعات"}
-          </h2>
-          <p>
-            {tab === "weight"
-              ? "إنشاء واعتماد فواتير الوزن الفعلي."
-              : tab === "quotation"
-                ? "عروض أسعار دون تأثير على المخزون أو الحسابات."
-                : "أوامر البيع والتسليم وفاتورة العميل."}
-          </p>
+          <h2>{SALES_TAB_COPY[tab].heading}</h2>
+          <p>{SALES_TAB_COPY[tab].subtitle}</p>
         </div>
         <div className="page-heading__actions">
           {canPiece && tab === "piece" ? (
@@ -1269,7 +1282,7 @@ export function SalesPage() {
               </p>
             </div>
             <span
-              className={`purchase-status purchase-status--${selected.status === "delivered" ? "received" : selected.status === "draft" ? "draft" : "cancelled"}`}
+              className={`purchase-status purchase-status--${orderStatusClass(selected.status)}`}
             >
               {statusLabels[selected.status]}
             </span>

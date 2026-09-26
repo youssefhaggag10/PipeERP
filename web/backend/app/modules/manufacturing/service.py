@@ -70,6 +70,7 @@ from app.modules.master_data.models import Product, Warehouse
 from app.modules.master_data.service import allocate_document_number, normalize_code
 
 MANUFACTURING_ORDER_NOT_FOUND = "أمر التصنيع غير موجود"
+STALE_ORDER_MESSAGE = "تم تعديل الأمر بواسطة مستخدم آخر؛ حدّث الصفحة"
 
 
 class ManufacturingError(Exception):
@@ -865,7 +866,7 @@ def update_order(
     if order.status != "draft":
         raise ManufacturingConflict("يمكن تعديل أمر تصنيع في حالة المسودة فقط")
     if order.version != payload.version:
-        raise ManufacturingConflict("تم تعديل الأمر بواسطة مستخدم آخر؛ حدّث الصفحة")
+        raise ManufacturingConflict(STALE_ORDER_MESSAGE)
     before: dict[str, object] = {
         "version": order.version,
         "planned_batches": order.planned_batches,
@@ -902,7 +903,7 @@ def delete_draft_order(
     if order.status != "draft":
         raise ManufacturingConflict("يمكن حذف أمر تصنيع في حالة المسودة فقط")
     if order.version != version:
-        raise ManufacturingConflict("تم تعديل الأمر بواسطة مستخدم آخر؛ حدّث الصفحة")
+        raise ManufacturingConflict(STALE_ORDER_MESSAGE)
     number = order.order_number
     db.delete(order)
     db.flush()
@@ -1045,7 +1046,7 @@ def apply_replan(
     if order.status != "draft":
         raise ManufacturingConflict("يمكن إعادة تخطيط أمر التصنيع وهو مسودة فقط")
     if order.version != payload.version:
-        raise ManufacturingConflict("تم تعديل الأمر بواسطة مستخدم آخر؛ حدّث الصفحة")
+        raise ManufacturingConflict(STALE_ORDER_MESSAGE)
     result = _stock_aware_plan(db, order=order, lock=True)
     materials = list(
         db.scalars(
@@ -1169,7 +1170,7 @@ def start_order(
     if order.status != "draft":
         raise ManufacturingConflict("يمكن بدء أمر تصنيع في حالة المسودة فقط")
     if order.version != payload.version:
-        raise ManufacturingConflict("تم تعديل الأمر بواسطة مستخدم آخر؛ حدّث الصفحة")
+        raise ManufacturingConflict(STALE_ORDER_MESSAGE)
     current_plan = _stock_aware_plan(db, order=order, lock=True)
     if current_plan.changed:
         raise ManufacturingConflict("راجع توافر الخامات وأعد تخطيط الكسر قبل بدء الأمر")
@@ -1302,7 +1303,7 @@ def complete_order(
     if order.status != "in_progress":
         raise ManufacturingConflict("يمكن إتمام أمر تصنيع جارٍ فقط")
     if order.version != payload.version:
-        raise ManufacturingConflict("تم تعديل الأمر بواسطة مستخدم آخر؛ حدّث الصفحة")
+        raise ManufacturingConflict(STALE_ORDER_MESSAGE)
     materials = list(
         db.scalars(
             select(ManufacturingOrderMaterial)
@@ -1540,7 +1541,7 @@ def cancel_order(
     if order.status != "in_progress":
         raise ManufacturingConflict("يمكن إلغاء أمر تصنيع جارٍ فقط")
     if order.version != payload.version:
-        raise ManufacturingConflict("تم تعديل الأمر بواسطة مستخدم آخر؛ حدّث الصفحة")
+        raise ManufacturingConflict(STALE_ORDER_MESSAGE)
     materials = {
         item.id: item
         for item in db.scalars(

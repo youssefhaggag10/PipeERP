@@ -48,6 +48,11 @@ ORDER_NUMBER_LABEL = "رقم الأمر"
 RETURN_LABEL = "المرتجع"
 SUPPLIER_LABEL = "المورد"
 PAYMENT_METHOD_LABEL = "الطريقة"
+CUSTOMER_LABEL = "العميل"
+ORIGINAL_TOTAL_LABEL = "الإجمالي الأصلي"
+TYPE_LABEL = "النوع"
+AMOUNT_LABEL = "المبلغ"
+REMAINING_LABEL = "المتبقي"
 REPORT_TITLES: dict[str, str] = {
     "sales": "تقرير المبيعات",
     "purchases": "تقرير المشتريات",
@@ -515,12 +520,12 @@ def _sales_report(
             {
                 ORDER_NUMBER_LABEL: order.order_number,
                 "التاريخ": order.order_date.date().isoformat(),
-                "العميل": partner.name_ar,
-                "الإجمالي الأصلي": _money(original),
+                CUSTOMER_LABEL: partner.name_ar,
+                ORIGINAL_TOTAL_LABEL: _money(original),
                 RETURN_LABEL: _money(returned),
                 "الصافي": _money(net),
                 "المدفوع": _money(effective_paid),
-                "المتبقي": _money(remaining if invoice is not None else net),
+                REMAINING_LABEL: _money(remaining if invoice is not None else net),
                 "الحالة": order.status,
             }
         )
@@ -532,12 +537,12 @@ def _sales_report(
     columns = [
         ORDER_NUMBER_LABEL,
         "التاريخ",
-        "العميل",
-        "الإجمالي الأصلي",
+        CUSTOMER_LABEL,
+        ORIGINAL_TOTAL_LABEL,
         RETURN_LABEL,
         "الصافي",
         "المدفوع",
-        "المتبقي",
+        REMAINING_LABEL,
         "الحالة",
     ]
     return columns, rows, {key: _money(value) for key, value in totals.items()}
@@ -574,11 +579,11 @@ def _purchases_report(
                 ORDER_NUMBER_LABEL: order.order_number,
                 "التاريخ": order.order_date.date().isoformat(),
                 SUPPLIER_LABEL: partner.name_ar,
-                "الإجمالي الأصلي": _money(original),
+                ORIGINAL_TOTAL_LABEL: _money(original),
                 RETURN_LABEL: _money(returned),
                 "الصافي": _money(net),
                 "المدفوع": _money(effective_paid),
-                "المتبقي": _money(remaining if invoice is not None else net),
+                REMAINING_LABEL: _money(remaining if invoice is not None else net),
                 "الحالة": order.status,
             }
         )
@@ -591,11 +596,11 @@ def _purchases_report(
         ORDER_NUMBER_LABEL,
         "التاريخ",
         SUPPLIER_LABEL,
-        "الإجمالي الأصلي",
+        ORIGINAL_TOTAL_LABEL,
         RETURN_LABEL,
         "الصافي",
         "المدفوع",
-        "المتبقي",
+        REMAINING_LABEL,
         "الحالة",
     ]
     return columns, rows, {key: _money(value) for key, value in totals.items()}
@@ -604,7 +609,7 @@ def _purchases_report(
 def _balances_report(
     db: Session, *, partner_type: str, partner_id: UUID | None
 ) -> tuple[list[str], list[dict[str, str]], dict[str, str]]:
-    name_label = "العميل" if partner_type == "customer" else SUPPLIER_LABEL
+    name_label = CUSTOMER_LABEL if partner_type == "customer" else SUPPLIER_LABEL
     values = list_partner_balances(db, partner_type=partner_type)
     if partner_id is not None:
         values = [item for item in values if item.partner_id == partner_id]
@@ -666,10 +671,10 @@ def _payments_report(
                 {
                     "رقم الحركة": payment.transaction_number,
                     "التاريخ": payment.transaction_date.isoformat(),
-                    "النوع": label,
+                    TYPE_LABEL: label,
                     "الطرف": partner.name_ar,
                     "الحساب": account.name_ar,
-                    "المبلغ": _money(payment.amount),
+                    AMOUNT_LABEL: _money(payment.amount),
                     PAYMENT_METHOD_LABEL: payment.payment_method,
                     "الحالة": payment.status,
                     "ملاحظات": payment.notes,
@@ -685,10 +690,10 @@ def _payments_report(
                 {
                     "رقم الحركة": refund.refund_number,
                     "التاريخ": refund.refund_date.isoformat(),
-                    "النوع": label,
+                    TYPE_LABEL: label,
                     "الطرف": partner.name_ar,
                     "الحساب": account.name_ar,
-                    "المبلغ": _money(refund.amount),
+                    AMOUNT_LABEL: _money(refund.amount),
                     PAYMENT_METHOD_LABEL: refund.payment_method,
                     "الحالة": refund.status,
                     "ملاحظات": refund.notes,
@@ -700,10 +705,10 @@ def _payments_report(
     columns = [
         "رقم الحركة",
         "التاريخ",
-        "النوع",
+        TYPE_LABEL,
         "الطرف",
         "الحساب",
-        "المبلغ",
+        AMOUNT_LABEL,
         PAYMENT_METHOD_LABEL,
         "الحالة",
         "ملاحظات",

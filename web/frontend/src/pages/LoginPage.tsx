@@ -55,7 +55,6 @@ export function LoginPage() {
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
                 required
-                autoFocus
               />
             </span>
           </label>

@@ -83,16 +83,14 @@ class CompletionPlan:
     adjustments: tuple[AdjustmentCost, ...]
 
 
-def calculate_completion_plan(
+def _validate_completion_counts(
     *,
     actual_batches: int,
     issued_batches: int,
+    scrap_weight_kg: Decimal,
     materials: list[CompletionMaterial],
-    outputs: list[CompletionOutput],
-    scrap_weight_kg: Decimal = Decimal("0"),
-    adjustments: list[MixAdjustment] | None = None,
-) -> CompletionPlan:
-    """Apply the active desktop completion rules using fixed-precision decimals."""
+    adjustments: list[MixAdjustment],
+) -> tuple[dict[str, CompletionMaterial], int, int]:
     if actual_batches <= 0:
         raise ValueError("عدد الخلطات الفعلي يجب أن يكون أكبر من صفر")
     if issued_batches <= 0:
@@ -101,18 +99,19 @@ def calculate_completion_plan(
         raise ValueError("الهالك لا يمكن أن يكون سالبًا")
     if not materials:
         raise ValueError("أمر التصنيع لا يحتوي على خامات مصروفة")
-
-    adjustments = adjustments or []
     material_by_id = {item.product_id: item for item in materials}
     if len(material_by_id) != len(materials):
         raise ValueError("لا يمكن تكرار الخامة في أمر التصنيع")
-
     modified_batches = sum(item.batch_count for item in adjustments)
     if modified_batches > actual_batches:
         raise ValueError("مجموع الخلطات المعدلة لا يمكن أن يتجاوز عدد الخلطات الفعلي")
-    full_batches = actual_batches - modified_batches
+    return material_by_id, modified_batches, actual_batches - modified_batches
 
-    effective_per_batch: dict[str, Decimal] = {}
+
+def _effective_per_batch(
+    materials: list[CompletionMaterial], issued_batches: int
+) -> dict[str, Decimal]:
+    result: dict[str, Decimal] = {}
     for item in materials:
         if item.quantity_per_batch <= 0 or item.issued_quantity < 0 or item.unit_cost < 0:
             raise ValueError("بيانات الخامات المصروفة غير صحيحة")
@@ -121,19 +120,42 @@ def calculate_completion_plan(
             per_batch = min(per_batch, item.issued_quantity / Decimal(issued_batches))
         elif item.component_kind != "material":
             raise ValueError("نوع خامة أمر التصنيع غير صحيح")
-        effective_per_batch[item.product_id] = per_batch
+        result[item.product_id] = per_batch
+    return result
 
-    used = {
-        product_id: per_batch * Decimal(full_batches)
-        for product_id, per_batch in effective_per_batch.items()
-    }
-    full_mix_cost = sum(
-        (used[item.product_id] * item.unit_cost for item in materials),
-        Decimal("0"),
-    )
 
-    normalized_adjustments: list[AdjustmentCost] = []
-    modified_mix_cost = Decimal("0")
+def _adjustment_quantities(
+    adjustment: MixAdjustment,
+    *,
+    material_by_id: dict[str, CompletionMaterial],
+    effective_per_batch: dict[str, Decimal],
+) -> tuple[dict[str, Decimal], Decimal]:
+    quantities: dict[str, Decimal] = {}
+    cost = Decimal("0")
+    for product_id, material in material_by_id.items():
+        if product_id == adjustment.excluded_product_id:
+            used_quantity = Decimal("0")
+        else:
+            used_quantity = adjustment.actual_material_quantities.get(
+                product_id,
+                effective_per_batch[product_id] * Decimal(adjustment.batch_count),
+            )
+        if used_quantity < 0:
+            raise ValueError("كميات الخامات الفعلية لا يمكن أن تكون سالبة")
+        quantities[product_id] = used_quantity
+        cost += used_quantity * material.unit_cost
+    return quantities, money(cost)
+
+
+def _apply_adjustments(
+    adjustments: list[MixAdjustment],
+    *,
+    material_by_id: dict[str, CompletionMaterial],
+    effective_per_batch: dict[str, Decimal],
+    used: dict[str, Decimal],
+) -> tuple[list[AdjustmentCost], Decimal]:
+    normalized: list[AdjustmentCost] = []
+    total_cost = Decimal("0")
     for index, adjustment in enumerate(adjustments, start=1):
         if adjustment.excluded_product_id not in material_by_id:
             raise ValueError(f"الخامة المستبعدة في مجموعة التعديل رقم {index} غير صحيحة")
@@ -144,34 +166,33 @@ def calculate_completion_plan(
             raise ValueError("اكتب سبب استبعاد الخامة في كل مجموعة تعديل")
         if set(adjustment.actual_material_quantities).difference(material_by_id):
             raise ValueError("تفاصيل الكميات تحتوي على خامة لا تخص أمر التصنيع")
-
-        group_quantities: dict[str, Decimal] = {}
-        group_cost = Decimal("0")
-        for product_id, material in material_by_id.items():
-            if product_id == adjustment.excluded_product_id:
-                used_quantity = Decimal("0")
-            elif product_id in adjustment.actual_material_quantities:
-                used_quantity = adjustment.actual_material_quantities[product_id]
-            else:
-                used_quantity = effective_per_batch[product_id] * Decimal(adjustment.batch_count)
-            if used_quantity < 0:
-                raise ValueError("كميات الخامات الفعلية لا يمكن أن تكون سالبة")
-            group_quantities[product_id] = quantity(used_quantity)
+        group_quantities, group_cost = _adjustment_quantities(
+            adjustment,
+            material_by_id=material_by_id,
+            effective_per_batch=effective_per_batch,
+        )
+        for product_id, used_quantity in group_quantities.items():
             used[product_id] += used_quantity
-            group_cost += used_quantity * material.unit_cost
-        group_cost = money(group_cost)
-        modified_mix_cost += group_cost
-        normalized_adjustments.append(
+        total_cost += group_cost
+        normalized.append(
             AdjustmentCost(
                 excluded_product_id=adjustment.excluded_product_id,
                 batch_count=adjustment.batch_count,
                 reason=reason,
-                actual_material_quantities=group_quantities,
+                actual_material_quantities={
+                    product_id: quantity(used_quantity)
+                    for product_id, used_quantity in group_quantities.items()
+                },
                 cost_amount=group_cost,
             )
         )
+    return normalized, money(total_cost)
 
-    material_usage: list[MaterialUsage] = []
+
+def _material_usage(
+    materials: list[CompletionMaterial], used: dict[str, Decimal]
+) -> tuple[list[MaterialUsage], Decimal, Decimal]:
+    result: list[MaterialUsage] = []
     used_input_weight = Decimal("0")
     for item in materials:
         used_quantity = quantity(used[item.product_id])
@@ -180,91 +201,129 @@ def calculate_completion_plan(
                 f"استخدام {item.name} يتجاوز المصروف. "
                 f"المستخدم {used_quantity} والمصروف {item.issued_quantity}"
             )
-        unused_quantity = quantity(item.issued_quantity - used_quantity)
-        used_cost = money(used_quantity * item.unit_cost)
-        material_usage.append(
+        result.append(
             MaterialUsage(
                 product_id=item.product_id,
                 issued_quantity=quantity(item.issued_quantity),
                 used_quantity=used_quantity,
-                unused_quantity=unused_quantity,
+                unused_quantity=quantity(item.issued_quantity - used_quantity),
                 unit_cost=quantity(item.unit_cost),
-                used_cost=used_cost,
+                used_cost=money(used_quantity * item.unit_cost),
             )
         )
         used_input_weight += used_quantity
+    total_cost = money(sum((item.used_cost for item in result), Decimal("0")))
+    return result, used_input_weight, total_cost
 
-    full_mix_cost = money(full_mix_cost)
-    modified_mix_cost = money(modified_mix_cost)
-    total_material_cost = money(sum((item.used_cost for item in material_usage), Decimal("0")))
+
+def _validate_output(output: CompletionOutput) -> None:
+    if min(output.good_quantity, output.defective_quantity, output.actual_weight_kg) < 0:
+        raise ValueError("الإنتاج والوزن الفعلي لا يمكن أن تكون قيمًا سالبة")
+    if output.good_quantity > 0 and output.actual_weight_kg <= 0:
+        raise ValueError(f"أدخل الوزن الفعلي للإنتاج السليم للصنف {output.name}")
+    if output.good_quantity <= 0 and output.actual_weight_kg > 0:
+        raise ValueError(f"أدخل عدد المواسير السليمة للصنف {output.name}")
+
+
+def _output_totals(outputs: list[CompletionOutput]) -> tuple[Decimal, Decimal, Decimal]:
+    for output in outputs:
+        _validate_output(output)
+    return (
+        sum((item.good_quantity for item in outputs), Decimal("0")),
+        sum((item.defective_quantity for item in outputs), Decimal("0")),
+        sum((item.actual_weight_kg for item in outputs), Decimal("0")),
+    )
+
+
+def _allocate_output_costs(
+    outputs: list[CompletionOutput], *, finished_cost: Decimal, cost_per_good_kg: Decimal
+) -> list[OutputCost]:
+    nonzero_outputs = [item for item in outputs if item.good_quantity > 0]
+    result: list[OutputCost] = []
+    allocated_cost = Decimal("0")
+    for index, output in enumerate(nonzero_outputs):
+        is_last = index == len(nonzero_outputs) - 1
+        line_cost = money(
+            finished_cost - allocated_cost
+            if is_last
+            else output.actual_weight_kg * cost_per_good_kg
+        )
+        allocated_cost += line_cost
+        result.append(
+            OutputCost(
+                product_id=output.product_id,
+                good_quantity=quantity(output.good_quantity),
+                defective_quantity=quantity(output.defective_quantity),
+                actual_weight_kg=quantity(output.actual_weight_kg),
+                line_cost=line_cost,
+                unit_cost=quantity(line_cost / output.good_quantity),
+            )
+        )
+    output_cost_by_id = {item.product_id for item in result}
+    result.extend(
+        OutputCost(
+            product_id=output.product_id,
+            good_quantity=Decimal("0"),
+            defective_quantity=quantity(output.defective_quantity),
+            actual_weight_kg=Decimal("0"),
+            line_cost=Decimal("0"),
+            unit_cost=Decimal("0"),
+        )
+        for output in outputs
+        if output.product_id not in output_cost_by_id
+    )
+    return result
+
+
+def calculate_completion_plan(
+    *,
+    actual_batches: int,
+    issued_batches: int,
+    materials: list[CompletionMaterial],
+    outputs: list[CompletionOutput],
+    scrap_weight_kg: Decimal = Decimal("0"),
+    adjustments: list[MixAdjustment] | None = None,
+) -> CompletionPlan:
+    """Apply the active desktop completion rules using fixed-precision decimals."""
+    adjustments = adjustments or []
+    material_by_id, modified_batches, full_batches = _validate_completion_counts(
+        actual_batches=actual_batches,
+        issued_batches=issued_batches,
+        scrap_weight_kg=scrap_weight_kg,
+        materials=materials,
+        adjustments=adjustments,
+    )
+    effective_per_batch = _effective_per_batch(materials, issued_batches)
+    used = {
+        product_id: per_batch * Decimal(full_batches)
+        for product_id, per_batch in effective_per_batch.items()
+    }
+    full_mix_cost = money(
+        sum((used[item.product_id] * item.unit_cost for item in materials), Decimal("0"))
+    )
+    normalized_adjustments, modified_mix_cost = _apply_adjustments(
+        adjustments,
+        material_by_id=material_by_id,
+        effective_per_batch=effective_per_batch,
+        used=used,
+    )
+    material_usage, used_input_weight, total_material_cost = _material_usage(materials, used)
     if total_material_cost != money(full_mix_cost + modified_mix_cost):
         modified_mix_cost = money(max(Decimal("0"), total_material_cost - full_mix_cost))
-
-    good_quantity = Decimal("0")
-    defective_quantity = Decimal("0")
-    actual_output_weight = Decimal("0")
-    for output_item in outputs:
-        if (
-            min(
-                output_item.good_quantity,
-                output_item.defective_quantity,
-                output_item.actual_weight_kg,
-            )
-            < 0
-        ):
-            raise ValueError("الإنتاج والوزن الفعلي لا يمكن أن تكون قيمًا سالبة")
-        if output_item.good_quantity > 0 and output_item.actual_weight_kg <= 0:
-            raise ValueError(f"أدخل الوزن الفعلي للإنتاج السليم للصنف {output_item.name}")
-        if output_item.good_quantity <= 0 and output_item.actual_weight_kg > 0:
-            raise ValueError(f"أدخل عدد المواسير السليمة للصنف {output_item.name}")
-        good_quantity += output_item.good_quantity
-        defective_quantity += output_item.defective_quantity
-        actual_output_weight += output_item.actual_weight_kg
-
+    good_quantity, defective_quantity, actual_output_weight = _output_totals(outputs)
     if good_quantity <= 0 or actual_output_weight <= 0:
         raise ValueError("أدخل الإنتاج السليم ووزنه الفعلي")
     if actual_output_weight + scrap_weight_kg > used_input_weight:
         raise ValueError("وزن الإنتاج والهالك لا يمكن أن يتجاوز وزن الخامات المستخدمة")
-
     average_input_cost = quantity(total_material_cost / used_input_weight)
     scrap_value = money(scrap_weight_kg * average_input_cost)
     finished_cost = money(max(Decimal("0"), total_material_cost - scrap_value))
     cost_per_good_kg = quantity(finished_cost / actual_output_weight)
-
-    output_costs: list[OutputCost] = []
-    allocated_cost = Decimal("0")
-    nonzero_outputs = [output_item for output_item in outputs if output_item.good_quantity > 0]
-    for index, output_item in enumerate(nonzero_outputs):
-        line_cost = (
-            money(finished_cost - allocated_cost)
-            if index == len(nonzero_outputs) - 1
-            else money(output_item.actual_weight_kg * cost_per_good_kg)
-        )
-        allocated_cost += line_cost
-        output_costs.append(
-            OutputCost(
-                product_id=output_item.product_id,
-                good_quantity=quantity(output_item.good_quantity),
-                defective_quantity=quantity(output_item.defective_quantity),
-                actual_weight_kg=quantity(output_item.actual_weight_kg),
-                line_cost=line_cost,
-                unit_cost=quantity(line_cost / output_item.good_quantity),
-            )
-        )
-    output_cost_by_id = {item.product_id: item for item in output_costs}
-    for output_item in outputs:
-        if output_item.product_id not in output_cost_by_id:
-            output_costs.append(
-                OutputCost(
-                    product_id=output_item.product_id,
-                    good_quantity=Decimal("0"),
-                    defective_quantity=quantity(output_item.defective_quantity),
-                    actual_weight_kg=Decimal("0"),
-                    line_cost=Decimal("0"),
-                    unit_cost=Decimal("0"),
-                )
-            )
-
+    output_costs = _allocate_output_costs(
+        outputs,
+        finished_cost=finished_cost,
+        cost_per_good_kg=cost_per_good_kg,
+    )
     return CompletionPlan(
         actual_batches=actual_batches,
         full_batches=full_batches,

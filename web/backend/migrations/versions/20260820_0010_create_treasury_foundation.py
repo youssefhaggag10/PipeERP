@@ -18,6 +18,7 @@ depends_on: str | Sequence[str] | None = None
 
 PARTNERS_ID = "partners.id"
 POSITIVE_AMOUNT = "amount > 0"
+USERS_ID = "users.id"
 
 
 def _timestamps() -> list[sa.Column]:
@@ -125,8 +126,8 @@ def upgrade() -> None:
             ["financial_account_id"], ["financial_accounts.id"], ondelete="RESTRICT"
         ),
         sa.ForeignKeyConstraint(["partner_id"], [PARTNERS_ID], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["posted_by_id"], ["users.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["reversed_by_id"], ["users.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["posted_by_id"], [USERS_ID], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["reversed_by_id"], [USERS_ID], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
             ["supplier_invoice_id"], ["supplier_invoices.id"], ondelete="RESTRICT"
         ),
@@ -227,8 +228,8 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["from_account_id"], ["financial_accounts.id"], ondelete="RESTRICT"
         ),
-        sa.ForeignKeyConstraint(["posted_by_id"], ["users.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["reversed_by_id"], ["users.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["posted_by_id"], [USERS_ID], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["reversed_by_id"], [USERS_ID], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["to_account_id"], ["financial_accounts.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("idempotency_key"),
@@ -278,8 +279,8 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["financial_account_id"], ["financial_accounts.id"], ondelete="RESTRICT"
         ),
-        sa.ForeignKeyConstraint(["posted_by_id"], ["users.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["reversed_by_id"], ["users.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["posted_by_id"], [USERS_ID], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["reversed_by_id"], [USERS_ID], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("adjustment_number"),
         sa.UniqueConstraint("idempotency_key"),
@@ -314,7 +315,7 @@ def upgrade() -> None:
             "source IN ('manual','reversal')",
             name=op.f("ck_partner_opening_balance_entries_source_valid"),
         ),
-        sa.ForeignKeyConstraint(["created_by_id"], ["users.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["created_by_id"], [USERS_ID], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["partner_id"], [PARTNERS_ID], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
             ["reversal_of_id"], ["partner_opening_balance_entries.id"], ondelete="RESTRICT"

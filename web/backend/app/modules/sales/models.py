@@ -22,6 +22,8 @@ from app.infrastructure.database.base import Base, TimestampMixin
 
 SALES_ORDERS_ID = "sales_orders.id"
 SUBTOTAL_NONNEGATIVE = "subtotal >= 0"
+TOTAL_NONNEGATIVE = "total >= 0"
+VERSION_POSITIVE = "version > 0"
 
 
 class SalesOrder(TimestampMixin, Base):
@@ -37,8 +39,8 @@ class SalesOrder(TimestampMixin, Base):
         CheckConstraint("discount_amount >= 0", name="discount_nonnegative"),
         CheckConstraint("transport_amount >= 0", name="transport_nonnegative"),
         CheckConstraint("tax_amount >= 0", name="tax_nonnegative"),
-        CheckConstraint("total >= 0", name="total_nonnegative"),
-        CheckConstraint("version > 0", name="version_positive"),
+        CheckConstraint(TOTAL_NONNEGATIVE, name="total_nonnegative"),
+        CheckConstraint(VERSION_POSITIVE, name="version_positive"),
         Index("ix_sales_orders_customer_status", "customer_id", "status"),
     )
 
@@ -233,8 +235,8 @@ class CustomerInvoice(TimestampMixin, Base):
         CheckConstraint("discount_amount >= 0", name="discount_nonnegative"),
         CheckConstraint("transport_amount >= 0", name="transport_nonnegative"),
         CheckConstraint("tax_amount >= 0", name="tax_nonnegative"),
-        CheckConstraint("total >= 0", name="total_nonnegative"),
-        CheckConstraint("version > 0", name="version_positive"),
+        CheckConstraint(TOTAL_NONNEGATIVE, name="total_nonnegative"),
+        CheckConstraint(VERSION_POSITIVE, name="version_positive"),
         Index("ix_customer_invoices_customer_status", "customer_id", "status"),
     )
 
@@ -273,8 +275,8 @@ class SalesQuotation(TimestampMixin, Base):
             "status IN ('draft', 'sent', 'accepted', 'rejected', 'cancelled')",
             name="status_valid",
         ),
-        CheckConstraint("total >= 0", name="total_nonnegative"),
-        CheckConstraint("version > 0", name="version_positive"),
+        CheckConstraint(TOTAL_NONNEGATIVE, name="total_nonnegative"),
+        CheckConstraint(VERSION_POSITIVE, name="version_positive"),
         Index("ix_sales_quotations_customer_date", "customer_id", "quotation_date"),
     )
 

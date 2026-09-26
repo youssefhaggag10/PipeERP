@@ -86,6 +86,16 @@ function query(params: Record<string, string>) {
   return values.toString();
 }
 
+function printOptionLabel(item: OrderOption | QuoteOption | Partner): string {
+  if ("invoice" in item) {
+    return `${item.invoice?.invoice_number} · ${item.customer_name_ar}`;
+  }
+  if ("quotation_number" in item) {
+    return `${item.quotation_number} · ${item.customer_name_ar}`;
+  }
+  return `${item.code} · ${item.name_ar}`;
+}
+
 export function ReportsPage() {
   const { user } = useAuth();
   const [tab, setTab] = useState<"reports" | "print">("reports");
@@ -407,12 +417,7 @@ export function ReportsPage() {
                 {printOptions.map((item) => {
                   const value =
                     "invoice" in item ? item.invoice?.id || "" : item.id;
-                  const label =
-                    "invoice" in item
-                      ? `${item.invoice?.invoice_number} · ${item.customer_name_ar}`
-                      : "quotation_number" in item
-                        ? `${item.quotation_number} · ${item.customer_name_ar}`
-                        : `${item.code} · ${item.name_ar}`;
+                  const label = printOptionLabel(item);
                   return (
                     <option key={value} value={value}>
                       {label}

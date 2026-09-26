@@ -1307,6 +1307,291 @@ def create_return(
     return _return_view(db, document)
 
 
+def _locked_return_lines(db: Session, document_id: UUID) -> list[InvoiceReturnLine]:
+    return list(
+        db.scalars(
+            select(InvoiceReturnLine)
+            .where(InvoiceReturnLine.invoice_return_id == document_id)
+            .order_by(InvoiceReturnLine.id)
+            .with_for_update()
+        )
+    )
+
+
+def _validate_return_reversal(
+    db: Session,
+    *,
+    document: InvoiceReturn,
+    payload: ReverseRequest,
+    idempotency_key: str,
+) -> bool:
+    if document.reversal_idempotency_key == idempotency_key:
+        return False
+    if document.status != "posted":
+        raise ReturnsConflict("تم عكس مستند المرتجع بالفعل")
+    if document.version != payload.version:
+        raise ReturnsConflict("تغير مستند المرتجع؛ حدّث الصفحة")
+    invoice_id = cast(UUID, document.customer_invoice_id or document.supplier_invoice_id)
+    if _refunded_total(db, return_type=document.return_type, invoice_id=invoice_id) > 0:
+        raise ReturnsConflict("اعكس استردادات الفاتورة أولًا قبل عكس المرتجع")
+    return True
+
+
+def _reverse_legacy_line(
+    db: Session,
+    *,
+    document: InvoiceReturn,
+    line: InvoiceReturnLine,
+    payload: ReverseRequest,
+    idempotency_key: str,
+    actor: Principal,
+    client: ClientContext,
+) -> None:
+    if line.inventory_transaction_id is None:
+        raise ReturnsConflict("مستند المرتجع التاريخي يفتقد حركة المخزون")
+    child_key = _derived_key(idempotency_key, line.id, "reverse")
+    if document.return_type == "sales":
+        reversed_transaction = reverse_sales_return_inventory(
+            db,
+            transaction_id=line.inventory_transaction_id,
+            sales_return_id=document.id,
+            sales_order_line_id=cast(UUID, line.sales_order_line_id),
+            idempotency_key=child_key,
+            actor_user_id=actor.user.id,
+            client=client,
+            reason=payload.reason,
+        )
+    else:
+        reversed_transaction = reverse_purchase_return_inventory(
+            db,
+            transaction_id=line.inventory_transaction_id,
+            purchase_return_id=document.id,
+            purchase_order_line_id=cast(UUID, line.purchase_order_line_id),
+            idempotency_key=child_key,
+            actor_user_id=actor.user.id,
+            client=client,
+            reason=payload.reason,
+        )
+    line.reversal_inventory_transaction_id = reversed_transaction.id
+
+
+def _locked_return_sources(
+    db: Session, lines: list[InvoiceReturnLine]
+) -> dict[UUID, list[InvoiceReturnSource]]:
+    result: dict[UUID, list[InvoiceReturnSource]] = {}
+    for line in lines:
+        sources = list(
+            db.scalars(
+                select(InvoiceReturnSource)
+                .where(InvoiceReturnSource.invoice_return_line_id == line.id)
+                .order_by(InvoiceReturnSource.id)
+                .with_for_update()
+            )
+        )
+        source_quantity = quantity(sum((item.quantity for item in sources), ZERO))
+        source_weight = quantity(sum((item.weight_kg for item in sources), ZERO))
+        if source_quantity != line.quantity or source_weight != line.weight_kg:
+            raise ReturnsConflict("تعذر عكس المرتجع: الكمية التجارية لا تطابق مصادر المخزون")
+        result[line.id] = sources
+    return result
+
+
+def _validate_sales_return_layers(
+    db: Session, sources_by_line: dict[UUID, list[InvoiceReturnSource]]
+) -> None:
+    return_layer_ids = sorted(
+        [
+            source.return_inventory_layer_id
+            for sources in sources_by_line.values()
+            for source in sources
+            if source.return_inventory_layer_id is not None
+        ],
+        key=str,
+    )
+    locked_layers = {
+        layer.id: layer
+        for layer in db.scalars(
+            select(InventoryLayer)
+            .where(InventoryLayer.id.in_(return_layer_ids))
+            .order_by(InventoryLayer.id)
+            .with_for_update()
+        )
+    }
+    for sources in sources_by_line.values():
+        for source in sources:
+            layer = locked_layers.get(cast(UUID, source.return_inventory_layer_id))
+            if layer is None:
+                raise ReturnsConflict("تعذر العثور على طبقة مرتجع المبيعات")
+            if (
+                layer.quantity_remaining != source.quantity
+                or layer.weight_remaining_kg != source.weight_kg
+            ):
+                raise ReturnsConflict("لا يمكن عكس مرتجع المبيعات بعد استهلاك جزء من مخزونه")
+
+
+def _reverse_sales_source(
+    db: Session,
+    *,
+    document: InvoiceReturn,
+    line: InvoiceReturnLine,
+    source: InvoiceReturnSource,
+    payload: ReverseRequest,
+    child_key: str,
+    actor: Principal,
+    client: ClientContext,
+) -> InventoryTransaction:
+    return_layer_id = cast(UUID, source.return_inventory_layer_id)
+    if db.get(InventoryLayer, return_layer_id) is None:
+        raise ReturnsConflict("تعذر العثور على طبقة مرتجع المبيعات")
+    reversal, _ = post_exact_layer_issue(
+        db,
+        source_layer_id=return_layer_id,
+        product_id=line.product_id,
+        warehouse_id=document.warehouse_id,
+        requested_quantity=source.quantity,
+        requested_weight_kg=source.weight_kg,
+        cost_basis=source.cost_basis,
+        idempotency_key=child_key,
+        reference_type="sales_return_reversal",
+        reference_id=str(document.id),
+        reference_line_id=str(line.id),
+        notes=payload.reason,
+        actor_user_id=actor.user.id,
+        client=client,
+        transaction_type="reversal_out",
+        reversal_of_id=source.return_inventory_transaction_id,
+    )
+    source.reversal_inventory_layer_id = None
+    return reversal
+
+
+def _reverse_purchase_source(
+    db: Session,
+    *,
+    document: InvoiceReturn,
+    line: InvoiceReturnLine,
+    source: InvoiceReturnSource,
+    payload: ReverseRequest,
+    child_key: str,
+    actor: Principal,
+    client: ClientContext,
+) -> InventoryTransaction:
+    consumed_layer = db.get(InventoryLayer, cast(UUID, source.consumed_inventory_layer_id))
+    if consumed_layer is None:
+        raise ReturnsConflict("تعذر تحميل مصدر مرتجع المشتريات")
+    lot = db.get(InventoryLot, consumed_layer.lot_id) if consumed_layer.lot_id else None
+    reversal = post_receipt(
+        db,
+        payload=ReceiptRequest(
+            product_id=line.product_id,
+            warehouse_id=document.warehouse_id,
+            quantity=source.quantity,
+            weight_kg=source.weight_kg,
+            cost_basis=cast(Literal["quantity", "weight"], source.cost_basis),
+            unit_cost=source.unit_cost,
+            lot_number=lot.lot_number if lot else "",
+            reference_type="purchase_return_reversal",
+            reference_id=str(document.id),
+            reference_line_id=str(line.id),
+            notes=payload.reason,
+        ),
+        idempotency_key=child_key,
+        actor_user_id=actor.user.id,
+        client=client,
+        transaction_type="reversal_in",
+        reversal_of_id=source.return_inventory_transaction_id,
+        provenance_root_layer_id=source.root_inventory_layer_id,
+    )
+    reversal_layer = receipt_layer_for_transaction(db, reversal.id)
+    source.reversal_inventory_layer_id = reversal_layer.id
+    return reversal
+
+
+def _reverse_source_line(
+    db: Session,
+    *,
+    document: InvoiceReturn,
+    line: InvoiceReturnLine,
+    sources: list[InvoiceReturnSource],
+    payload: ReverseRequest,
+    idempotency_key: str,
+    actor: Principal,
+    client: ClientContext,
+) -> None:
+    first_reversal_id: UUID | None = None
+    for source in sources:
+        child_key = _derived_key(idempotency_key, source.id, "source-reverse")
+        reverse_source = (
+            _reverse_sales_source if document.return_type == "sales" else _reverse_purchase_source
+        )
+        reversal = reverse_source(
+            db,
+            document=document,
+            line=line,
+            source=source,
+            payload=payload,
+            child_key=child_key,
+            actor=actor,
+            client=client,
+        )
+        source.reversal_inventory_transaction_id = reversal.id
+        first_reversal_id = first_reversal_id or reversal.id
+    line.reversal_inventory_transaction_id = first_reversal_id
+
+
+def _reverse_source_layers(
+    db: Session,
+    *,
+    document: InvoiceReturn,
+    lines: list[InvoiceReturnLine],
+    payload: ReverseRequest,
+    idempotency_key: str,
+    actor: Principal,
+    client: ClientContext,
+) -> None:
+    sources_by_line = _locked_return_sources(db, lines)
+    lock_inventory_contexts(db, {(line.product_id, document.warehouse_id) for line in lines})
+    if document.return_type == "sales":
+        _validate_sales_return_layers(db, sources_by_line)
+    for line in lines:
+        _reverse_source_line(
+            db,
+            document=document,
+            line=line,
+            sources=sources_by_line[line.id],
+            payload=payload,
+            idempotency_key=idempotency_key,
+            actor=actor,
+            client=client,
+        )
+
+
+def _finalize_return_reversal(
+    db: Session,
+    *,
+    document: InvoiceReturn,
+    payload: ReverseRequest,
+    idempotency_key: str,
+    actor: Principal,
+    client: ClientContext,
+) -> None:
+    document.status = "reversed"
+    document.reversed_by_id = actor.user.id
+    document.reversed_at = datetime.now(UTC)
+    document.reversal_reason = payload.reason.strip()
+    document.reversal_idempotency_key = idempotency_key
+    document.version += 1
+    add_audit(
+        db,
+        actor_user_id=actor.user.id,
+        event_type="returns.document.reverse",
+        entity_type="invoice_return",
+        entity_id=str(document.id),
+        outcome="success",
+        client=client,
+    )
+
+
 def reverse_return(
     db: Session,
     *,
@@ -1321,190 +1606,41 @@ def reverse_return(
     )
     if document is None:
         raise ReturnsNotFound("مستند المرتجع غير موجود")
-    if document.reversal_idempotency_key == idempotency_key:
-        return _return_view(db, document)
-    if document.status != "posted":
-        raise ReturnsConflict("تم عكس مستند المرتجع بالفعل")
-    if document.version != payload.version:
-        raise ReturnsConflict("تغير مستند المرتجع؛ حدّث الصفحة")
-    if (
-        _refunded_total(
-            db,
-            return_type=document.return_type,
-            invoice_id=cast(UUID, document.customer_invoice_id or document.supplier_invoice_id),
-        )
-        > 0
+    if not _validate_return_reversal(
+        db,
+        document=document,
+        payload=payload,
+        idempotency_key=idempotency_key,
     ):
-        raise ReturnsConflict("اعكس استردادات الفاتورة أولًا قبل عكس المرتجع")
-    lines = list(
-        db.scalars(
-            select(InvoiceReturnLine)
-            .where(InvoiceReturnLine.invoice_return_id == document.id)
-            .order_by(InvoiceReturnLine.id)
-            .with_for_update()
-        )
-    )
+        return _return_view(db, document)
+    lines = _locked_return_lines(db, document.id)
     if document.valuation_method == "legacy_aggregate":
         for line in lines:
-            if line.inventory_transaction_id is None:
-                raise ReturnsConflict("مستند المرتجع التاريخي يفتقد حركة المخزون")
-            if document.return_type == "sales":
-                reversed_transaction = reverse_sales_return_inventory(
-                    db,
-                    transaction_id=line.inventory_transaction_id,
-                    sales_return_id=document.id,
-                    sales_order_line_id=cast(UUID, line.sales_order_line_id),
-                    idempotency_key=_derived_key(idempotency_key, line.id, "reverse"),
-                    actor_user_id=actor.user.id,
-                    client=client,
-                    reason=payload.reason,
-                )
-            else:
-                reversed_transaction = reverse_purchase_return_inventory(
-                    db,
-                    transaction_id=line.inventory_transaction_id,
-                    purchase_return_id=document.id,
-                    purchase_order_line_id=cast(UUID, line.purchase_order_line_id),
-                    idempotency_key=_derived_key(idempotency_key, line.id, "reverse"),
-                    actor_user_id=actor.user.id,
-                    client=client,
-                    reason=payload.reason,
-                )
-            line.reversal_inventory_transaction_id = reversed_transaction.id
+            _reverse_legacy_line(
+                db,
+                document=document,
+                line=line,
+                payload=payload,
+                idempotency_key=idempotency_key,
+                actor=actor,
+                client=client,
+            )
     else:
-        sources_by_line: dict[UUID, list[InvoiceReturnSource]] = {}
-        for line in lines:
-            sources = list(
-                db.scalars(
-                    select(InvoiceReturnSource)
-                    .where(InvoiceReturnSource.invoice_return_line_id == line.id)
-                    .order_by(InvoiceReturnSource.id)
-                    .with_for_update()
-                )
-            )
-            source_quantity = quantity(sum((item.quantity for item in sources), ZERO))
-            source_weight = quantity(sum((item.weight_kg for item in sources), ZERO))
-            if source_quantity != line.quantity or source_weight != line.weight_kg:
-                raise ReturnsConflict("تعذر عكس المرتجع: الكمية التجارية لا تطابق مصادر المخزون")
-            sources_by_line[line.id] = sources
-
-        lock_inventory_contexts(
+        _reverse_source_layers(
             db,
-            {(line.product_id, document.warehouse_id) for line in lines},
+            document=document,
+            lines=lines,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            actor=actor,
+            client=client,
         )
-
-        if document.return_type == "sales":
-            return_layer_ids = sorted(
-                [
-                    source.return_inventory_layer_id
-                    for sources in sources_by_line.values()
-                    for source in sources
-                    if source.return_inventory_layer_id is not None
-                ],
-                key=str,
-            )
-            locked_layers = {
-                layer.id: layer
-                for layer in db.scalars(
-                    select(InventoryLayer)
-                    .where(InventoryLayer.id.in_(return_layer_ids))
-                    .order_by(InventoryLayer.id)
-                    .with_for_update()
-                )
-            }
-            for sources in sources_by_line.values():
-                for source in sources:
-                    layer = locked_layers.get(cast(UUID, source.return_inventory_layer_id))
-                    if layer is None:
-                        raise ReturnsConflict("تعذر العثور على طبقة مرتجع المبيعات")
-                    if (
-                        layer.quantity_remaining != source.quantity
-                        or layer.weight_remaining_kg != source.weight_kg
-                    ):
-                        raise ReturnsConflict(
-                            "لا يمكن عكس مرتجع المبيعات بعد استهلاك جزء من مخزونه"
-                        )
-
-        for line in lines:
-            first_reversal_id: UUID | None = None
-            for source in sources_by_line[line.id]:
-                child_key = _derived_key(idempotency_key, source.id, "source-reverse")
-                if document.return_type == "sales":
-                    return_layer_id = cast(UUID, source.return_inventory_layer_id)
-                    return_layer = db.get(InventoryLayer, return_layer_id)
-                    if return_layer is None:
-                        raise ReturnsConflict("تعذر العثور على طبقة مرتجع المبيعات")
-                    reversal, _ = post_exact_layer_issue(
-                        db,
-                        source_layer_id=return_layer_id,
-                        product_id=line.product_id,
-                        warehouse_id=document.warehouse_id,
-                        requested_quantity=source.quantity,
-                        requested_weight_kg=source.weight_kg,
-                        cost_basis=source.cost_basis,
-                        idempotency_key=child_key,
-                        reference_type="sales_return_reversal",
-                        reference_id=str(document.id),
-                        reference_line_id=str(line.id),
-                        notes=payload.reason,
-                        actor_user_id=actor.user.id,
-                        client=client,
-                        transaction_type="reversal_out",
-                        reversal_of_id=source.return_inventory_transaction_id,
-                    )
-                    source.reversal_inventory_layer_id = None
-                else:
-                    consumed_layer = db.get(
-                        InventoryLayer, cast(UUID, source.consumed_inventory_layer_id)
-                    )
-                    if consumed_layer is None:
-                        raise ReturnsConflict("تعذر تحميل مصدر مرتجع المشتريات")
-                    lot = (
-                        db.get(InventoryLot, consumed_layer.lot_id)
-                        if consumed_layer.lot_id
-                        else None
-                    )
-                    reversal = post_receipt(
-                        db,
-                        payload=ReceiptRequest(
-                            product_id=line.product_id,
-                            warehouse_id=document.warehouse_id,
-                            quantity=source.quantity,
-                            weight_kg=source.weight_kg,
-                            cost_basis=cast(Literal["quantity", "weight"], source.cost_basis),
-                            unit_cost=source.unit_cost,
-                            lot_number=lot.lot_number if lot else "",
-                            reference_type="purchase_return_reversal",
-                            reference_id=str(document.id),
-                            reference_line_id=str(line.id),
-                            notes=payload.reason,
-                        ),
-                        idempotency_key=child_key,
-                        actor_user_id=actor.user.id,
-                        client=client,
-                        transaction_type="reversal_in",
-                        reversal_of_id=source.return_inventory_transaction_id,
-                        provenance_root_layer_id=source.root_inventory_layer_id,
-                    )
-                    reversal_layer = receipt_layer_for_transaction(db, reversal.id)
-                    source.reversal_inventory_layer_id = reversal_layer.id
-                source.reversal_inventory_transaction_id = reversal.id
-                if first_reversal_id is None:
-                    first_reversal_id = reversal.id
-            line.reversal_inventory_transaction_id = first_reversal_id
-    document.status = "reversed"
-    document.reversed_by_id = actor.user.id
-    document.reversed_at = datetime.now(UTC)
-    document.reversal_reason = payload.reason.strip()
-    document.reversal_idempotency_key = idempotency_key
-    document.version += 1
-    add_audit(
+    _finalize_return_reversal(
         db,
-        actor_user_id=actor.user.id,
-        event_type="returns.document.reverse",
-        entity_type="invoice_return",
-        entity_id=str(document.id),
-        outcome="success",
+        document=document,
+        payload=payload,
+        idempotency_key=idempotency_key,
+        actor=actor,
         client=client,
     )
     db.flush()

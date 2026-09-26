@@ -71,7 +71,6 @@ def add_user(
             display_name=payload.display_name,
             password=payload.password,
             role_codes=payload.role_codes,
-            must_change_password=payload.must_change_password,
             actor=principal,
             client=client_context(request),
         )
