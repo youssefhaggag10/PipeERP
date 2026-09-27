@@ -110,17 +110,24 @@ def test_five_concurrent_issues_cannot_double_allocate_or_go_negative() -> None:
         )
         assert issue_count == 5
 
-    with pytest.raises(InsufficientStock), Session(engine) as db, db.begin():
-        post_issue(
-            db,
-            payload=IssueRequest(
-                product_id=product_id,
-                warehouse_id=warehouse_id,
-                amount=Decimal("1"),
-                cost_basis="quantity",
-                reference_type="concurrency_test",
-            ),
-            idempotency_key=f"concurrency-overdraw-{suffix}",
-            actor_user_id=actor_id,
-            client=ClientContext("127.0.0.1", "test", "overdraw"),
-        )
+    payload = IssueRequest(
+        product_id=product_id,
+        warehouse_id=warehouse_id,
+        amount=Decimal("1"),
+        cost_basis="quantity",
+        reference_type="concurrency_test",
+    )
+    client = ClientContext("127.0.0.1", "test", "overdraw")
+    db = Session(engine)
+    try:
+        with pytest.raises(InsufficientStock):
+            post_issue(
+                db,
+                payload=payload,
+                idempotency_key=f"concurrency-overdraw-{suffix}",
+                actor_user_id=actor_id,
+                client=client,
+            )
+    finally:
+        db.rollback()
+        db.close()

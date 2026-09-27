@@ -46,9 +46,12 @@ def test_partial_receipt_cannot_exceed_ordered_amount() -> None:
         previously_received_amount=Decimal("40"),
         current_received_amount=Decimal("35"),
     ) == Decimal("25.000000")
+    ordered_amount = Decimal("100")
+    previously_received_amount = Decimal("80")
+    current_received_amount = Decimal("21")
     with pytest.raises(ValueError, match="يتجاوز"):
         validate_partial_receipt(
-            ordered_amount=Decimal("100"),
-            previously_received_amount=Decimal("80"),
-            current_received_amount=Decimal("21"),
+            ordered_amount=ordered_amount,
+            previously_received_amount=previously_received_amount,
+            current_received_amount=current_received_amount,
         )

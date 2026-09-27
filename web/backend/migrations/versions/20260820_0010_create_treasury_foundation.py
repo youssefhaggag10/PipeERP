@@ -21,6 +21,7 @@ POSITIVE_AMOUNT = "amount > 0"
 USERS_ID = "users.id"
 POSTED_OR_REVERSED_STATUS = "status IN ('posted','reversed')"
 FINANCIAL_ACCOUNTS_ID = "financial_accounts.id"
+NOW_SQL = "now()"
 
 
 def _timestamps() -> list[sa.Column]:
@@ -28,13 +29,13 @@ def _timestamps() -> list[sa.Column]:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
     ]
@@ -77,7 +78,7 @@ def upgrade() -> None:
         sa.Column(
             "transaction_date",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
         sa.Column("transaction_type", sa.String(24), nullable=False),
@@ -200,7 +201,7 @@ def upgrade() -> None:
         sa.Column(
             "transfer_date",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
         sa.Column("from_account_id", sa.Uuid(), nullable=False),
@@ -255,7 +256,7 @@ def upgrade() -> None:
         sa.Column(
             "adjustment_date",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
         sa.Column("financial_account_id", sa.Uuid(), nullable=False),
@@ -338,7 +339,7 @@ def upgrade() -> None:
         sa.Column(
             "adjustment_date",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
         sa.Column("customer_id", sa.Uuid(), nullable=False),
@@ -362,9 +363,9 @@ def upgrade() -> None:
             POSTED_OR_REVERSED_STATUS,
             name=op.f("ck_customer_account_adjustments_status_valid"),
         ),
-        sa.ForeignKeyConstraint(["created_by_id"], ["users.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["created_by_id"], [USERS_ID], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["customer_id"], [PARTNERS_ID], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["reversed_by_id"], ["users.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["reversed_by_id"], [USERS_ID], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("adjustment_number"),
     )

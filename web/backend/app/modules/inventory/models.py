@@ -22,6 +22,7 @@ from app.infrastructure.database.base import Base, TimestampMixin
 PRODUCTS_ID = "products.id"
 WAREHOUSES_ID = "warehouses.id"
 INVENTORY_TRANSACTIONS_ID = "inventory_transactions.id"
+UNIT_COST_NONNEGATIVE = "unit_cost >= 0"
 
 
 class InventoryLot(TimestampMixin, Base):
@@ -55,7 +56,7 @@ class InventoryLayer(TimestampMixin, Base):
         CheckConstraint(
             "weight_remaining_kg <= weight_received_kg", name="weight_remaining_within_received"
         ),
-        CheckConstraint("unit_cost >= 0", name="unit_cost_nonnegative"),
+        CheckConstraint(UNIT_COST_NONNEGATIVE, name="unit_cost_nonnegative"),
         CheckConstraint("cost_basis IN ('quantity', 'weight')", name="cost_basis_valid"),
         CheckConstraint(
             "quantity_received > 0 OR weight_received_kg > 0", name="received_amount_positive"
@@ -116,7 +117,7 @@ class InventoryTransaction(Base):
         CheckConstraint(
             "quantity_delta <> 0 OR weight_delta_kg <> 0", name="movement_amount_nonzero"
         ),
-        CheckConstraint("unit_cost >= 0", name="unit_cost_nonnegative"),
+        CheckConstraint(UNIT_COST_NONNEGATIVE, name="unit_cost_nonnegative"),
         CheckConstraint("total_cost >= 0", name="total_cost_nonnegative"),
         CheckConstraint("cost_basis IN ('quantity', 'weight')", name="cost_basis_valid"),
         CheckConstraint(
@@ -173,7 +174,7 @@ class InventoryAllocation(TimestampMixin, Base):
         UniqueConstraint("outbound_transaction_id", "source_layer_id"),
         CheckConstraint("quantity >= 0", name="quantity_nonnegative"),
         CheckConstraint("weight_kg >= 0", name="weight_nonnegative"),
-        CheckConstraint("unit_cost >= 0", name="unit_cost_nonnegative"),
+        CheckConstraint(UNIT_COST_NONNEGATIVE, name="unit_cost_nonnegative"),
         CheckConstraint("total_cost >= 0", name="total_cost_nonnegative"),
         CheckConstraint("quantity > 0 OR weight_kg > 0", name="allocated_amount_positive"),
         Index("ix_inventory_allocations_layer", "source_layer_id"),

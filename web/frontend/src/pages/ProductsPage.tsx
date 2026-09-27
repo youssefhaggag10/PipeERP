@@ -356,7 +356,7 @@ export function ProductsPage() {
                 />
               </label>
               <div className="form-actions">
-                <button className="primary-button">
+                <button type="submit" className="primary-button">
                   <PackagePlus size={17} />{" "}
                   {editing ? "حفظ تعديلات الصنف" : "حفظ الصنف"}
                 </button>

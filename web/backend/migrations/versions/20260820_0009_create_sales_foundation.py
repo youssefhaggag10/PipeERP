@@ -24,6 +24,7 @@ PRODUCTS_ID = "products.id"
 QUANTITY_POSITIVE = "quantity > 0"
 NOW_SQL = "now()"
 LINE_TOTAL_NONNEGATIVE = "line_total >= 0"
+TOTAL_NONNEGATIVE = "total >= 0"
 
 
 def _timestamps() -> list[sa.Column]:
@@ -83,7 +84,7 @@ def upgrade() -> None:
             "transport_amount >= 0", name=op.f("ck_sales_orders_transport_nonnegative")
         ),
         sa.CheckConstraint("tax_amount >= 0", name=op.f("ck_sales_orders_tax_nonnegative")),
-        sa.CheckConstraint("total >= 0", name=op.f("ck_sales_orders_total_nonnegative")),
+        sa.CheckConstraint(TOTAL_NONNEGATIVE, name=op.f("ck_sales_orders_total_nonnegative")),
         sa.CheckConstraint(VERSION_POSITIVE, name=op.f("ck_sales_orders_version_positive")),
         sa.ForeignKeyConstraint(["customer_id"], [PARTNERS_ID], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["warehouse_id"], ["warehouses.id"], ondelete="RESTRICT"),
@@ -299,7 +300,7 @@ def upgrade() -> None:
             "transport_amount >= 0", name=op.f("ck_customer_invoices_transport_nonnegative")
         ),
         sa.CheckConstraint("tax_amount >= 0", name=op.f("ck_customer_invoices_tax_nonnegative")),
-        sa.CheckConstraint("total >= 0", name=op.f("ck_customer_invoices_total_nonnegative")),
+        sa.CheckConstraint(TOTAL_NONNEGATIVE, name=op.f("ck_customer_invoices_total_nonnegative")),
         sa.CheckConstraint(VERSION_POSITIVE, name=op.f("ck_customer_invoices_version_positive")),
         sa.ForeignKeyConstraint(["sales_order_id"], [SALES_ORDERS_ID], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["customer_id"], [PARTNERS_ID], ondelete="RESTRICT"),
@@ -362,7 +363,7 @@ def upgrade() -> None:
             "status IN ('draft','sent','accepted','rejected','cancelled')",
             name=op.f("ck_sales_quotations_status_valid"),
         ),
-        sa.CheckConstraint("total >= 0", name=op.f("ck_sales_quotations_total_nonnegative")),
+        sa.CheckConstraint(TOTAL_NONNEGATIVE, name=op.f("ck_sales_quotations_total_nonnegative")),
         sa.CheckConstraint(VERSION_POSITIVE, name=op.f("ck_sales_quotations_version_positive")),
         sa.ForeignKeyConstraint(["customer_id"], [PARTNERS_ID], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["created_by_id"], [USERS_ID], ondelete="RESTRICT"),

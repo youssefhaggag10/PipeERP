@@ -63,21 +63,22 @@ type StockCardLine = {
 };
 type InventoryView = "balances" | "lots" | "stock-card";
 
-const VIEW_COPY: Record<InventoryView, { heading: string; subtitle: string }> = {
-  balances: {
-    heading: "رصيد المخزون",
-    subtitle:
-      "الرصيد ناتج من حركات المخزون فقط. استخدم التسوية للرصيد الافتتاحي أو الجرد.",
-  },
-  lots: {
-    heading: "أرصدة الدفعات",
-    subtitle: "الرصيد والقيمة المتبقية لكل دفعة وفق الصرف بنظام FIFO.",
-  },
-  "stock-card": {
-    heading: "كارت الصنف",
-    subtitle: "كل حركات الصنف داخل وخارج بالمخزن والتشغيلة والمرجع.",
-  },
-};
+const VIEW_COPY: Record<InventoryView, { heading: string; subtitle: string }> =
+  {
+    balances: {
+      heading: "رصيد المخزون",
+      subtitle:
+        "الرصيد ناتج من حركات المخزون فقط. استخدم التسوية للرصيد الافتتاحي أو الجرد.",
+    },
+    lots: {
+      heading: "أرصدة الدفعات",
+      subtitle: "الرصيد والقيمة المتبقية لكل دفعة وفق الصرف بنظام FIFO.",
+    },
+    "stock-card": {
+      heading: "كارت الصنف",
+      subtitle: "كل حركات الصنف داخل وخارج بالمخزن والتشغيلة والمرجع.",
+    },
+  };
 
 const productTypeLabels: Record<string, string> = {
   raw_material: "خامة",
@@ -151,7 +152,9 @@ export function InventoryPage() {
         const balanceRows = await api<Balance[]>("/inventory/balances");
         setBalances(
           factoryWarehouse
-            ? balanceRows.filter((item) => item.warehouse_id === factoryWarehouse.id)
+            ? balanceRows.filter(
+                (item) => item.warehouse_id === factoryWarehouse.id,
+              )
             : balanceRows,
         );
         setProductId((current) => current || optionRows.products[0]?.id || "");
@@ -159,14 +162,20 @@ export function InventoryPage() {
         const lotRows = await api<LotBalance[]>("/inventory/lot-balances");
         setLots(
           factoryWarehouse
-            ? lotRows.filter((item) => item.warehouse_id === factoryWarehouse.id)
+            ? lotRows.filter(
+                (item) => item.warehouse_id === factoryWarehouse.id,
+              )
             : lotRows,
         );
       } else {
-        const stockRows = await api<StockCardLine[]>("/inventory/stock-card?limit=500");
+        const stockRows = await api<StockCardLine[]>(
+          "/inventory/stock-card?limit=500",
+        );
         setStockCard(
           factoryWarehouse
-            ? stockRows.filter((item) => item.warehouse_id === factoryWarehouse.id)
+            ? stockRows.filter(
+                (item) => item.warehouse_id === factoryWarehouse.id,
+              )
             : stockRows,
         );
       }
@@ -267,8 +276,7 @@ export function InventoryPage() {
               onSubmit={submitAdjustment}
             >
               <label>
-                الصنف
-                {" "}
+                الصنف{" "}
                 <select
                   value={productId}
                   onChange={(event) => setProductId(event.target.value)}
@@ -282,8 +290,7 @@ export function InventoryPage() {
                 </select>
               </label>
               <label>
-                كمية التسوية
-                {" "}
+                كمية التسوية{" "}
                 <input
                   type="number"
                   step="0.001"
@@ -294,8 +301,7 @@ export function InventoryPage() {
                 />
               </label>
               <label>
-                تكلفة الوحدة للإضافة
-                {" "}
+                تكلفة الوحدة للإضافة{" "}
                 <input
                   type="number"
                   min="0"
@@ -305,8 +311,7 @@ export function InventoryPage() {
                 />
               </label>
               <label>
-                رقم الدفعة
-                {" "}
+                رقم الدفعة{" "}
                 <input
                   readOnly
                   value=""
@@ -314,8 +319,7 @@ export function InventoryPage() {
                 />
               </label>
               <label>
-                ملاحظات
-                {" "}
+                ملاحظات{" "}
                 <input
                   value={notes}
                   onChange={(event) => setNotes(event.target.value)}
@@ -373,121 +377,129 @@ export function InventoryPage() {
             )}
           </section>
         </>
-      ) : view === "lots" ? (
-        <section className="panel">
-          {lots.length ? (
-            <div className="data-table-wrap">
-              <table className="data-table inventory-table">
-                <thead>
-                  <tr>
-                    <th>الكود</th>
-                    <th>الصنف</th>
-                    <th>المخزن</th>
-                    <th>رقم الدفعة</th>
-                    <th>تاريخ الاستلام</th>
-                    <th>المستلم</th>
-                    <th>المصروف</th>
-                    <th>المتبقي</th>
-                    <th>متوسط التكلفة</th>
-                    <th>القيمة</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lots.map((item) => (
-                    <tr key={item.lot_id}>
-                      <td dir="ltr">{item.product_code}</td>
-                      <td>{item.product_name_ar}</td>
-                      <td>{item.warehouse_name_ar}</td>
-                      <td dir="ltr">{item.lot_number}</td>
-                      <td>
-                        {new Date(item.received_at).toLocaleString("ar-EG")}
-                      </td>
-                      <td className="numeric-cell">
-                        {number(item.quantity_received)}
-                      </td>
-                      <td className="numeric-cell">
-                        {number(item.quantity_issued)}
-                      </td>
-                      <td className="numeric-cell">
-                        <strong>{number(item.quantity_remaining)}</strong>
-                      </td>
-                      <td className="numeric-cell">
-                        {costFormat.format(Number(item.average_cost))}
-                      </td>
-                      <td className="numeric-cell">
-                        {costFormat.format(Number(item.inventory_value))}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <Empty
-              icon={<Layers3 size={27} />}
-              title="لا توجد دفعات حتى الآن"
-            />
-          )}
-        </section>
       ) : (
-        <section className="panel">
-          {stockCard.length ? (
-            <div className="data-table-wrap">
-              <table className="data-table inventory-table stock-card-table">
-                <thead>
-                  <tr>
-                    <th>التاريخ</th>
-                    <th>الكود</th>
-                    <th>الصنف</th>
-                    <th>المخزن</th>
-                    <th>الدفعة</th>
-                    <th>داخل</th>
-                    <th>خارج</th>
-                    <th>التكلفة</th>
-                    <th>المرجع</th>
-                    <th>الطرف</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stockCard.map((item) => (
-                    <tr key={item.id}>
-                      <td>
-                        {new Date(item.posted_at).toLocaleString("ar-EG")}
-                      </td>
-                      <td dir="ltr">{item.product_code}</td>
-                      <td>{item.product_name_ar}</td>
-                      <td>{item.warehouse_name_ar}</td>
-                      <td dir="ltr">{item.lot_number || "—"}</td>
-                      <td className="numeric-cell">
-                        {Number(item.quantity_in)
-                          ? number(item.quantity_in)
-                          : "—"}
-                      </td>
-                      <td className="numeric-cell">
-                        {Number(item.quantity_out)
-                          ? number(item.quantity_out)
-                          : "—"}
-                      </td>
-                      <td className="numeric-cell">
-                        {costFormat.format(Number(item.unit_cost))}
-                      </td>
-                      <td>
-                        {referenceLabels[item.reference_type] ??
-                          item.reference_type}
-                      </td>
-                      <td>{item.partner_name_ar || "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <Empty
-              icon={<PackageSearch size={27} />}
-              title="لا توجد حركات حتى الآن"
-            />
-          )}
-        </section>
+        (() => {
+          if (view === "lots")
+            return (
+              <section className="panel">
+                {lots.length ? (
+                  <div className="data-table-wrap">
+                    <table className="data-table inventory-table">
+                      <thead>
+                        <tr>
+                          <th>الكود</th>
+                          <th>الصنف</th>
+                          <th>المخزن</th>
+                          <th>رقم الدفعة</th>
+                          <th>تاريخ الاستلام</th>
+                          <th>المستلم</th>
+                          <th>المصروف</th>
+                          <th>المتبقي</th>
+                          <th>متوسط التكلفة</th>
+                          <th>القيمة</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {lots.map((item) => (
+                          <tr key={item.lot_id}>
+                            <td dir="ltr">{item.product_code}</td>
+                            <td>{item.product_name_ar}</td>
+                            <td>{item.warehouse_name_ar}</td>
+                            <td dir="ltr">{item.lot_number}</td>
+                            <td>
+                              {new Date(item.received_at).toLocaleString(
+                                "ar-EG",
+                              )}
+                            </td>
+                            <td className="numeric-cell">
+                              {number(item.quantity_received)}
+                            </td>
+                            <td className="numeric-cell">
+                              {number(item.quantity_issued)}
+                            </td>
+                            <td className="numeric-cell">
+                              <strong>{number(item.quantity_remaining)}</strong>
+                            </td>
+                            <td className="numeric-cell">
+                              {costFormat.format(Number(item.average_cost))}
+                            </td>
+                            <td className="numeric-cell">
+                              {costFormat.format(Number(item.inventory_value))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <Empty
+                    icon={<Layers3 size={27} />}
+                    title="لا توجد دفعات حتى الآن"
+                  />
+                )}
+              </section>
+            );
+          return (
+            <section className="panel">
+              {stockCard.length ? (
+                <div className="data-table-wrap">
+                  <table className="data-table inventory-table stock-card-table">
+                    <thead>
+                      <tr>
+                        <th>التاريخ</th>
+                        <th>الكود</th>
+                        <th>الصنف</th>
+                        <th>المخزن</th>
+                        <th>الدفعة</th>
+                        <th>داخل</th>
+                        <th>خارج</th>
+                        <th>التكلفة</th>
+                        <th>المرجع</th>
+                        <th>الطرف</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stockCard.map((item) => (
+                        <tr key={item.id}>
+                          <td>
+                            {new Date(item.posted_at).toLocaleString("ar-EG")}
+                          </td>
+                          <td dir="ltr">{item.product_code}</td>
+                          <td>{item.product_name_ar}</td>
+                          <td>{item.warehouse_name_ar}</td>
+                          <td dir="ltr">{item.lot_number || "—"}</td>
+                          <td className="numeric-cell">
+                            {Number(item.quantity_in)
+                              ? number(item.quantity_in)
+                              : "—"}
+                          </td>
+                          <td className="numeric-cell">
+                            {Number(item.quantity_out)
+                              ? number(item.quantity_out)
+                              : "—"}
+                          </td>
+                          <td className="numeric-cell">
+                            {costFormat.format(Number(item.unit_cost))}
+                          </td>
+                          <td>
+                            {referenceLabels[item.reference_type] ??
+                              item.reference_type}
+                          </td>
+                          <td>{item.partner_name_ar || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <Empty
+                  icon={<PackageSearch size={27} />}
+                  title="لا توجد حركات حتى الآن"
+                />
+              )}
+            </section>
+          );
+        })()
       )}
     </AppShell>
   );

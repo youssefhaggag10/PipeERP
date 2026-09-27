@@ -18,6 +18,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type FormEvent,
   type ReactNode,
 } from "react";
@@ -411,6 +412,169 @@ export function SalesPage() {
   function updateQuote(lineKey: string, patch: Partial<QuoteDraft>) {
     setQuoteLines((rows) =>
       rows.map((x) => (x.key === lineKey ? { ...x, ...patch } : x)),
+    );
+  }
+
+  function grossWeightChange(event: ChangeEvent<HTMLInputElement>) {
+    setGrossWeight(event.target.value);
+  }
+
+  function tareWeightChange(event: ChangeEvent<HTMLInputElement>) {
+    setTareWeight(event.target.value);
+  }
+
+  function netWeightChange(event: ChangeEvent<HTMLInputElement>) {
+    setNetWeight(event.target.value);
+  }
+
+  function uniformPriceChange(event: ChangeEvent<HTMLInputElement>) {
+    setUniformPrice(event.target.value);
+  }
+
+  function addDraftLine() {
+    const firstProduct = options.products[0];
+    if (tab === "weight") {
+      setWeightLines((rows) => [
+        ...rows,
+        {
+          ...weightLine(firstProduct?.id),
+          unit: firstProduct?.unit_symbol || "ماسورة",
+        },
+      ]);
+      return;
+    }
+    setPieceLines((rows) => [
+      ...rows,
+      pieceLine(firstProduct?.id, firstProduct?.unit_symbol || "قطعة"),
+    ]);
+  }
+
+  function draftFieldChange(
+    lineKey: string,
+    field:
+      "quantity" | "unit" | "unit_price" | "actual_weight_kg" | "price_per_kg",
+  ) {
+    return (event: ChangeEvent<HTMLInputElement>) => {
+      const patch = { [field]: event.target.value };
+      if (tab === "weight") updateWeight(lineKey, patch);
+      else updatePiece(lineKey, patch);
+    };
+  }
+
+  function draftProductChange(lineKey: string) {
+    return (event: ChangeEvent<HTMLSelectElement>) => {
+      const productId = event.target.value;
+      const patch = { product_id: productId, unit: productUnit(productId) };
+      if (tab === "weight") updateWeight(lineKey, patch);
+      else updatePiece(lineKey, patch);
+    };
+  }
+
+  function removeDraftLine(lineKey: string) {
+    return () => {
+      if (tab === "weight") {
+        setWeightLines((rows) =>
+          rows.length > 1 ? rows.filter((row) => row.key !== lineKey) : rows,
+        );
+        return;
+      }
+      setPieceLines((rows) =>
+        rows.length > 1 ? rows.filter((row) => row.key !== lineKey) : rows,
+      );
+    };
+  }
+
+  function renderWeightMeasurement(): ReactNode {
+    if (vehicleScale) {
+      return (
+        <div className="form-pair">
+          <label>
+            الوزن القائم{" "}
+            <input
+              type="number"
+              min="0"
+              step="0.001"
+              value={grossWeight}
+              onChange={grossWeightChange}
+              required
+            />
+          </label>
+          <label>
+            وزن السيارة الفارغ{" "}
+            <input
+              type="number"
+              min="0"
+              step="0.001"
+              value={tareWeight}
+              onChange={tareWeightChange}
+              required
+            />
+          </label>
+        </div>
+      );
+    }
+    if (weightMode !== "total_card") return null;
+    return (
+      <label>
+        الوزن الصافي الفعلي{" "}
+        <input
+          type="number"
+          min="0.001"
+          step="0.001"
+          value={netWeight}
+          onChange={netWeightChange}
+          required
+        />
+      </label>
+    );
+  }
+
+  function renderDraftPricing(line: PieceDraft | WeightDraft): ReactNode {
+    if (tab === "piece") {
+      return (
+        <label>
+          سعر الوحدة{" "}
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={line.unit_price}
+            onChange={draftFieldChange(line.key, "unit_price")}
+            required
+          />
+        </label>
+      );
+    }
+    const weightDraft = line as WeightDraft;
+    return (
+      <>
+        {weightMode === "per_line" ? (
+          <label>
+            الوزن الفعلي{" "}
+            <input
+              type="number"
+              min="0.001"
+              step="0.001"
+              value={weightDraft.actual_weight_kg}
+              onChange={draftFieldChange(line.key, "actual_weight_kg")}
+              required
+            />
+          </label>
+        ) : null}
+        {pricingMode === "per_line" ? (
+          <label>
+            سعر الكيلو{" "}
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={weightDraft.price_per_kg}
+              onChange={draftFieldChange(line.key, "price_per_kg")}
+              required
+            />
+          </label>
+        ) : null}
+      </>
     );
   }
 
@@ -832,49 +996,7 @@ export function SalesPage() {
                         />{" "}
                         حساب الصافي من ميزان السيارة
                       </label>
-                      {renderIfElse(
-                        vehicleScale,
-                        () => (
-                          <div className="form-pair">
-                            <label>
-                              الوزن القائم{" "}
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.001"
-                                value={grossWeight}
-                                onChange={(e) => setGrossWeight(e.target.value)}
-                                required
-                              />
-                            </label>
-                            <label>
-                              وزن السيارة الفارغ{" "}
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.001"
-                                value={tareWeight}
-                                onChange={(e) => setTareWeight(e.target.value)}
-                                required
-                              />
-                            </label>
-                          </div>
-                        ),
-                        () =>
-                          renderIf(weightMode === "total_card", () => (
-                            <label>
-                              الوزن الصافي الفعلي{" "}
-                              <input
-                                type="number"
-                                min="0.001"
-                                step="0.001"
-                                value={netWeight}
-                                onChange={(e) => setNetWeight(e.target.value)}
-                                required
-                              />
-                            </label>
-                          )),
-                      )}
+                      {renderWeightMeasurement()}
                       {renderIf(pricingMode === "uniform", () => (
                         <label>
                           سعر الكيلو الموحد{" "}
@@ -883,7 +1005,7 @@ export function SalesPage() {
                             min="0"
                             step="0.01"
                             value={uniformPrice}
-                            onChange={(e) => setUniformPrice(e.target.value)}
+                            onChange={uniformPriceChange}
                             required
                           />
                         </label>
@@ -902,24 +1024,7 @@ export function SalesPage() {
                     <button
                       type="button"
                       className="text-button"
-                      onClick={() =>
-                        tab === "weight"
-                          ? setWeightLines((x) => [
-                              ...x,
-                              {
-                                ...weightLine(options.products[0]?.id),
-                                unit:
-                                  options.products[0]?.unit_symbol || "ماسورة",
-                              },
-                            ])
-                          : setPieceLines((x) => [
-                              ...x,
-                              pieceLine(
-                                options.products[0]?.id,
-                                options.products[0]?.unit_symbol || "قطعة",
-                              ),
-                            ])
-                      }
+                      onClick={addDraftLine}
                     >
                       <Plus size={15} /> إضافة بند
                     </button>
@@ -935,17 +1040,7 @@ export function SalesPage() {
                             الصنف{" "}
                             <select
                               value={line.product_id}
-                              onChange={(e) =>
-                                tab === "weight"
-                                  ? updateWeight(line.key, {
-                                      product_id: e.target.value,
-                                      unit: productUnit(e.target.value),
-                                    })
-                                  : updatePiece(line.key, {
-                                      product_id: e.target.value,
-                                      unit: productUnit(e.target.value),
-                                    })
-                              }
+                              onChange={draftProductChange(line.key)}
                             >
                               {options.products.map((x) => (
                                 <option key={x.id} value={x.id}>
@@ -961,15 +1056,7 @@ export function SalesPage() {
                               min="0.001"
                               step="0.001"
                               value={line.quantity}
-                              onChange={(e) =>
-                                tab === "weight"
-                                  ? updateWeight(line.key, {
-                                      quantity: e.target.value,
-                                    })
-                                  : updatePiece(line.key, {
-                                      quantity: e.target.value,
-                                    })
-                              }
+                              onChange={draftFieldChange(line.key, "quantity")}
                               required
                             />
                           </label>
@@ -978,95 +1065,16 @@ export function SalesPage() {
                             <input
                               value={line.unit}
                               maxLength={40}
-                              onChange={(e) =>
-                                tab === "weight"
-                                  ? updateWeight(line.key, {
-                                      unit: e.target.value,
-                                    })
-                                  : updatePiece(line.key, {
-                                      unit: e.target.value,
-                                    })
-                              }
+                              onChange={draftFieldChange(line.key, "unit")}
                               required
                             />
                           </label>
-                          {renderIfElse(
-                            tab === "piece",
-                            () => (
-                              <label>
-                                سعر الوحدة{" "}
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={line.unit_price}
-                                  onChange={(e) =>
-                                    updatePiece(line.key, {
-                                      unit_price: e.target.value,
-                                    })
-                                  }
-                                  required
-                                />
-                              </label>
-                            ),
-                            () => (
-                              <>
-                                {renderIf(weightMode === "per_line", () => (
-                                  <label>
-                                    الوزن الفعلي{" "}
-                                    <input
-                                      type="number"
-                                      min="0.001"
-                                      step="0.001"
-                                      value={
-                                        (line as WeightDraft).actual_weight_kg
-                                      }
-                                      onChange={(e) =>
-                                        updateWeight(line.key, {
-                                          actual_weight_kg: e.target.value,
-                                        })
-                                      }
-                                      required
-                                    />
-                                  </label>
-                                ))}
-                                {renderIf(pricingMode === "per_line", () => (
-                                  <label>
-                                    سعر الكيلو{" "}
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      step="0.01"
-                                      value={(line as WeightDraft).price_per_kg}
-                                      onChange={(e) =>
-                                        updateWeight(line.key, {
-                                          price_per_kg: e.target.value,
-                                        })
-                                      }
-                                      required
-                                    />
-                                  </label>
-                                ))}
-                              </>
-                            ),
-                          )}
+                          {renderDraftPricing(line)}
                           <button
                             type="button"
                             className="mini-action"
                             aria-label="حذف"
-                            onClick={() =>
-                              tab === "weight"
-                                ? setWeightLines((x) =>
-                                    x.length > 1
-                                      ? x.filter((y) => y.key !== line.key)
-                                      : x,
-                                  )
-                                : setPieceLines((x) =>
-                                    x.length > 1
-                                      ? x.filter((y) => y.key !== line.key)
-                                      : x,
-                                  )
-                            }
+                            onClick={removeDraftLine(line.key)}
                           >
                             <Trash2 size={14} />
                           </button>

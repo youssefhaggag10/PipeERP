@@ -10,7 +10,9 @@ down_revision: str | None = "20260818_0005"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 PRODUCTS_ID = "products.id"
+WAREHOUSES_ID = "warehouses.id"
 UNIT_COST_NONNEGATIVE = "unit_cost >= 0"
+NOW_SQL = "now()"
 
 
 def timestamps() -> tuple[sa.Column[object], sa.Column[object]]:
@@ -18,13 +20,13 @@ def timestamps() -> tuple[sa.Column[object], sa.Column[object]]:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
     )
@@ -47,7 +49,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["warehouse_id"],
-            ["warehouses.id"],
+            [WAREHOUSES_ID],
             ondelete="RESTRICT",
             name=op.f("fk_inventory_lots_warehouse_id_warehouses"),
         ),
@@ -84,7 +86,7 @@ def upgrade() -> None:
         sa.Column(
             "received_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
         sa.Column("version", sa.Integer(), nullable=False),
@@ -136,7 +138,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["warehouse_id"],
-            ["warehouses.id"],
+            [WAREHOUSES_ID],
             ondelete="RESTRICT",
             name=op.f("fk_inventory_layers_warehouse_id_warehouses"),
         ),
@@ -168,7 +170,7 @@ def upgrade() -> None:
         sa.Column("notes", sa.Text(), nullable=False),
         sa.Column("posted_by_id", sa.Uuid(), nullable=False),
         sa.Column(
-            "posted_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False
+            "posted_at", sa.DateTime(timezone=True), server_default=sa.text(NOW_SQL), nullable=False
         ),
         sa.CheckConstraint(
             "quantity_delta <> 0 OR weight_delta_kg <> 0",
@@ -212,7 +214,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["warehouse_id"],
-            ["warehouses.id"],
+            [WAREHOUSES_ID],
             ondelete="RESTRICT",
             name=op.f("fk_inventory_transactions_warehouse_id_warehouses"),
         ),
@@ -306,7 +308,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["warehouse_id"],
-            ["warehouses.id"],
+            [WAREHOUSES_ID],
             ondelete="RESTRICT",
             name=op.f("fk_inventory_balances_warehouse_id_warehouses"),
         ),

@@ -16,6 +16,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 USERS_ID = "users.id"
+CURRENT_TIMESTAMP_SQL = "(CURRENT_TIMESTAMP)"
 
 
 def upgrade() -> None:
@@ -32,7 +33,7 @@ def upgrade() -> None:
         sa.Column(
             "return_date",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.Column("total", sa.Numeric(precision=20, scale=2), nullable=False),
@@ -49,13 +50,13 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.CheckConstraint(
@@ -146,7 +147,7 @@ def upgrade() -> None:
         sa.Column(
             "refund_date",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.Column("amount", sa.Numeric(precision=20, scale=2), nullable=False),
@@ -164,13 +165,13 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.CheckConstraint(
@@ -267,13 +268,13 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.CheckConstraint(

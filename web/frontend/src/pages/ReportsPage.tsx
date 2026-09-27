@@ -5,7 +5,13 @@ import {
   Printer,
   RefreshCw,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { useAuth } from "../auth/AuthContext";
 import {
@@ -25,6 +31,7 @@ type ReportKey =
   | "supplier_balances"
   | "payments"
   | "inventory_valuation";
+type PrintKind = "invoice" | "quotation" | "statement";
 type Partner = {
   id: string;
   code: string;
@@ -97,27 +104,39 @@ function printOptionLabel(item: OrderOption | QuoteOption | Partner): string {
 }
 
 function printOptionsFor(
-  kind: "invoice" | "quotation" | "statement",
+  kind: PrintKind,
   orders: OrderOption[],
   quotations: QuoteOption[],
   partners: Partner[],
 ): Array<OrderOption | QuoteOption | Partner> {
-  if (kind === "invoice") return orders.filter((item) => item.invoice?.status === "posted");
+  if (kind === "invoice")
+    return orders.filter((item) => item.invoice?.status === "posted");
   if (kind === "quotation") return quotations;
   return partners.filter((item) => item.is_customer);
 }
 
 function firstPrintDocumentId(
-  kind: "invoice" | "quotation" | "statement",
+  kind: PrintKind,
   orders: OrderOption[],
   quotations: QuoteOption[],
   partners: Partner[],
 ): string {
   if (kind === "invoice") {
-    return orders.find((item) => item.invoice?.status === "posted")?.invoice?.id ?? "";
+    return (
+      orders.find((item) => item.invoice?.status === "posted")?.invoice?.id ??
+      ""
+    );
   }
   if (kind === "quotation") return quotations[0]?.id ?? "";
   return partners.find((item) => item.is_customer)?.id ?? "";
+}
+
+function renderIfElse(
+  condition: boolean,
+  whenTrue: () => ReactNode,
+  whenFalse: () => ReactNode,
+): ReactNode {
+  return condition ? whenTrue() : whenFalse();
 }
 
 export function ReportsPage() {
@@ -131,9 +150,7 @@ export function ReportsPage() {
   const [result, setResult] = useState<ReportView | null>(null);
   const [orders, setOrders] = useState<OrderOption[]>([]);
   const [quotations, setQuotations] = useState<QuoteOption[]>([]);
-  const [printKind, setPrintKind] = useState<
-    "invoice" | "quotation" | "statement"
-  >("invoice");
+  const [printKind, setPrintKind] = useState<PrintKind>("invoice");
   const [documentId, setDocumentId] = useState("");
   const [document, setDocument] = useState<PrintDocument | null>(null);
   const [statement, setStatement] = useState<Statement | null>(null);
@@ -192,7 +209,9 @@ export function ReportsPage() {
     setPartnerId("");
   }, [reportKey]);
   useEffect(() => {
-    setDocumentId(firstPrintDocumentId(printKind, orders, quotations, partners));
+    setDocumentId(
+      firstPrintDocumentId(printKind, orders, quotations, partners),
+    );
     setDocument(null);
     setStatement(null);
   }, [printKind, orders, quotations, partners]);
@@ -278,241 +297,236 @@ export function ReportsPage() {
           </button>
         ) : null}
       </div>
-      {tab === "reports" ? (
-        <>
-          <section className="panel report-filters">
-            <label>
-              التقرير
-              {" "}
-              <select
-                value={reportKey}
-                onChange={(event) =>
-                  setReportKey(event.target.value as ReportKey)
-                }
-              >
-                {reports.map((item) => (
-                  <option key={item.key} value={item.key}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              من
-              {" "}
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(event) => setDateFrom(event.target.value)}
-              />
-            </label>
-            <label>
-              إلى
-              {" "}
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(event) => setDateTo(event.target.value)}
-              />
-            </label>
-            {selectedReport.partner !== "none" ? (
+      {renderIfElse(
+        tab === "reports",
+        () => (
+          <>
+            <section className="panel report-filters">
               <label>
-                الطرف
-                {" "}
+                التقرير{" "}
                 <select
-                  value={partnerId}
-                  onChange={(event) => setPartnerId(event.target.value)}
+                  value={reportKey}
+                  onChange={(event) =>
+                    setReportKey(event.target.value as ReportKey)
+                  }
                 >
-                  <option value="">الكل</option>
-                  {filteredPartners.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.code} · {item.name_ar}
+                  {reports.map((item) => (
+                    <option key={item.key} value={item.key}>
+                      {item.label}
                     </option>
                   ))}
                 </select>
               </label>
-            ) : null}
-            <button
-              className="primary-button"
-              onClick={() => void generate()}
-              disabled={loading}
-            >
-              <BarChart3 size={17} /> إنشاء
-            </button>
+              <label>
+                من{" "}
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(event) => setDateFrom(event.target.value)}
+                />
+              </label>
+              <label>
+                إلى{" "}
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(event) => setDateTo(event.target.value)}
+                />
+              </label>
+              {selectedReport.partner !== "none" ? (
+                <label>
+                  الطرف{" "}
+                  <select
+                    value={partnerId}
+                    onChange={(event) => setPartnerId(event.target.value)}
+                  >
+                    <option value="">الكل</option>
+                    {filteredPartners.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.code} · {item.name_ar}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              <button
+                className="primary-button"
+                onClick={() => void generate()}
+                disabled={loading}
+              >
+                <BarChart3 size={17} /> إنشاء
+              </button>
+              {result ? (
+                <a className="secondary-button" href={exportHref}>
+                  <Download size={17} /> Excel
+                </a>
+              ) : null}
+            </section>
             {result ? (
-              <a className="secondary-button" href={exportHref}>
-                <Download size={17} /> Excel
-              </a>
-            ) : null}
-          </section>
-          {result ? (
-            <section className="panel report-result">
-              <header className="panel__head">
-                <div>
-                  <h3>{result.title}</h3>
-                  <p>
-                    {result.date_from} — {result.date_to}
-                  </p>
-                </div>
-                <span className="status-badge status-badge--active">
-                  {result.rows.length} صف
-                </span>
-              </header>
-              <div className="report-summary">
-                {Object.entries(result.summary).map(([key, value]) => (
-                  <span key={key}>
-                    <small>{summaryLabels[key] || key}</small>
-                    <strong>{value}</strong>
+              <section className="panel report-result">
+                <header className="panel__head">
+                  <div>
+                    <h3>{result.title}</h3>
+                    <p>
+                      {result.date_from} — {result.date_to}
+                    </p>
+                  </div>
+                  <span className="status-badge status-badge--active">
+                    {result.rows.length} صف
                   </span>
-                ))}
-              </div>
-              <div className="data-table-wrap">
-                <table className="data-table report-table">
-                  <thead>
-                    <tr>
-                      {result.columns.map((column) => (
-                        <th key={column}>{column}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.rows.map((row) => (
-                      <tr key={Object.values(row).join("|")}>
+                </header>
+                <div className="report-summary">
+                  {Object.entries(result.summary).map(([key, value]) => (
+                    <span key={key}>
+                      <small>{summaryLabels[key] || key}</small>
+                      <strong>{value}</strong>
+                    </span>
+                  ))}
+                </div>
+                <div className="data-table-wrap">
+                  <table className="data-table report-table">
+                    <thead>
+                      <tr>
                         {result.columns.map((column) => (
-                          <td key={column}>{row[column] ?? "—"}</td>
+                          <th key={column}>{column}</th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          ) : (
-            <section className="empty-state report-empty">
-              <BarChart3 size={34} />
-              <h3>اختر التقرير ثم اضغط إنشاء</h3>
-              <p>
-                تُحسب القيم لحظيًا من المبيعات والمشتريات والخزانة والمخزون.
-              </p>
-            </section>
-          )}
-        </>
-      ) : (
-        <>
-          <section className="panel report-filters print-filters">
-            <label>
-              المستند
-              {" "}
-              <select
-                value={printKind}
-                onChange={(event) =>
-                  setPrintKind(event.target.value as typeof printKind)
-                }
-              >
-                {canSales ? (
-                  <option value="invoice">فاتورة مبيعات / وزن</option>
-                ) : null}
-                {user?.permissions.includes("sales.read") ? (
-                  <option value="quotation">عرض سعر</option>
-                ) : null}
-                {canAccounts ? (
-                  <option value="statement">كشف حساب عميل</option>
-                ) : null}
-              </select>
-            </label>
-            <label>
-              الرقم
-              {" "}
-              <select
-                value={documentId}
-                onChange={(event) => setDocumentId(event.target.value)}
-              >
-                {printOptions.map((item) => {
-                  const value =
-                    "invoice" in item ? item.invoice?.id || "" : item.id;
-                  const label = printOptionLabel(item);
-                  return (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  );
-                })}
-              </select>
-            </label>
-            {printKind === "statement" ? (
-              <>
-                <label>
-                  من
-                  {" "}
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(event) => setDateFrom(event.target.value)}
-                  />
-                </label>
-                <label>
-                  إلى
-                  {" "}
-                  <input
-                    type="date"
-                    value={dateTo}
-                    onChange={(event) => setDateTo(event.target.value)}
-                  />
-                </label>
-                <label className="report-check">
-                  <input
-                    type="checkbox"
-                    checked={detailedStatement}
-                    onChange={(event) =>
-                      setDetailedStatement(event.target.checked)
-                    }
-                  />{" "}
-                  كشف تفصيلي
-                </label>
-                <label className="report-check">
-                  <input
-                    type="checkbox"
-                    checked={includeDrafts}
-                    onChange={(event) => setIncludeDrafts(event.target.checked)}
-                  />{" "}
-                  إظهار المسودات للمراجعة
-                </label>
-              </>
-            ) : null}
-            <button
-              className="primary-button"
-              onClick={() => void preview()}
-              disabled={loading || !documentId}
-            >
-              <FileText size={17} /> معاينة
-            </button>
-            {document || statement ? (
+                    </thead>
+                    <tbody>
+                      {result.rows.map((row) => (
+                        <tr key={Object.values(row).join("|")}>
+                          {result.columns.map((column) => (
+                            <td key={column}>{row[column] ?? "—"}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ) : (
+              <section className="empty-state report-empty">
+                <BarChart3 size={34} />
+                <h3>اختر التقرير ثم اضغط إنشاء</h3>
+                <p>
+                  تُحسب القيم لحظيًا من المبيعات والمشتريات والخزانة والمخزون.
+                </p>
+              </section>
+            )}
+          </>
+        ),
+        () => (
+          <>
+            <section className="panel report-filters print-filters">
+              <label>
+                المستند{" "}
+                <select
+                  value={printKind}
+                  onChange={(event) =>
+                    setPrintKind(event.target.value as typeof printKind)
+                  }
+                >
+                  {canSales ? (
+                    <option value="invoice">فاتورة مبيعات / وزن</option>
+                  ) : null}
+                  {user?.permissions.includes("sales.read") ? (
+                    <option value="quotation">عرض سعر</option>
+                  ) : null}
+                  {canAccounts ? (
+                    <option value="statement">كشف حساب عميل</option>
+                  ) : null}
+                </select>
+              </label>
+              <label>
+                الرقم{" "}
+                <select
+                  value={documentId}
+                  onChange={(event) => setDocumentId(event.target.value)}
+                >
+                  {printOptions.map((item) => {
+                    const value =
+                      "invoice" in item ? item.invoice?.id || "" : item.id;
+                    const label = printOptionLabel(item);
+                    return (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
+              {printKind === "statement" ? (
+                <>
+                  <label>
+                    من{" "}
+                    <input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(event) => setDateFrom(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    إلى{" "}
+                    <input
+                      type="date"
+                      value={dateTo}
+                      onChange={(event) => setDateTo(event.target.value)}
+                    />
+                  </label>
+                  <label className="report-check">
+                    <input
+                      type="checkbox"
+                      checked={detailedStatement}
+                      onChange={(event) =>
+                        setDetailedStatement(event.target.checked)
+                      }
+                    />{" "}
+                    كشف تفصيلي
+                  </label>
+                  <label className="report-check">
+                    <input
+                      type="checkbox"
+                      checked={includeDrafts}
+                      onChange={(event) =>
+                        setIncludeDrafts(event.target.checked)
+                      }
+                    />{" "}
+                    إظهار المسودات للمراجعة
+                  </label>
+                </>
+              ) : null}
               <button
-                className="secondary-button"
-                onClick={printA4}
+                className="primary-button"
+                onClick={() => void preview()}
+                disabled={loading || !documentId}
               >
-                <Printer size={17} /> A4 / PDF
+                <FileText size={17} /> معاينة
               </button>
-            ) : null}
-            {statement ? (
-              <a
-                className="secondary-button"
-                href={`/api/v1/reports/export/customer-statements/${documentId}.xlsx?${query({ date_from: dateFrom, date_to: dateTo, detailed: String(detailedStatement), include_drafts: String(includeDrafts) })}`}
-              >
-                <Download size={17} /> Excel
-              </a>
-            ) : null}
-          </section>
-          {document ? <BrandedDocumentPreview document={document} /> : null}
-          {statement ? <BrandedStatementPreview data={statement} /> : null}
-          {!document && !statement ? (
-            <section className="empty-state report-empty">
-              <Printer size={34} />
-              <h3>معاينة A4 قبل الطباعة</h3>
-              <p>اختر المستند، راجعه، ثم اطبعه أو احفظه PDF من المتصفح.</p>
+              {document || statement ? (
+                <button className="secondary-button" onClick={printA4}>
+                  <Printer size={17} /> A4 / PDF
+                </button>
+              ) : null}
+              {statement ? (
+                <a
+                  className="secondary-button"
+                  href={`/api/v1/reports/export/customer-statements/${documentId}.xlsx?${query({ date_from: dateFrom, date_to: dateTo, detailed: String(detailedStatement), include_drafts: String(includeDrafts) })}`}
+                >
+                  <Download size={17} /> Excel
+                </a>
+              ) : null}
             </section>
-          ) : null}
-        </>
+            {document ? <BrandedDocumentPreview document={document} /> : null}
+            {statement ? <BrandedStatementPreview data={statement} /> : null}
+            {!document && !statement ? (
+              <section className="empty-state report-empty">
+                <Printer size={34} />
+                <h3>معاينة A4 قبل الطباعة</h3>
+                <p>اختر المستند، راجعه، ثم اطبعه أو احفظه PDF من المتصفح.</p>
+              </section>
+            ) : null}
+          </>
+        ),
       )}
     </AppShell>
   );
