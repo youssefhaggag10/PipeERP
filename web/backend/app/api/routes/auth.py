@@ -63,7 +63,8 @@ def _set_auth_cookies(
         CSRF_COOKIE,
         csrf_token,
         max_age=settings.refresh_session_hours * 3600,
-        httponly=False,
+        # The double-submit CSRF token must be readable by the SPA; it is not an auth secret.
+        httponly=False,  # NOSONAR
         path="/",
         secure=settings.secure_cookies,
         samesite="strict",
@@ -88,7 +89,8 @@ def _clear_auth_cookies(response: Response, settings: Settings) -> None:
     response.delete_cookie(
         CSRF_COOKIE,
         path="/",
-        httponly=False,
+        # Match the deliberately script-readable double-submit cookie created above.
+        httponly=False,  # NOSONAR
         secure=settings.secure_cookies,
         samesite="strict",
     )

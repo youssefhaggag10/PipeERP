@@ -20,6 +20,8 @@ USERS_ID = "users.id"
 SALES_ORDERS_ID = "sales_orders.id"
 SUBTOTAL_NONNEGATIVE = "subtotal >= 0"
 VERSION_POSITIVE = "version > 0"
+PRODUCTS_ID = "products.id"
+QUANTITY_POSITIVE = "quantity > 0"
 
 
 def _timestamps() -> list[sa.Column]:
@@ -102,7 +104,7 @@ def upgrade() -> None:
         sa.Column("price_per_kg", sa.Numeric(20, 6), nullable=False),
         sa.Column("notes", sa.Text(), nullable=False),
         *_timestamps(),
-        sa.CheckConstraint("quantity > 0", name=op.f("ck_sales_order_lines_quantity_positive")),
+        sa.CheckConstraint(QUANTITY_POSITIVE, name=op.f("ck_sales_order_lines_quantity_positive")),
         sa.CheckConstraint(
             "unit_price >= 0", name=op.f("ck_sales_order_lines_unit_price_nonnegative")
         ),
@@ -119,7 +121,7 @@ def upgrade() -> None:
             "price_per_kg >= 0", name=op.f("ck_sales_order_lines_price_per_kg_nonnegative")
         ),
         sa.ForeignKeyConstraint(["sales_order_id"], [SALES_ORDERS_ID], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["product_id"], ["products.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["product_id"], [PRODUCTS_ID], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("sales_order_id", "product_id"),
     )
@@ -215,7 +217,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["sales_order_line_id"], ["sales_order_lines.id"], ondelete="RESTRICT"
         ),
-        sa.ForeignKeyConstraint(["product_id"], ["products.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["product_id"], [PRODUCTS_ID], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("weight_card_id", "sales_order_line_id"),
     )
@@ -316,7 +318,9 @@ def upgrade() -> None:
         sa.Column("weight_kg", sa.Numeric(20, 6), nullable=False),
         sa.Column("cost_amount", sa.Numeric(20, 6), nullable=False),
         *_timestamps(),
-        sa.CheckConstraint("quantity > 0", name=op.f("ck_sales_delivery_lines_quantity_positive")),
+        sa.CheckConstraint(
+            QUANTITY_POSITIVE, name=op.f("ck_sales_delivery_lines_quantity_positive")
+        ),
         sa.CheckConstraint(
             "weight_kg >= 0", name=op.f("ck_sales_delivery_lines_weight_nonnegative")
         ),
@@ -378,7 +382,9 @@ def upgrade() -> None:
         sa.Column("line_total", sa.Numeric(20, 2), nullable=False),
         sa.Column("notes", sa.Text(), nullable=False),
         *_timestamps(),
-        sa.CheckConstraint("quantity > 0", name=op.f("ck_sales_quotation_lines_quantity_positive")),
+        sa.CheckConstraint(
+            QUANTITY_POSITIVE, name=op.f("ck_sales_quotation_lines_quantity_positive")
+        ),
         sa.CheckConstraint(
             "unit_price >= 0", name=op.f("ck_sales_quotation_lines_unit_price_nonnegative")
         ),
@@ -386,7 +392,7 @@ def upgrade() -> None:
             "line_total >= 0", name=op.f("ck_sales_quotation_lines_line_total_nonnegative")
         ),
         sa.ForeignKeyConstraint(["quotation_id"], ["sales_quotations.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["product_id"], ["products.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["product_id"], [PRODUCTS_ID], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(

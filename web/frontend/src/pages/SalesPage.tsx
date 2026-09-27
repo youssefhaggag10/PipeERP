@@ -695,7 +695,7 @@ export function SalesPage() {
                     </small>
                   </span>
                   <span
-                    className={`purchase-status purchase-status--${order.status === "delivered" ? "received" : order.status === "draft" ? "draft" : "cancelled"}`}
+                    className={`purchase-status purchase-status--${orderStatusClass(order.status)}`}
                   >
                     {statusLabels[order.status]}
                   </span>

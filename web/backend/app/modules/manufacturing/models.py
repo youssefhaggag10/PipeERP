@@ -20,6 +20,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.infrastructure.database.base import Base, TimestampMixin
 
 PRODUCTS_ID = "products.id"
+MANUFACTURING_RECIPES_ID = "manufacturing_recipes.id"
+INVENTORY_TRANSACTIONS_ID = "inventory_transactions.id"
 
 
 class ManufacturingRecipe(TimestampMixin, Base):
@@ -61,7 +63,7 @@ class ManufacturingRecipeOutput(TimestampMixin, Base):
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     recipe_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("manufacturing_recipes.id", ondelete="CASCADE"), nullable=False
+        Uuid, ForeignKey(MANUFACTURING_RECIPES_ID, ondelete="CASCADE"), nullable=False
     )
     product_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey(PRODUCTS_ID, ondelete="RESTRICT"), nullable=False
@@ -79,7 +81,7 @@ class ManufacturingRecipeComponent(TimestampMixin, Base):
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     recipe_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("manufacturing_recipes.id", ondelete="CASCADE"), nullable=False
+        Uuid, ForeignKey(MANUFACTURING_RECIPES_ID, ondelete="CASCADE"), nullable=False
     )
     product_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey(PRODUCTS_ID, ondelete="RESTRICT"), nullable=False
@@ -115,7 +117,7 @@ class ManufacturingOrder(TimestampMixin, Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     order_number: Mapped[str] = mapped_column(String(40), nullable=False)
     recipe_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("manufacturing_recipes.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(MANUFACTURING_RECIPES_ID, ondelete="RESTRICT"), nullable=False
     )
     warehouse_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False
@@ -189,7 +191,7 @@ class ManufacturingOrderOutput(TimestampMixin, Base):
     unit_cost: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False, default=0)
     line_cost: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False, default=0)
     inventory_transaction_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("inventory_transactions.id", ondelete="RESTRICT"), unique=True
+        Uuid, ForeignKey(INVENTORY_TRANSACTIONS_ID, ondelete="RESTRICT"), unique=True
     )
 
 
@@ -224,7 +226,7 @@ class ManufacturingOrderMaterial(TimestampMixin, Base):
     issued_cost: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False, default=0)
     used_cost: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False, default=0)
     return_inventory_transaction_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("inventory_transactions.id", ondelete="RESTRICT"), unique=True
+        Uuid, ForeignKey(INVENTORY_TRANSACTIONS_ID, ondelete="RESTRICT"), unique=True
     )
 
 
@@ -246,10 +248,10 @@ class ManufacturingMaterialIssue(TimestampMixin, Base):
         Uuid, ForeignKey("manufacturing_order_materials.id", ondelete="CASCADE"), nullable=False
     )
     inventory_transaction_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("inventory_transactions.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(INVENTORY_TRANSACTIONS_ID, ondelete="RESTRICT"), nullable=False
     )
     reversal_transaction_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("inventory_transactions.id", ondelete="RESTRICT")
+        Uuid, ForeignKey(INVENTORY_TRANSACTIONS_ID, ondelete="RESTRICT")
     )
     issue_kind: Mapped[str] = mapped_column(String(16), nullable=False)
     batch_count: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -301,7 +303,7 @@ class ManufacturingCompletion(TimestampMixin, Base):
     cost_per_good_kg: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     weight_variance_kg: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     scrap_inventory_transaction_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("inventory_transactions.id", ondelete="RESTRICT")
+        Uuid, ForeignKey(INVENTORY_TRANSACTIONS_ID, ondelete="RESTRICT")
     )
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
     completed_by_id: Mapped[UUID] = mapped_column(
@@ -334,7 +336,7 @@ class ManufacturingCompletionOutput(TimestampMixin, Base):
     line_cost: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False)
     unit_cost: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     inventory_transaction_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("inventory_transactions.id", ondelete="RESTRICT")
+        Uuid, ForeignKey(INVENTORY_TRANSACTIONS_ID, ondelete="RESTRICT")
     )
 
 

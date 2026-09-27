@@ -20,6 +20,7 @@ MANUFACTURING_RECIPES_ID = "manufacturing_recipes.id"
 MANUFACTURING_ORDERS_ID = "manufacturing_orders.id"
 PRODUCTS_ID = "products.id"
 INVENTORY_TRANSACTIONS_ID = "inventory_transactions.id"
+CURRENT_TIMESTAMP_SQL = "(CURRENT_TIMESTAMP)"
 
 
 def upgrade() -> None:
@@ -40,13 +41,13 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.CheckConstraint(
@@ -120,13 +121,13 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.CheckConstraint(
@@ -231,13 +232,13 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.CheckConstraint(
@@ -279,13 +280,13 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.ForeignKeyConstraint(
@@ -339,13 +340,13 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.CheckConstraint(
@@ -444,13 +445,13 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.CheckConstraint(
@@ -539,13 +540,13 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.CheckConstraint(
@@ -625,13 +626,13 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.CheckConstraint(
@@ -699,13 +700,13 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.CheckConstraint(
@@ -775,13 +776,13 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.CheckConstraint(
@@ -819,13 +820,13 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            server_default=sa.text(CURRENT_TIMESTAMP_SQL),
             nullable=False,
         ),
         sa.CheckConstraint(

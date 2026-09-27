@@ -15,6 +15,8 @@ down_revision: str | None = "20260824_0016"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+INVENTORY_LAYERS_ID = "inventory_layers.id"
+
 
 def _backfill_deterministic_receipt_layers(connection: sa.Connection) -> None:
     purchase_receipts = connection.execute(
@@ -277,13 +279,13 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["root_inventory_layer_id"],
-            ["inventory_layers.id"],
+            [INVENTORY_LAYERS_ID],
             ondelete="RESTRICT",
             name=op.f("fk_invoice_return_sources_root_inventory_layer_id_inventory_layers"),
         ),
         sa.ForeignKeyConstraint(
             ["consumed_inventory_layer_id"],
-            ["inventory_layers.id"],
+            [INVENTORY_LAYERS_ID],
             ondelete="RESTRICT",
             name=op.f(
                 "fk_invoice_return_sources_consumed_inventory_layer_id_inventory_layers"
@@ -307,7 +309,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["return_inventory_layer_id"],
-            ["inventory_layers.id"],
+            [INVENTORY_LAYERS_ID],
             ondelete="RESTRICT",
             name=op.f("fk_invoice_return_sources_return_inventory_layer_id_inventory_layers"),
         ),
@@ -321,7 +323,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["reversal_inventory_layer_id"],
-            ["inventory_layers.id"],
+            [INVENTORY_LAYERS_ID],
             ondelete="RESTRICT",
             name=op.f("fk_invoice_return_sources_reversal_inventory_layer_id_inventory_layers"),
         ),

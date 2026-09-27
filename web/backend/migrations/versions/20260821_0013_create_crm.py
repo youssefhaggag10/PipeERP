@@ -12,6 +12,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 USERS_ID = "users.id"
+CRM_READ = "crm.read"
 
 
 def upgrade() -> None:
@@ -122,7 +123,7 @@ def upgrade() -> None:
         "role_permissions", sa.column("role_id", sa.Uuid()), sa.column("permission_id", sa.Uuid())
     )
     permission_ids = {}
-    for code, name in (("crm.read", "عرض متابعة العملاء"), ("crm.manage", "إدارة متابعة العملاء")):
+    for code, name in ((CRM_READ, "عرض متابعة العملاء"), ("crm.manage", "إدارة متابعة العملاء")):
         permission_id = uuid4()
         permission_ids[code] = permission_id
         connection.execute(
@@ -138,7 +139,7 @@ def upgrade() -> None:
     role_ids = dict(connection.execute(sa.select(roles.c.code, roles.c.id)).all())
     for role_code, codes in (
         ("system_admin", permission_ids),
-        ("operations_manager", {"crm.read": permission_ids["crm.read"]}),
+        ("operations_manager", {CRM_READ: permission_ids[CRM_READ]}),
     ):
         if role_id := role_ids.get(role_code):
             for permission_id in codes.values():

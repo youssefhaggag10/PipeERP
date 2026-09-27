@@ -27,6 +27,7 @@ from app.modules.purchasing.models import (
     SupplierInvoice,
 )
 from app.modules.purchasing.schemas import (
+    CreatePurchaseOrderLineRequest,
     CreatePurchaseOrderRequest,
     CreateSupplierInvoiceRequest,
     PostPurchaseReceiptRequest,
@@ -58,6 +59,71 @@ class PurchasingNotFound(PurchasingError):
 
 class PurchasingConflict(PurchasingError):
     pass
+
+
+def _active_manufacturing_warehouse(db: Session) -> Warehouse:
+    warehouse = db.scalar(
+        select(Warehouse).where(Warehouse.is_active.is_(True), Warehouse.is_default.is_(True))
+    )
+    if warehouse is None:
+        warehouse = db.scalar(
+            select(Warehouse).where(Warehouse.is_active.is_(True)).order_by(Warehouse.name_ar)
+        )
+    if warehouse is None:
+        raise PurchasingNotFound("لا يوجد مخزن مصنع نشط")
+    return warehouse
+
+
+def _order_products(db: Session, payload: CreatePurchaseOrderRequest) -> dict[UUID, Product]:
+    products = {
+        item.id: item
+        for item in db.scalars(
+            select(Product).where(Product.id.in_({line.product_id for line in payload.lines}))
+        )
+    }
+    invalid_product = any(
+        (product := products.get(line.product_id)) is None
+        or not product.is_active
+        or product.product_type == "service"
+        for line in payload.lines
+    )
+    if invalid_product:
+        raise PurchasingNotFound("أحد منتجات أمر الشراء غير موجود أو غير صالح للمخزون")
+    return products
+
+
+def _new_purchase_order_line(
+    order: PurchaseOrder,
+    product: Product,
+    payload_line: CreatePurchaseOrderLineRequest,
+) -> PurchaseOrderLine:
+    ordered_quantity = quantity(payload_line.ordered_quantity)
+    purchase_loss = quantity(payload_line.purchase_loss_quantity or Decimal("0"))
+    if purchase_loss >= ordered_quantity:
+        raise PurchasingConflict("فقد الشراء يجب أن يكون أقل من الكمية")
+    net_quantity = quantity(ordered_quantity - purchase_loss)
+    line_total = money(ordered_quantity * payload_line.unit_price)
+    inventory_total = ordered_quantity * (
+        payload_line.unit_price + payload_line.additional_unit_cost
+    )
+    lot_number = payload_line.lot_number.strip() or f"PUR-{order.order_number}-{product.code}"
+    return PurchaseOrderLine(
+        purchase_order_id=order.id,
+        product_id=payload_line.product_id,
+        cost_basis="quantity",
+        ordered_quantity=ordered_quantity,
+        ordered_weight_kg=Decimal("0"),
+        unit_price=quantity(payload_line.unit_price),
+        additional_unit_cost=quantity(payload_line.additional_unit_cost),
+        lot_number=lot_number,
+        purchase_loss_quantity=purchase_loss,
+        net_quantity=net_quantity,
+        inventory_unit_cost=quantity(inventory_total / net_quantity),
+        line_total=line_total,
+        received_quantity=Decimal("0"),
+        received_weight_kg=Decimal("0"),
+        version=1,
+    )
 
 
 def _request_hash(payload: PostPurchaseReceiptRequest) -> str:
@@ -201,25 +267,8 @@ def create_purchase_order(
     supplier = db.get(Partner, payload.supplier_id)
     if supplier is None or not supplier.is_active or not supplier.is_supplier:
         raise PurchasingNotFound("المورد غير موجود أو غير نشط")
-    warehouse = db.scalar(
-        select(Warehouse).where(Warehouse.is_active.is_(True), Warehouse.is_default.is_(True))
-    )
-    if warehouse is None:
-        warehouse = db.scalar(
-            select(Warehouse).where(Warehouse.is_active.is_(True)).order_by(Warehouse.name_ar)
-        )
-    if warehouse is None:
-        raise PurchasingNotFound("لا يوجد مخزن مصنع نشط")
-    products = {
-        item.id: item
-        for item in db.scalars(
-            select(Product).where(Product.id.in_({line.product_id for line in payload.lines}))
-        )
-    }
-    for line in payload.lines:
-        product = products.get(line.product_id)
-        if product is None or not product.is_active or product.product_type == "service":
-            raise PurchasingNotFound("أحد منتجات أمر الشراء غير موجود أو غير صالح للمخزون")
+    warehouse = _active_manufacturing_warehouse(db)
+    products = _order_products(db, payload)
     order = PurchaseOrder(
         order_number=allocate_document_number(db, "purchase_order"),
         supplier_id=payload.supplier_id,
@@ -234,45 +283,15 @@ def create_purchase_order(
     db.flush()
     total = Decimal("0")
     for payload_line in payload.lines:
-        product = products[payload_line.product_id]
-        ordered_quantity = quantity(payload_line.ordered_quantity)
-        default_loss = Decimal("0")
-        purchase_loss = quantity(
-            payload_line.purchase_loss_quantity
-            if payload_line.purchase_loss_quantity is not None
-            else default_loss
-        )
-        if purchase_loss >= ordered_quantity and ordered_quantity > 0:
-            raise PurchasingConflict("فقد الشراء يجب أن يكون أقل من الكمية")
-        net_quantity = quantity(ordered_quantity - purchase_loss)
         # Supplier payable excludes internal processing/handling cost. That
         # extra cost is capitalized into FIFO only when goods are received.
-        line_total = money(ordered_quantity * payload_line.unit_price)
-        inventory_total = ordered_quantity * (
-            payload_line.unit_price + payload_line.additional_unit_cost
+        line = _new_purchase_order_line(
+            order,
+            products[payload_line.product_id],
+            payload_line,
         )
-        inventory_unit_cost = quantity(inventory_total / net_quantity)
-        lot_number = payload_line.lot_number.strip() or f"PUR-{order.order_number}-{product.code}"
-        total += line_total
-        db.add(
-            PurchaseOrderLine(
-                purchase_order_id=order.id,
-                product_id=payload_line.product_id,
-                cost_basis="quantity",
-                ordered_quantity=ordered_quantity,
-                ordered_weight_kg=Decimal("0"),
-                unit_price=quantity(payload_line.unit_price),
-                additional_unit_cost=quantity(payload_line.additional_unit_cost),
-                lot_number=lot_number,
-                purchase_loss_quantity=purchase_loss,
-                net_quantity=net_quantity,
-                inventory_unit_cost=inventory_unit_cost,
-                line_total=line_total,
-                received_quantity=Decimal("0"),
-                received_weight_kg=Decimal("0"),
-                version=1,
-            )
-        )
+        total += line.line_total
+        db.add(line)
     order.total = money(total)
     db.flush()
     add_audit(

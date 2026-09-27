@@ -19,6 +19,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.base import Base, TimestampMixin
 
+USERS_ID = "users.id"
+
 PURCHASE_ORDERS_ID = "purchase_orders.id"
 VERSION_POSITIVE = "version > 0"
 
@@ -52,7 +54,7 @@ class PurchaseOrder(TimestampMixin, Base):
     total: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False, default=0)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_by_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT"), nullable=False
     )
 
 
@@ -133,13 +135,13 @@ class PurchaseReceipt(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="posted")
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
     posted_by_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT"), nullable=False
     )
     posted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     reversed_by_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT")
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT")
     )
     reversed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     reversal_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")

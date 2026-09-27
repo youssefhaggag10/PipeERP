@@ -21,6 +21,7 @@ from app.infrastructure.database.base import Base, TimestampMixin
 
 USERS_ID = "users.id"
 INVENTORY_TRANSACTIONS_ID = "inventory_transactions.id"
+INVENTORY_LAYERS_ID = "inventory_layers.id"
 
 
 class InvoiceReturn(TimestampMixin, Base):
@@ -213,10 +214,10 @@ class InvoiceReturnSource(TimestampMixin, Base):
         Uuid, ForeignKey("purchase_receipt_lines.id", ondelete="RESTRICT")
     )
     root_inventory_layer_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("inventory_layers.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(INVENTORY_LAYERS_ID, ondelete="RESTRICT"), nullable=False
     )
     consumed_inventory_layer_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("inventory_layers.id", ondelete="RESTRICT")
+        Uuid, ForeignKey(INVENTORY_LAYERS_ID, ondelete="RESTRICT")
     )
     return_inventory_transaction_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey(INVENTORY_TRANSACTIONS_ID, ondelete="RESTRICT"), nullable=False
@@ -225,13 +226,13 @@ class InvoiceReturnSource(TimestampMixin, Base):
         Uuid, ForeignKey("inventory_allocations.id", ondelete="RESTRICT")
     )
     return_inventory_layer_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("inventory_layers.id", ondelete="RESTRICT")
+        Uuid, ForeignKey(INVENTORY_LAYERS_ID, ondelete="RESTRICT")
     )
     reversal_inventory_transaction_id: Mapped[UUID | None] = mapped_column(
         Uuid, ForeignKey(INVENTORY_TRANSACTIONS_ID, ondelete="RESTRICT")
     )
     reversal_inventory_layer_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("inventory_layers.id", ondelete="RESTRICT")
+        Uuid, ForeignKey(INVENTORY_LAYERS_ID, ondelete="RESTRICT")
     )
     quantity: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     weight_kg: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False, default=0)

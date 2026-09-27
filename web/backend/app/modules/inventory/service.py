@@ -548,6 +548,91 @@ def post_issue(
     return transaction
 
 
+PairedAllocation = tuple[InventoryLayer, Decimal, Decimal, Decimal]
+
+
+def _validate_paired_availability(
+    layers: list[InventoryLayer],
+    *,
+    requested_quantity: Decimal,
+    requested_weight_kg: Decimal,
+) -> None:
+    available_quantity = sum((layer.quantity_remaining for layer in layers), Decimal("0"))
+    available_weight = sum((layer.weight_remaining_kg for layer in layers), Decimal("0"))
+    if available_quantity < requested_quantity:
+        raise InsufficientStock(
+            f"عدد المواسير غير كافٍ. المتاح {available_quantity} والمطلوب {requested_quantity}"
+        )
+    if available_weight < requested_weight_kg:
+        raise InsufficientStock(
+            f"الوزن المخزني غير كافٍ. المتاح {available_weight} والمطلوب {requested_weight_kg}"
+        )
+
+
+def _paired_layer_amounts(
+    layer: InventoryLayer,
+    *,
+    remaining_quantity: Decimal,
+    remaining_weight: Decimal,
+    average_sale_weight: Decimal,
+) -> tuple[Decimal, Decimal]:
+    max_quantity_by_weight = quantity(layer.weight_remaining_kg / average_sale_weight)
+    take_quantity = min(
+        remaining_quantity,
+        layer.quantity_remaining,
+        max_quantity_by_weight,
+    )
+    if take_quantity <= 0:
+        return Decimal("0"), Decimal("0")
+    take_weight = (
+        remaining_weight
+        if take_quantity == remaining_quantity
+        else quantity(take_quantity * average_sale_weight)
+    )
+    if take_weight > layer.weight_remaining_kg:
+        take_weight = layer.weight_remaining_kg
+        take_quantity = quantity(take_weight / average_sale_weight)
+    return take_quantity, take_weight
+
+
+def _prepare_paired_allocations(
+    layers: list[InventoryLayer],
+    *,
+    requested_quantity: Decimal,
+    requested_weight_kg: Decimal,
+) -> tuple[list[PairedAllocation], Decimal]:
+    average_sale_weight = requested_weight_kg / requested_quantity
+    remaining_quantity = requested_quantity
+    remaining_weight = requested_weight_kg
+    prepared: list[PairedAllocation] = []
+    total_cost = Decimal("0")
+    for layer in layers:
+        if remaining_quantity == 0:
+            break
+        take_quantity, take_weight = _paired_layer_amounts(
+            layer,
+            remaining_quantity=remaining_quantity,
+            remaining_weight=remaining_weight,
+            average_sale_weight=average_sale_weight,
+        )
+        if take_quantity <= 0:
+            continue
+        allocation_cost = quantity(
+            take_weight * layer.unit_cost
+            if layer.cost_basis == "weight"
+            else take_quantity * layer.unit_cost
+        )
+        prepared.append((layer, take_quantity, take_weight, allocation_cost))
+        total_cost += allocation_cost
+        remaining_quantity = quantity(remaining_quantity - take_quantity)
+        remaining_weight = quantity(remaining_weight - take_weight)
+    if remaining_quantity != 0 or remaining_weight != 0:
+        raise InsufficientStock(
+            "الرصيد الإجمالي موجود لكن نسب العدد والوزن داخل طبقات FIFO لا تكفي كارتة الوزن"
+        )
+    return prepared, total_cost
+
+
 def post_exact_paired_issue(
     db: Session,
     *,
@@ -597,54 +682,16 @@ def post_exact_paired_issue(
             .with_for_update()
         )
     )
-    available_quantity = sum((layer.quantity_remaining for layer in layers), Decimal("0"))
-    available_weight = sum((layer.weight_remaining_kg for layer in layers), Decimal("0"))
-    if available_quantity < requested_quantity:
-        raise InsufficientStock(
-            f"عدد المواسير غير كافٍ. المتاح {available_quantity} والمطلوب {requested_quantity}"
-        )
-    if available_weight < requested_weight_kg:
-        raise InsufficientStock(
-            f"الوزن المخزني غير كافٍ. المتاح {available_weight} والمطلوب {requested_weight_kg}"
-        )
-
-    average_sale_weight = requested_weight_kg / requested_quantity
-    remaining_quantity = requested_quantity
-    remaining_weight = requested_weight_kg
-    prepared: list[tuple[InventoryLayer, Decimal, Decimal, Decimal]] = []
-    total_cost = Decimal("0")
-    for layer in layers:
-        if remaining_quantity == 0:
-            break
-        max_quantity_by_weight = quantity(layer.weight_remaining_kg / average_sale_weight)
-        take_quantity = min(
-            remaining_quantity,
-            layer.quantity_remaining,
-            max_quantity_by_weight,
-        )
-        if take_quantity <= 0:
-            continue
-        take_weight = (
-            remaining_weight
-            if take_quantity == remaining_quantity
-            else quantity(take_quantity * average_sale_weight)
-        )
-        if take_weight > layer.weight_remaining_kg:
-            take_weight = layer.weight_remaining_kg
-            take_quantity = quantity(take_weight / average_sale_weight)
-        allocation_cost = quantity(
-            take_weight * layer.unit_cost
-            if layer.cost_basis == "weight"
-            else take_quantity * layer.unit_cost
-        )
-        prepared.append((layer, take_quantity, take_weight, allocation_cost))
-        total_cost += allocation_cost
-        remaining_quantity = quantity(remaining_quantity - take_quantity)
-        remaining_weight = quantity(remaining_weight - take_weight)
-    if remaining_quantity != 0 or remaining_weight != 0:
-        raise InsufficientStock(
-            "الرصيد الإجمالي موجود لكن نسب العدد والوزن داخل طبقات FIFO لا تكفي كارتة الوزن"
-        )
+    _validate_paired_availability(
+        layers,
+        requested_quantity=requested_quantity,
+        requested_weight_kg=requested_weight_kg,
+    )
+    prepared, total_cost = _prepare_paired_allocations(
+        layers,
+        requested_quantity=requested_quantity,
+        requested_weight_kg=requested_weight_kg,
+    )
 
     average_cost = quantity(total_cost / requested_weight_kg)
     transaction = InventoryTransaction(

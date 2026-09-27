@@ -1281,6 +1281,175 @@ def _complete_outputs(
         )
 
 
+def _completion_plan(
+    db: Session,
+    *,
+    order: ManufacturingOrder,
+    materials: list[ManufacturingOrderMaterial],
+    order_outputs: list[ManufacturingOrderOutput],
+    payload: CompleteManufacturingOrderRequest,
+) -> CompletionPlan:
+    supplied_outputs = {item.product_id: item for item in payload.outputs}
+    if set(supplied_outputs).difference({item.product_id for item in order_outputs}):
+        raise ManufacturingConflict("تفاصيل الإنتاج تحتوي منتجًا لا يخص الأمر")
+    products = _load_products(db, {item.product_id for item in materials})
+    output_products = _load_products(db, {item.product_id for item in order_outputs})
+    completion_outputs = [
+        CompletionOutput(
+            product_id=str(output_row.product_id),
+            name=output_products[output_row.product_id].name_ar,
+            good_quantity=(
+                supplied_outputs[output_row.product_id].good_quantity
+                if output_row.product_id in supplied_outputs
+                else Decimal("0")
+            ),
+            defective_quantity=(
+                supplied_outputs[output_row.product_id].defective_quantity
+                if output_row.product_id in supplied_outputs
+                else Decimal("0")
+            ),
+            actual_weight_kg=(
+                supplied_outputs[output_row.product_id].actual_weight_kg
+                if output_row.product_id in supplied_outputs
+                else Decimal("0")
+            ),
+        )
+        for output_row in order_outputs
+    ]
+    return calculate_completion_plan(
+        actual_batches=payload.actual_batches,
+        issued_batches=order.issued_batches,
+        materials=[
+            CompletionMaterial(
+                product_id=str(item.product_id),
+                name=products[item.product_id].name_ar,
+                component_kind=item.component_kind,
+                quantity_per_batch=item.quantity_per_batch,
+                issued_quantity=item.issued_quantity,
+                unit_cost=(
+                    quantity(item.issued_cost / item.issued_quantity)
+                    if item.issued_quantity > 0
+                    else Decimal("0")
+                ),
+            )
+            for item in materials
+        ],
+        outputs=completion_outputs,
+        scrap_weight_kg=payload.scrap_weight_kg,
+        adjustments=[
+            MixAdjustment(
+                excluded_product_id=str(item.excluded_product_id),
+                batch_count=item.batch_count,
+                reason=item.reason,
+                actual_material_quantities={
+                    str(value.product_id): value.actual_quantity
+                    for value in item.actual_material_quantities
+                },
+            )
+            for item in payload.adjustments
+        ],
+    )
+
+
+def _complete_material_usage(
+    db: Session,
+    *,
+    order: ManufacturingOrder,
+    materials: list[ManufacturingOrderMaterial],
+    plan: CompletionPlan,
+    idempotency_key: str,
+    actor: Principal,
+    client: ClientContext,
+) -> None:
+    usage = {item.product_id: item for item in plan.materials}
+    for item in materials:
+        result = usage[str(item.product_id)]
+        if result.unused_quantity > 0:
+            returned = post_receipt(
+                db,
+                payload=ReceiptRequest(
+                    product_id=item.product_id,
+                    warehouse_id=order.warehouse_id,
+                    quantity=result.unused_quantity,
+                    weight_kg=Decimal("0"),
+                    cost_basis="quantity",
+                    unit_cost=result.unit_cost,
+                    reference_type="manufacturing_unused_return",
+                    reference_id=str(order.id),
+                    reference_line_id=str(item.id),
+                    notes=f"رد خامات غير مستخدمة عند إتمام {order.order_number}",
+                ),
+                idempotency_key=_derived_key(idempotency_key, item.id, "unused-return"),
+                actor_user_id=actor.user.id,
+                client=client,
+                transaction_type="return_in",
+            )
+            item.return_inventory_transaction_id = returned.id
+        item.used_quantity = result.used_quantity
+        item.returned_quantity = result.unused_quantity
+        item.used_cost = result.used_cost
+
+
+def _post_completion_scrap(
+    db: Session,
+    *,
+    order: ManufacturingOrder,
+    completion: ManufacturingCompletion,
+    plan: CompletionPlan,
+    idempotency_key: str,
+    actor: Principal,
+    client: ClientContext,
+) -> None:
+    recipe = db.get(ManufacturingRecipe, order.recipe_id)
+    if recipe is None:
+        raise ManufacturingNotFound("خلطة أمر التصنيع غير موجودة")
+    if plan.scrap_weight_kg <= 0:
+        return
+    scrap_receipt = post_receipt(
+        db,
+        payload=ReceiptRequest(
+            product_id=recipe.scrap_product_id,
+            warehouse_id=order.warehouse_id,
+            quantity=plan.scrap_weight_kg,
+            weight_kg=Decimal("0"),
+            cost_basis="quantity",
+            unit_cost=plan.average_input_cost_per_kg,
+            lot_number=f"{order.order_number}-SCRAP",
+            reference_type="manufacturing_scrap",
+            reference_id=str(order.id),
+            notes=f"هالك مصنع ناتج من {order.order_number}",
+        ),
+        idempotency_key=_derived_key(idempotency_key, completion.id, "scrap-output"),
+        actor_user_id=actor.user.id,
+        client=client,
+        transaction_type="production_output",
+    )
+    completion.scrap_inventory_transaction_id = scrap_receipt.id
+
+
+def _store_mix_adjustments(
+    db: Session, *, completion: ManufacturingCompletion, plan: CompletionPlan
+) -> None:
+    for adjustment_result in plan.adjustments:
+        adjustment = ManufacturingMixAdjustment(
+            completion_id=completion.id,
+            excluded_product_id=UUID(adjustment_result.excluded_product_id),
+            batch_count=adjustment_result.batch_count,
+            reason=adjustment_result.reason,
+            cost_amount=adjustment_result.cost_amount,
+        )
+        db.add(adjustment)
+        db.flush()
+        db.add_all(
+            ManufacturingMixAdjustmentMaterial(
+                adjustment_id=adjustment.id,
+                product_id=UUID(product_id),
+                actual_quantity=actual_quantity,
+            )
+            for product_id, actual_quantity in adjustment_result.actual_material_quantities.items()
+        )
+
+
 def complete_order(
     db: Session,
     *,
@@ -1334,55 +1503,12 @@ def complete_order(
             .with_for_update()
         )
     )
-    supplied_outputs = {item.product_id: item for item in payload.outputs}
-    if set(supplied_outputs).difference({item.product_id for item in order_outputs}):
-        raise ManufacturingConflict("تفاصيل الإنتاج تحتوي منتجًا لا يخص الأمر")
-    products = _load_products(db, {item.product_id for item in materials})
-    output_products = _load_products(db, {item.product_id for item in order_outputs})
-    completion_outputs: list[CompletionOutput] = []
-    for output_row in order_outputs:
-        supplied = supplied_outputs.get(output_row.product_id)
-        completion_outputs.append(
-            CompletionOutput(
-                product_id=str(output_row.product_id),
-                name=output_products[output_row.product_id].name_ar,
-                good_quantity=supplied.good_quantity if supplied else Decimal("0"),
-                defective_quantity=(supplied.defective_quantity if supplied else Decimal("0")),
-                actual_weight_kg=(supplied.actual_weight_kg if supplied else Decimal("0")),
-            )
-        )
-    plan = calculate_completion_plan(
-        actual_batches=payload.actual_batches,
-        issued_batches=order.issued_batches,
-        materials=[
-            CompletionMaterial(
-                product_id=str(item.product_id),
-                name=products[item.product_id].name_ar,
-                component_kind=item.component_kind,
-                quantity_per_batch=item.quantity_per_batch,
-                issued_quantity=item.issued_quantity,
-                unit_cost=(
-                    quantity(item.issued_cost / item.issued_quantity)
-                    if item.issued_quantity > 0
-                    else Decimal("0")
-                ),
-            )
-            for item in materials
-        ],
-        outputs=completion_outputs,
-        scrap_weight_kg=payload.scrap_weight_kg,
-        adjustments=[
-            MixAdjustment(
-                excluded_product_id=str(item.excluded_product_id),
-                batch_count=item.batch_count,
-                reason=item.reason,
-                actual_material_quantities={
-                    str(value.product_id): value.actual_quantity
-                    for value in item.actual_material_quantities
-                },
-            )
-            for item in payload.adjustments
-        ],
+    plan = _completion_plan(
+        db,
+        order=order,
+        materials=materials,
+        order_outputs=order_outputs,
+        payload=payload,
     )
     completion = ManufacturingCompletion(
         manufacturing_order_id=order.id,
@@ -1409,33 +1535,15 @@ def complete_order(
     )
     db.add(completion)
     db.flush()
-    usage = {item.product_id: item for item in plan.materials}
-    for item in materials:
-        result = usage[str(item.product_id)]
-        if result.unused_quantity > 0:
-            returned = post_receipt(
-                db,
-                payload=ReceiptRequest(
-                    product_id=item.product_id,
-                    warehouse_id=order.warehouse_id,
-                    quantity=result.unused_quantity,
-                    weight_kg=Decimal("0"),
-                    cost_basis="quantity",
-                    unit_cost=result.unit_cost,
-                    reference_type="manufacturing_unused_return",
-                    reference_id=str(order.id),
-                    reference_line_id=str(item.id),
-                    notes=f"رد خامات غير مستخدمة عند إتمام {order.order_number}",
-                ),
-                idempotency_key=_derived_key(idempotency_key, item.id, "unused-return"),
-                actor_user_id=actor.user.id,
-                client=client,
-                transaction_type="return_in",
-            )
-            item.return_inventory_transaction_id = returned.id
-        item.used_quantity = result.used_quantity
-        item.returned_quantity = result.unused_quantity
-        item.used_cost = result.used_cost
+    _complete_material_usage(
+        db,
+        order=order,
+        materials=materials,
+        plan=plan,
+        idempotency_key=idempotency_key,
+        actor=actor,
+        client=client,
+    )
     _complete_outputs(
         db,
         order=order,
@@ -1446,52 +1554,16 @@ def complete_order(
         actor=actor,
         client=client,
     )
-    recipe = db.get(ManufacturingRecipe, order.recipe_id)
-    if recipe is None:
-        raise ManufacturingNotFound("خلطة أمر التصنيع غير موجودة")
-    if plan.scrap_weight_kg > 0:
-        scrap_receipt = post_receipt(
-            db,
-            payload=ReceiptRequest(
-                product_id=recipe.scrap_product_id,
-                warehouse_id=order.warehouse_id,
-                quantity=plan.scrap_weight_kg,
-                weight_kg=Decimal("0"),
-                cost_basis="quantity",
-                unit_cost=plan.average_input_cost_per_kg,
-                lot_number=f"{order.order_number}-SCRAP",
-                reference_type="manufacturing_scrap",
-                reference_id=str(order.id),
-                notes=f"هالك مصنع ناتج من {order.order_number}",
-            ),
-            idempotency_key=_derived_key(idempotency_key, completion.id, "scrap-output"),
-            actor_user_id=actor.user.id,
-            client=client,
-            transaction_type="production_output",
-        )
-        completion.scrap_inventory_transaction_id = scrap_receipt.id
-    for adjustment_result in plan.adjustments:
-        adjustment = ManufacturingMixAdjustment(
-            completion_id=completion.id,
-            excluded_product_id=UUID(adjustment_result.excluded_product_id),
-            batch_count=adjustment_result.batch_count,
-            reason=adjustment_result.reason,
-            cost_amount=adjustment_result.cost_amount,
-        )
-        db.add(adjustment)
-        db.flush()
-        db.add_all(
-            [
-                ManufacturingMixAdjustmentMaterial(
-                    adjustment_id=adjustment.id,
-                    product_id=UUID(product_id),
-                    actual_quantity=actual_quantity,
-                )
-                for product_id, actual_quantity in (
-                    adjustment_result.actual_material_quantities.items()
-                )
-            ]
-        )
+    _post_completion_scrap(
+        db,
+        order=order,
+        completion=completion,
+        plan=plan,
+        idempotency_key=idempotency_key,
+        actor=actor,
+        client=client,
+    )
+    _store_mix_adjustments(db, completion=completion, plan=plan)
     order.status = "completed"
     order.actual_batches = plan.actual_batches
     order.returned_scrap_quantity = plan.scrap_weight_kg

@@ -20,6 +20,7 @@ import {
   useMemo,
   useState,
   type FormEvent,
+  type ReactNode,
 } from "react";
 
 import { useAuth } from "../auth/AuthContext";
@@ -223,6 +224,16 @@ function paymentStatusLabel(status: AccountInvoice["payment_status"]): string {
   if (status === "paid") return "مدفوعة";
   if (status === "partial") return "مدفوعة جزئيًا";
   return "غير مدفوعة";
+}
+
+function returnStatusTone(status: AccountInvoice["return_status"]): string {
+  if (status === "none") return "received";
+  if (status === "partial") return "approved";
+  return "cancelled";
+}
+
+function renderIf(condition: boolean, render: () => ReactNode): ReactNode {
+  return condition ? render() : null;
 }
 
 export function TreasuryPage() {
@@ -710,7 +721,7 @@ export function TreasuryPage() {
           {notice}
         </div>
       ) : null}
-      {tab === "summary" ? <section className="inventory-stats treasury-stats">
+      {renderIf(tab === "summary", () => <section className="inventory-stats treasury-stats">
         <article>
           <span className="inventory-stat__icon">
             <Banknote size={20} />
@@ -759,7 +770,7 @@ export function TreasuryPage() {
         <article><span className="inventory-stat__icon inventory-stat__icon--blue"><CircleDollarSign size={20}/></span><span><small>مدفوعات الموردين</small><strong>{currency.format(Number(summary.supplier_payments))} <em>ج.م</em></strong></span></article>
         <article><span className="inventory-stat__icon inventory-stat__icon--amber"><FileClock size={20}/></span><span><small>دفعات مقدمة للموردين</small><strong>{currency.format(Number(summary.supplier_advances))} <em>ج.م</em></strong></span></article>
         <article><span className="inventory-stat__icon inventory-stat__icon--violet"><Building2 size={20}/></span><span><small>مديونيات الموردين</small><strong>{currency.format(Number(summary.payables))} <em>ج.م</em></strong></span></article>
-      </section> : null}
+      </section>)}
       <div className="sales-tabs treasury-tabs" role="tablist">
         <button className={tab === "summary" ? "active" : ""} onClick={() => setTab("summary")}><Scale size={17}/> الملخص</button>
         <button
@@ -802,7 +813,7 @@ export function TreasuryPage() {
         ) : null}
       </div>
 
-      {tab === "payments" ? (
+      {renderIf(tab === "payments", () => (
         <section
           className={`master-layout treasury-layout ${canManage ? "" : "master-layout--single"}`}
         >
@@ -1093,9 +1104,9 @@ export function TreasuryPage() {
             </article>
           ) : null}
         </section>
-      ) : null}
+      ))}
 
-      {tab === "accounts" ? (
+      {renderIf(tab === "accounts", () => (
         <>
           <section
             className={`master-layout treasury-layout ${canManage ? "" : "master-layout--single"}`}
@@ -1259,7 +1270,7 @@ export function TreasuryPage() {
                     />
                   </label>
                   <div className="form-actions">
-                    <button className="primary-button">
+                    <button type="submit" className="primary-button">
                       <Check size={17} /> حفظ
                     </button>
                     {editingAccount ? (
@@ -1347,9 +1358,9 @@ export function TreasuryPage() {
             </section>
           ) : null}
         </>
-      ) : null}
+      ))}
 
-      {tab === "partners" ? (
+      {renderIf(tab === "partners", () => (
         <>
           <section className="partner-balance-toolbar">
             <div className="sales-tabs">
@@ -1428,7 +1439,7 @@ export function TreasuryPage() {
               </table>
             </div>
           </section>
-          {partnerType === "customer" ? (
+          {renderIf(partnerType === "customer", () => (
           <section className="treasury-partner-grid">
             <article className="panel">
               <header className="panel__head">
@@ -1723,10 +1734,10 @@ export function TreasuryPage() {
               </article>
             ) : null}
           </section>
-          ) : null}
+          ))}
         </>
-      ) : null}
-      {tab === "sales-invoices" || tab === "purchase-invoices" ? (
+      ))}
+      {renderIf(tab === "sales-invoices" || tab === "purchase-invoices", () => (
         <section className="panel accounts-invoices-panel">
           <header className="panel__head">
             <div>
@@ -1752,7 +1763,7 @@ export function TreasuryPage() {
                 <td>{(item.payment_methods ?? []).length ? (item.payment_methods ?? []).map((method) => methodLabels[method]).join("، ") : "—"}</td>
                 <td>{currency.format(Number(item.remaining))}</td>
                 <td><span className="purchase-status purchase-status--received">{item.invoice_status === "posted" ? "معتمدة" : item.invoice_status}</span></td>
-                <td><span className={`purchase-status purchase-status--${item.return_status === "none" ? "received" : item.return_status === "partial" ? "approved" : "cancelled"}`}>{item.delivery_return_status}</span></td>
+                <td><span className={`purchase-status purchase-status--${returnStatusTone(item.return_status)}`}>{item.delivery_return_status}</span></td>
                 <td><span className={`purchase-status purchase-status--${paymentStatusTone(item.payment_status)}`}>{paymentStatusLabel(item.payment_status)}</span></td>
                 <td><span className="invoice-row-actions">{canManage && Number(item.remaining) > 0 ? <button className="mini-action" onClick={() => payInvoice(item)}>{item.invoice_type === "sales" ? "تحصيل" : "سداد"}</button> : null}{canReturns && item.return_status !== "full" ? <button className="mini-action" onClick={() => returnInvoice(item)}>إنشاء مرتجع</button> : null}</span></td>
               </tr>)}</tbody>
@@ -1760,9 +1771,9 @@ export function TreasuryPage() {
           </div>
           {!displayedInvoices.length ? <div className="empty-state"><h4>لا توجد فواتير معتمدة</h4></div> : null}
         </section>
-      ) : null}
+      ))}
 
-      {tab === "returns" && canReturns ? <ReturnsWorkspace embedded initialType={returnTarget?.invoice_type} initialInvoiceId={returnTarget?.id} /> : null}
+      {renderIf(tab === "returns" && canReturns, () => <ReturnsWorkspace embedded initialType={returnTarget?.invoice_type} initialInvoiceId={returnTarget?.id} />)}
     </AppShell>
   );
 }

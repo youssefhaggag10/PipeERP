@@ -20,6 +20,7 @@ import {
   useState,
   type Dispatch,
   type FormEvent,
+  type ReactNode,
   type SetStateAction,
 } from "react";
 
@@ -29,6 +30,23 @@ import { api, ApiError } from "../lib/api";
 import { clientId } from "../lib/clientId";
 
 type Tab = "orders" | "recipes";
+
+function renderIf(condition: boolean, render: () => ReactNode): ReactNode {
+  return condition ? render() : null;
+}
+
+function renderIfElse(
+  condition: boolean,
+  whenTrue: () => ReactNode,
+  whenFalse: () => ReactNode,
+): ReactNode {
+  return condition ? whenTrue() : whenFalse();
+}
+
+function renderOptional<T>(value: T | null, render: (value: T) => ReactNode): ReactNode {
+  return value === null ? null : render(value);
+}
+
 type Option = {
   id: string;
   code: string;
@@ -641,6 +659,36 @@ export function ManufacturingPage() {
     );
   }
 
+  function removeRecipeComponent(index: number) {
+    setRecipeComponents((current) =>
+      current.filter((_, lineIndex) => lineIndex !== index),
+    );
+  }
+
+  function removeAdjustment(index: number) {
+    setAdjustments((current) =>
+      current.filter((_, itemIndex) => itemIndex !== index),
+    );
+  }
+
+  function updateAdjustment(index: number, changes: Partial<AdjustmentDraft>) {
+    setAdjustments((current) =>
+      current.map((row, itemIndex) =>
+        itemIndex === index ? { ...row, ...changes } : row,
+      ),
+    );
+  }
+
+  function updateAdjustmentQuantity(index: number, productId: string, value: string) {
+    setAdjustments((current) =>
+      current.map((row, itemIndex) =>
+        itemIndex === index
+          ? { ...row, quantities: { ...row.quantities, [productId]: value } }
+          : row,
+      ),
+    );
+  }
+
   return (
     <AppShell>
       <section className="page-heading manufacturing-heading">
@@ -683,7 +731,7 @@ export function ManufacturingPage() {
         </button>
       </div>
 
-      {tab === "recipes" ? (() => (
+      {renderIfElse(tab === "recipes", () => (
         <section className="master-layout manufacturing-layout">
           <article className="panel">
             <header className="panel__head">
@@ -833,13 +881,7 @@ export function ManufacturingPage() {
                         <button
                           type="button"
                           className="mini-action"
-                          onClick={() =>
-                            setRecipeComponents((current) =>
-                              current.filter(
-                                (_, lineIndex) => lineIndex !== index,
-                              ),
-                            )
-                          }
+                          onClick={() => removeRecipeComponent(index)}
                         >
                           <X size={15} />
                         </button>
@@ -887,6 +929,7 @@ export function ManufacturingPage() {
                   />
                 </label>
                 <button
+                  type="submit"
                   className="primary-button"
                   disabled={submitting || recipeOutputs.length === 0}
                 >
@@ -896,7 +939,7 @@ export function ManufacturingPage() {
             </article>
           ) : null}
         </section>
-      ))() : (() => (
+      ), () => (
         <>
           <section className="master-layout manufacturing-layout">
             <article className="panel">
@@ -936,7 +979,7 @@ export function ManufacturingPage() {
                 ))}
               </div>
             </article>
-            {canManage ? (() => (
+            {renderIf(canManage, () => (
               <article className="panel master-form-card">
                 <header className="panel__head">
                   <div>
@@ -1150,10 +1193,10 @@ export function ManufacturingPage() {
                   </button>
                 </form>
               </article>
-            ))() : null}
+            ))}
           </section>
 
-          {selected ? (() => (
+          {renderOptional(selected, (selected) => (
             <section className="panel manufacturing-detail">
               <header className="panel__head">
                 <div>
@@ -1395,13 +1438,7 @@ export function ManufacturingPage() {
                         <button
                           type="button"
                           className="mini-action"
-                          onClick={() =>
-                            setAdjustments((current) =>
-                              current.filter(
-                                (_, itemIndex) => itemIndex !== index,
-                              ),
-                            )
-                          }
+                          onClick={() => removeAdjustment(index)}
                         >
                           <X size={15} />
                         </button>
@@ -1411,16 +1448,9 @@ export function ManufacturingPage() {
                           <select
                             value={item.excluded_product_id}
                             onChange={(event) =>
-                              setAdjustments((current) =>
-                                current.map((row, itemIndex) =>
-                                  itemIndex === index
-                                    ? {
-                                        ...row,
-                                        excluded_product_id: event.target.value,
-                                      }
-                                    : row,
-                                ),
-                              )
+                              updateAdjustment(index, {
+                                excluded_product_id: event.target.value,
+                              })
                             }
                           >
                             {selected.materials.map((material) => (
@@ -1441,16 +1471,7 @@ export function ManufacturingPage() {
                             min="1"
                             value={item.batch_count}
                             onChange={(event) =>
-                              setAdjustments((current) =>
-                                current.map((row, itemIndex) =>
-                                  itemIndex === index
-                                    ? {
-                                        ...row,
-                                        batch_count: event.target.value,
-                                      }
-                                    : row,
-                                ),
-                              )
+                              updateAdjustment(index, { batch_count: event.target.value })
                             }
                           />
                         </label>
@@ -1461,13 +1482,7 @@ export function ManufacturingPage() {
                             required
                             value={item.reason}
                             onChange={(event) =>
-                              setAdjustments((current) =>
-                                current.map((row, itemIndex) =>
-                                  itemIndex === index
-                                    ? { ...row, reason: event.target.value }
-                                    : row,
-                                ),
-                              )
+                              updateAdjustment(index, { reason: event.target.value })
                             }
                           />
                         </label>
@@ -1489,19 +1504,10 @@ export function ManufacturingPage() {
                                     item.quantities[material.product_id] || ""
                                   }
                                   onChange={(event) =>
-                                    setAdjustments((current) =>
-                                      current.map((row, itemIndex) =>
-                                        itemIndex === index
-                                          ? {
-                                              ...row,
-                                              quantities: {
-                                                ...row.quantities,
-                                                [material.product_id]:
-                                                  event.target.value,
-                                              },
-                                            }
-                                          : row,
-                                      ),
+                                    updateAdjustmentQuantity(
+                                      index,
+                                      material.product_id,
+                                      event.target.value,
                                     )
                                   }
                                 />
@@ -1608,14 +1614,14 @@ export function ManufacturingPage() {
                 </>
               ) : null}
             </section>
-          ))() : null}
+          ))}
         </>
-      ))()}
+      ))}
       {availability ? (
         <div className="availability-backdrop" role="presentation">
-          <section
+          <dialog
+            open
             className="availability-dialog"
-            role="dialog"
             aria-modal="true"
             aria-labelledby="availability-title"
           >
@@ -1694,7 +1700,7 @@ export function ManufacturingPage() {
                 <Play size={16} /> صرف الخامات وبدء الأمر
               </button>
             </footer>
-          </section>
+          </dialog>
         </div>
       ) : null}
     </AppShell>

@@ -508,6 +508,118 @@ def create_weight_sale(
     return _order_view(db, order)
 
 
+def _delivery_weight_context(
+    db: Session, *, order: SalesOrder, lines: list[SalesOrderLine]
+) -> tuple[SalesWeightCard | None, dict[UUID, SalesWeightCardLine]]:
+    if order.billing_method != "weight":
+        return None, {}
+    card = db.scalar(
+        select(SalesWeightCard)
+        .where(
+            SalesWeightCard.sales_order_id == order.id,
+            SalesWeightCard.status == "draft",
+        )
+        .with_for_update()
+    )
+    if card is None:
+        raise SalesConflict("كارتة الوزن غير موجودة أو تم إلغاؤها")
+    weight_by_line = {
+        item.sales_order_line_id: item
+        for item in db.scalars(
+            select(SalesWeightCardLine).where(SalesWeightCardLine.weight_card_id == card.id)
+        )
+    }
+    if set(weight_by_line) != {line.id for line in lines}:
+        raise SalesConflict("يجب استكمال وزن كل بنود الأمر قبل الاعتماد")
+    return card, weight_by_line
+
+
+def _post_delivery_line(
+    db: Session,
+    *,
+    order: SalesOrder,
+    order_line: SalesOrderLine,
+    delivery: SalesDelivery,
+    card: SalesWeightCard | None,
+    weight_line: SalesWeightCardLine | None,
+    child_key: str,
+    actor: Principal,
+    client: ClientContext,
+) -> None:
+    if weight_line is not None:
+        transaction = post_exact_paired_issue(
+            db,
+            product_id=order_line.product_id,
+            warehouse_id=order.warehouse_id,
+            requested_quantity=order_line.quantity,
+            requested_weight_kg=weight_line.actual_weight_kg,
+            idempotency_key=child_key,
+            reference_type="sales_delivery",
+            reference_id=str(delivery.id),
+            reference_line_id=str(order_line.id),
+            notes=f"{order.order_number} / {card.card_number if card else ''}",
+            actor_user_id=actor.user.id,
+            client=client,
+        )
+    else:
+        transaction = post_issue(
+            db,
+            payload=IssueRequest(
+                product_id=order_line.product_id,
+                warehouse_id=order.warehouse_id,
+                amount=order_line.quantity,
+                cost_basis="quantity",
+                reference_type="sales_delivery",
+                reference_id=str(delivery.id),
+                reference_line_id=str(order_line.id),
+                notes=order.order_number,
+            ),
+            idempotency_key=child_key,
+            actor_user_id=actor.user.id,
+            client=client,
+        )
+    db.add(
+        SalesDeliveryLine(
+            sales_delivery_id=delivery.id,
+            sales_order_line_id=order_line.id,
+            inventory_transaction_id=transaction.id,
+            quantity=-transaction.quantity_delta,
+            weight_kg=-transaction.weight_delta_kg,
+            cost_amount=transaction.total_cost,
+        )
+    )
+
+
+def _post_delivery_lines(
+    db: Session,
+    *,
+    order: SalesOrder,
+    lines: list[SalesOrderLine],
+    delivery: SalesDelivery,
+    card: SalesWeightCard | None,
+    weight_by_line: dict[UUID, SalesWeightCardLine],
+    idempotency_key: str,
+    actor: Principal,
+    client: ClientContext,
+) -> None:
+    key_digest = sha256(idempotency_key.encode()).hexdigest()
+    try:
+        for index, order_line in enumerate(lines):
+            _post_delivery_line(
+                db,
+                order=order,
+                order_line=order_line,
+                delivery=delivery,
+                card=card,
+                weight_line=weight_by_line.get(order_line.id),
+                child_key=f"sale-{key_digest}-{index}",
+                actor=actor,
+                client=client,
+            )
+    except (InsufficientStock, InventoryConflict) as exc:
+        raise SalesConflict(str(exc)) from exc
+
+
 def deliver_sales_order(
     db: Session,
     *,
@@ -542,27 +654,7 @@ def deliver_sales_order(
     )
     if not lines:
         raise SalesConflict("أمر البيع لا يحتوي على بنود")
-    card = None
-    weight_by_line: dict[UUID, SalesWeightCardLine] = {}
-    if order.billing_method == "weight":
-        card = db.scalar(
-            select(SalesWeightCard)
-            .where(
-                SalesWeightCard.sales_order_id == order.id,
-                SalesWeightCard.status == "draft",
-            )
-            .with_for_update()
-        )
-        if card is None:
-            raise SalesConflict("كارتة الوزن غير موجودة أو تم إلغاؤها")
-        weight_by_line = {
-            item.sales_order_line_id: item
-            for item in db.scalars(
-                select(SalesWeightCardLine).where(SalesWeightCardLine.weight_card_id == card.id)
-            )
-        }
-        if set(weight_by_line) != {line.id for line in lines}:
-            raise SalesConflict("يجب استكمال وزن كل بنود الأمر قبل الاعتماد")
+    card, weight_by_line = _delivery_weight_context(db, order=order, lines=lines)
 
     delivery = SalesDelivery(
         delivery_number=allocate_document_number(db, "sales_delivery"),
@@ -575,55 +667,17 @@ def deliver_sales_order(
     )
     db.add(delivery)
     db.flush()
-    key_digest = sha256(idempotency_key.encode()).hexdigest()
-    try:
-        for index, order_line in enumerate(lines):
-            child_key = f"sale-{key_digest}-{index}"
-            if order.billing_method == "weight":
-                weight_line_row = weight_by_line[order_line.id]
-                transaction = post_exact_paired_issue(
-                    db,
-                    product_id=order_line.product_id,
-                    warehouse_id=order.warehouse_id,
-                    requested_quantity=order_line.quantity,
-                    requested_weight_kg=weight_line_row.actual_weight_kg,
-                    idempotency_key=child_key,
-                    reference_type="sales_delivery",
-                    reference_id=str(delivery.id),
-                    reference_line_id=str(order_line.id),
-                    notes=f"{order.order_number} / {card.card_number if card else ''}",
-                    actor_user_id=actor.user.id,
-                    client=client,
-                )
-            else:
-                transaction = post_issue(
-                    db,
-                    payload=IssueRequest(
-                        product_id=order_line.product_id,
-                        warehouse_id=order.warehouse_id,
-                        amount=order_line.quantity,
-                        cost_basis="quantity",
-                        reference_type="sales_delivery",
-                        reference_id=str(delivery.id),
-                        reference_line_id=str(order_line.id),
-                        notes=order.order_number,
-                    ),
-                    idempotency_key=child_key,
-                    actor_user_id=actor.user.id,
-                    client=client,
-                )
-            db.add(
-                SalesDeliveryLine(
-                    sales_delivery_id=delivery.id,
-                    sales_order_line_id=order_line.id,
-                    inventory_transaction_id=transaction.id,
-                    quantity=-transaction.quantity_delta,
-                    weight_kg=-transaction.weight_delta_kg,
-                    cost_amount=transaction.total_cost,
-                )
-            )
-    except (InsufficientStock, InventoryConflict) as exc:
-        raise SalesConflict(str(exc)) from exc
+    _post_delivery_lines(
+        db,
+        order=order,
+        lines=lines,
+        delivery=delivery,
+        card=card,
+        weight_by_line=weight_by_line,
+        idempotency_key=idempotency_key,
+        actor=actor,
+        client=client,
+    )
     order.status = "delivered"
     order.version += 1
     if card is not None:

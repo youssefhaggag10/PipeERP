@@ -15,6 +15,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import HTTPCookieProcessor, Request, build_opener
 
+UNITS_ENDPOINT = "/master-data/units?include_inactive=true"
+PIPE_UNIT_LABEL = "ماسورة"
 MARKER = "[PIPEERP-DEMO-V1]"
 UNITS_PATH = "/master-data/units"
 PARTNERS_PATH = "/master-data/partners"
@@ -106,7 +108,7 @@ def seed_master_data(api: Api) -> dict[str, dict[str, Any]]:
     units = {
         "piece": ensure(
             api,
-            "/master-data/units?include_inactive=true",
+            UNITS_ENDPOINT,
             UNITS_PATH,
             "code",
             "DEMO-PC",
@@ -114,7 +116,7 @@ def seed_master_data(api: Api) -> dict[str, dict[str, Any]]:
         ),
         "kg": ensure(
             api,
-            "/master-data/units?include_inactive=true",
+            UNITS_ENDPOINT,
             UNITS_PATH,
             "code",
             "DEMO-KG",
@@ -122,7 +124,7 @@ def seed_master_data(api: Api) -> dict[str, dict[str, Any]]:
         ),
         "service": ensure(
             api,
-            "/master-data/units?include_inactive=true",
+            UNITS_ENDPOINT,
             UNITS_PATH,
             "code",
             "DEMO-SRV",
@@ -376,7 +378,7 @@ def seed_sales(api: Api, data: dict[str, dict[str, Any]]) -> dict[str, Any]:
                     {
                         "product_id": data["finished"]["id"],
                         "quantity": "12",
-                        "unit": "ماسورة",
+                        "unit": PIPE_UNIT_LABEL,
                         "unit_price": "220",
                         "notes": "بيع بالقطعة",
                     }
@@ -408,7 +410,7 @@ def seed_sales(api: Api, data: dict[str, dict[str, Any]]) -> dict[str, Any]:
                     {
                         "product_id": data["finished"]["id"],
                         "quantity": "8",
-                        "unit": "ماسورة",
+                        "unit": PIPE_UNIT_LABEL,
                         "actual_weight_kg": "47.5",
                         "price_per_kg": "38",
                         "notes": "بيع بوزن فعلي",
@@ -434,7 +436,7 @@ def seed_sales(api: Api, data: dict[str, dict[str, Any]]) -> dict[str, Any]:
                     {
                         "product_id": data["finished"]["id"],
                         "quantity": "3",
-                        "unit": "ماسورة",
+                        "unit": PIPE_UNIT_LABEL,
                         "unit_price": "230",
                         "notes": "اتركه مسودة للاختبار",
                     }
@@ -455,7 +457,7 @@ def seed_sales(api: Api, data: dict[str, dict[str, Any]]) -> dict[str, Any]:
                         "product_id": data["finished"]["id"],
                         "item_name": "ماسورة PVC 110 مم",
                         "quantity": "25",
-                        "unit": "ماسورة",
+                        "unit": PIPE_UNIT_LABEL,
                         "unit_price": "215",
                         "notes": "عرض سعر ديمو",
                     },

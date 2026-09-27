@@ -79,14 +79,14 @@ def target(product_id: int, pieces: object, standard_weight_kg: object) -> Produ
     )
 
 
-def replan_for_available_scrap(
+def _validate_stock_aware_plan(
     *,
     target_weight_kg: Decimal,
     base_material_kg_per_batch: Decimal,
     scrap_quantities_kg_per_batch: list[Decimal],
     available_scrap_quantities_kg: list[Decimal],
     old_batches: int,
-) -> StockAwarePlan:
+) -> None:
     if target_weight_kg <= 0 or base_material_kg_per_batch <= 0:
         raise ValueError("تعذر حساب وزن أمر التصنيع أو وزن الخلطة الأساسية")
     if old_batches <= 0:
@@ -98,22 +98,53 @@ def replan_for_available_scrap(
     if any(item < 0 for item in available_scrap_quantities_kg):
         raise ValueError("رصيد الكسر لا يمكن أن يكون سالبًا")
 
+
+def _scrap_totals(
+    *,
+    batches: int,
+    scrap_quantities_kg_per_batch: list[Decimal],
+    available_scrap_quantities_kg: list[Decimal],
+) -> tuple[Decimal, Decimal]:
+    planned_scrap = sum(
+        (item * Decimal(batches) for item in scrap_quantities_kg_per_batch),
+        Decimal("0"),
+    )
+    usable_scrap = sum(
+        (
+            min(per_batch * Decimal(batches), available)
+            for per_batch, available in zip(
+                scrap_quantities_kg_per_batch,
+                available_scrap_quantities_kg,
+                strict=True,
+            )
+        ),
+        Decimal("0"),
+    )
+    return planned_scrap, usable_scrap
+
+
+def replan_for_available_scrap(
+    *,
+    target_weight_kg: Decimal,
+    base_material_kg_per_batch: Decimal,
+    scrap_quantities_kg_per_batch: list[Decimal],
+    available_scrap_quantities_kg: list[Decimal],
+    old_batches: int,
+) -> StockAwarePlan:
+    _validate_stock_aware_plan(
+        target_weight_kg=target_weight_kg,
+        base_material_kg_per_batch=base_material_kg_per_batch,
+        scrap_quantities_kg_per_batch=scrap_quantities_kg_per_batch,
+        available_scrap_quantities_kg=available_scrap_quantities_kg,
+        old_batches=old_batches,
+    )
+
     batches = old_batches
     while True:
-        planned_scrap = sum(
-            (item * Decimal(batches) for item in scrap_quantities_kg_per_batch),
-            Decimal("0"),
-        )
-        usable_scrap = sum(
-            (
-                min(per_batch * Decimal(batches), available)
-                for per_batch, available in zip(
-                    scrap_quantities_kg_per_batch,
-                    available_scrap_quantities_kg,
-                    strict=True,
-                )
-            ),
-            Decimal("0"),
+        planned_scrap, usable_scrap = _scrap_totals(
+            batches=batches,
+            scrap_quantities_kg_per_batch=scrap_quantities_kg_per_batch,
+            available_scrap_quantities_kg=available_scrap_quantities_kg,
         )
         input_weight = base_material_kg_per_batch * Decimal(batches) + usable_scrap
         if input_weight >= target_weight_kg:

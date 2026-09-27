@@ -14,6 +14,7 @@ import {
   useMemo,
   useState,
   type FormEvent,
+  type ReactNode,
 } from "react";
 
 import { useAuth } from "../auth/AuthContext";
@@ -87,6 +88,15 @@ const methodLabel: Record<PaymentMethod, string> = {
   cheque: "شيك",
   wallet: "محفظة",
 };
+
+function renderIf(condition: boolean, render: () => ReactNode): ReactNode {
+  return condition ? render() : null;
+}
+
+function returnLineSummary(line: ReturnDocument["lines"][number]): string {
+  const returnedAmount = Number(line.weight_kg) > 0 ? `${line.weight_kg} كجم` : line.quantity;
+  return `${line.product_name_ar}: ${returnedAmount}`;
+}
 
 export function ReturnsWorkspace({
   embedded = false,
@@ -360,7 +370,7 @@ export function ReturnsWorkspace({
           <BadgeDollarSign size={17} /> المبالغ
         </button>
       </div>
-      {tab === "documents" ? (
+      {renderIf(tab === "documents", () => (
         <section
           className={`master-layout returns-layout ${canManage ? "" : "master-layout--single"}`}
         >
@@ -392,12 +402,7 @@ export function ReturnsWorkspace({
                       {new Date(item.return_date).toLocaleDateString("ar-EG")}
                     </small>
                     <p>
-                      {item.lines
-                        .map(
-                          (line) =>
-                            `${line.product_name_ar}: ${Number(line.weight_kg) > 0 ? `${line.weight_kg} كجم` : line.quantity}`,
-                        )
-                        .join("، ")}
+                      {item.lines.map(returnLineSummary).join("، ")}
                     </p>
                   </div>
                   <b>{currency.format(Number(item.total))} ج.م</b>
@@ -497,9 +502,8 @@ export function ReturnsWorkspace({
                                   : `${line.remaining_quantity} ${line.unit}`}
                               </small>
                             </span>
-                            <div
+                            <fieldset
                               className="return-line-mode"
-                              role="group"
                               aria-label={`طريقة مرتجع ${line.product_name_ar}`}
                             >
                               <button
@@ -530,7 +534,7 @@ export function ReturnsWorkspace({
                               >
                                 كل المتبقي
                               </button>
-                            </div>
+                            </fieldset>
                           </header>
                           {mode === "full_remaining" ? (
                             <p className="return-full-note">
@@ -622,8 +626,8 @@ export function ReturnsWorkspace({
             </article>
           ) : null}
         </section>
-      ) : null}
-      {tab === "refunds" ? (
+      ))}
+      {renderIf(tab === "refunds", () => (
         <section
           className={`master-layout returns-layout ${canManage ? "" : "master-layout--single"}`}
         >
@@ -789,7 +793,7 @@ export function ReturnsWorkspace({
             </article>
           ) : null}
         </section>
-      ) : null}
+      ))}
     </Shell>
   );
 }

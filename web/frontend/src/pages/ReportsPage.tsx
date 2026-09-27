@@ -96,6 +96,30 @@ function printOptionLabel(item: OrderOption | QuoteOption | Partner): string {
   return `${item.code} · ${item.name_ar}`;
 }
 
+function printOptionsFor(
+  kind: "invoice" | "quotation" | "statement",
+  orders: OrderOption[],
+  quotations: QuoteOption[],
+  partners: Partner[],
+): Array<OrderOption | QuoteOption | Partner> {
+  if (kind === "invoice") return orders.filter((item) => item.invoice?.status === "posted");
+  if (kind === "quotation") return quotations;
+  return partners.filter((item) => item.is_customer);
+}
+
+function firstPrintDocumentId(
+  kind: "invoice" | "quotation" | "statement",
+  orders: OrderOption[],
+  quotations: QuoteOption[],
+  partners: Partner[],
+): string {
+  if (kind === "invoice") {
+    return orders.find((item) => item.invoice?.status === "posted")?.invoice?.id ?? "";
+  }
+  if (kind === "quotation") return quotations[0]?.id ?? "";
+  return partners.find((item) => item.is_customer)?.id ?? "";
+}
+
 export function ReportsPage() {
   const { user } = useAuth();
   const [tab, setTab] = useState<"reports" | "print">("reports");
@@ -133,12 +157,7 @@ export function ReportsPage() {
       }),
     [partners, selectedReport.partner],
   );
-  const printOptions =
-    printKind === "invoice"
-      ? orders.filter((item) => item.invoice?.status === "posted")
-      : printKind === "quotation"
-        ? quotations
-        : partners.filter((item) => item.is_customer);
+  const printOptions = printOptionsFor(printKind, orders, quotations, partners);
 
   const loadOptions = useCallback(async () => {
     try {
@@ -173,13 +192,7 @@ export function ReportsPage() {
     setPartnerId("");
   }, [reportKey]);
   useEffect(() => {
-    const first =
-      printKind === "invoice"
-        ? orders.find((item) => item.invoice?.status === "posted")?.invoice?.id
-        : printKind === "quotation"
-          ? quotations[0]?.id
-          : partners.find((item) => item.is_customer)?.id;
-    setDocumentId(first || "");
+    setDocumentId(firstPrintDocumentId(printKind, orders, quotations, partners));
     setDocument(null);
     setStatement(null);
   }, [printKind, orders, quotations, partners]);

@@ -27,6 +27,7 @@ USERS_ID = "users.id"
 SUBTOTAL_NONNEGATIVE = "subtotal >= 0"
 TOTAL_NONNEGATIVE = "total >= 0"
 VERSION_POSITIVE = "version > 0"
+QUANTITY_POSITIVE = "quantity > 0"
 
 
 class SalesOrder(TimestampMixin, Base):
@@ -76,7 +77,7 @@ class SalesOrderLine(TimestampMixin, Base):
     __tablename__ = "sales_order_lines"
     __table_args__ = (
         UniqueConstraint("sales_order_id", "product_id"),
-        CheckConstraint("quantity > 0", name="quantity_positive"),
+        CheckConstraint(QUANTITY_POSITIVE, name="quantity_positive"),
         CheckConstraint("unit_price >= 0", name="unit_price_nonnegative"),
         CheckConstraint("line_total >= 0", name="line_total_nonnegative"),
         CheckConstraint("standard_weight_kg >= 0", name="standard_weight_nonnegative"),
@@ -207,7 +208,7 @@ class SalesDeliveryLine(TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("sales_delivery_id", "sales_order_line_id"),
         UniqueConstraint("inventory_transaction_id"),
-        CheckConstraint("quantity > 0", name="quantity_positive"),
+        CheckConstraint(QUANTITY_POSITIVE, name="quantity_positive"),
         CheckConstraint("weight_kg >= 0", name="weight_nonnegative"),
         CheckConstraint("cost_amount >= 0", name="cost_nonnegative"),
     )
@@ -304,7 +305,7 @@ class SalesQuotation(TimestampMixin, Base):
 class SalesQuotationLine(TimestampMixin, Base):
     __tablename__ = "sales_quotation_lines"
     __table_args__ = (
-        CheckConstraint("quantity > 0", name="quantity_positive"),
+        CheckConstraint(QUANTITY_POSITIVE, name="quantity_positive"),
         CheckConstraint("unit_price >= 0", name="unit_price_nonnegative"),
         CheckConstraint("line_total >= 0", name="line_total_nonnegative"),
         Index("ix_sales_quotation_lines_quotation", "quotation_id", "id"),

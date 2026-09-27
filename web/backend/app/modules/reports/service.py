@@ -40,7 +40,7 @@ from app.modules.treasury.models import (
     PaymentAllocation,
     PaymentTransaction,
 )
-from app.modules.treasury.schemas import StatementLineView
+from app.modules.treasury.schemas import PartnerStatementView, StatementLineView
 from app.modules.treasury.service import list_partner_balances, partner_statement
 
 ZERO = Decimal("0")
@@ -59,6 +59,7 @@ PAID_LABEL = "المدفوع"
 STATUS_LABEL = "الحالة"
 PARTY_LABEL = "الطرف"
 ACCOUNT_LABEL = "الحساب"
+NOTES_LABEL = "ملاحظات"
 REPORT_TITLES: dict[str, str] = {
     "sales": "تقرير المبيعات",
     "purchases": "تقرير المشتريات",
@@ -308,6 +309,147 @@ def quotation_print_data(db: Session, quotation_id: UUID) -> PrintDocumentView:
     )
 
 
+def _statement_with_drafts(
+    db: Session,
+    *,
+    statement: PartnerStatementView,
+    customer_id: UUID,
+    start: datetime,
+    end: datetime,
+) -> PartnerStatementView:
+    draft_rows = db.scalars(
+        select(SalesOrder)
+        .where(
+            SalesOrder.customer_id == customer_id,
+            SalesOrder.status == "draft",
+            SalesOrder.order_date >= start,
+            SalesOrder.order_date < end,
+        )
+        .order_by(SalesOrder.order_date, SalesOrder.id)
+    )
+    merged = list(statement.lines)
+    merged.extend(
+        StatementLineView(
+            movement_date=order.order_date,
+            document_number=order.order_number,
+            movement_type=(
+                "مسودة بيع بالوزن" if order.billing_method == "weight" else "مسودة بيع عادية"
+            ),
+            debit=ZERO,
+            credit=ZERO,
+            running_balance=ZERO,
+            notes=f"للمراجعة فقط — لا تدخل في الرصيد — قيمة {_money(order.total)}",
+        )
+        for order in draft_rows
+    )
+    merged.sort(
+        key=lambda item: (
+            item.movement_date
+            if item.movement_date.tzinfo is not None
+            else item.movement_date.replace(tzinfo=UTC),
+            item.document_number,
+        )
+    )
+    running = statement.opening_balance
+    recalculated: list[StatementLineView] = []
+    for statement_line in merged:
+        running = money(running + statement_line.debit - statement_line.credit)
+        recalculated.append(statement_line.model_copy(update={"running_balance": running}))
+    return statement.model_copy(update={"lines": recalculated, "closing_balance": running})
+
+
+def _statement_invoice_details(
+    db: Session,
+    *,
+    customer_id: UUID,
+    start: datetime,
+    end: datetime,
+) -> dict[str, list[PrintDocumentLineView]]:
+    invoice_rows = db.execute(
+        select(CustomerInvoice, SalesOrderLine, Product)
+        .join(SalesOrder, SalesOrder.id == CustomerInvoice.sales_order_id)
+        .join(SalesOrderLine, SalesOrderLine.sales_order_id == SalesOrder.id)
+        .join(Product, Product.id == SalesOrderLine.product_id)
+        .where(
+            CustomerInvoice.customer_id == customer_id,
+            CustomerInvoice.status == "posted",
+            CustomerInvoice.invoice_date >= start,
+            CustomerInvoice.invoice_date < end,
+        )
+        .order_by(CustomerInvoice.invoice_date, SalesOrderLine.created_at)
+    )
+    details: dict[str, list[PrintDocumentLineView]] = {}
+    for invoice, sales_line, product in invoice_rows:
+        details.setdefault(invoice.invoice_number, []).append(
+            PrintDocumentLineView(
+                code=product.code,
+                name=product.name_ar,
+                quantity=sales_line.quantity,
+                unit=sales_line.unit,
+                unit_price=sales_line.unit_price,
+                line_total=sales_line.line_total,
+                notes=sales_line.notes,
+            )
+        )
+    return details
+
+
+def _statement_invoice_totals(
+    db: Session,
+    *,
+    customer_id: UUID,
+    start: datetime,
+    end: datetime,
+) -> dict[str, Decimal]:
+    rows = db.execute(
+        select(
+            CustomerInvoice.invoice_type,
+            func.coalesce(func.sum(CustomerInvoice.total), 0),
+        )
+        .where(
+            CustomerInvoice.customer_id == customer_id,
+            CustomerInvoice.status == "posted",
+            CustomerInvoice.invoice_date >= start,
+            CustomerInvoice.invoice_date < end,
+        )
+        .group_by(CustomerInvoice.invoice_type)
+    )
+    return {invoice_type: money(total) for invoice_type, total in rows.tuples()}
+
+
+def _customer_statement_summary(
+    statement: PartnerStatementView,
+    *,
+    invoice_totals: dict[str, Decimal],
+) -> CustomerStatementSummaryView:
+    movement_totals = {
+        "returns": ZERO,
+        "receipts": ZERO,
+        "refunds": ZERO,
+        "adjustments": ZERO,
+    }
+    for line in statement.lines:
+        if line.movement_type == "مرتجع مبيعات":
+            movement_totals["returns"] += line.credit
+        elif line.movement_type == "تحصيل عميل":
+            movement_totals["receipts"] += line.credit
+        elif line.movement_type == "رد مبلغ لعميل":
+            movement_totals["refunds"] += line.debit
+        elif line.movement_type == "تسوية حساب عميل":
+            movement_totals["adjustments"] += line.debit - line.credit
+    return CustomerStatementSummaryView(
+        opening_balance=statement.opening_balance,
+        standard_sales_total=money(invoice_totals.get("standard", ZERO)),
+        weight_sales_total=money(invoice_totals.get("weight", ZERO)),
+        returns_total=money(movement_totals["returns"]),
+        receipts_total=money(movement_totals["receipts"]),
+        customer_refunds_total=money(movement_totals["refunds"]),
+        adjustments_total=money(movement_totals["adjustments"]),
+        net_movement=money(sum((line.debit - line.credit for line in statement.lines), ZERO)),
+        closing_balance=statement.closing_balance,
+    )
+
+
 def customer_statement_print_data(
     db: Session,
     *,
@@ -329,111 +471,32 @@ def customer_statement_print_data(
     )
     start, end = _window(date_from, date_to)
     if include_drafts:
-        draft_rows = db.scalars(
-            select(SalesOrder)
-            .where(
-                SalesOrder.customer_id == customer_id,
-                SalesOrder.status == "draft",
-                SalesOrder.order_date >= start,
-                SalesOrder.order_date < end,
-            )
-            .order_by(SalesOrder.order_date, SalesOrder.id)
+        statement = _statement_with_drafts(
+            db,
+            statement=statement,
+            customer_id=customer_id,
+            start=start,
+            end=end,
         )
-        merged = list(statement.lines)
-        merged.extend(
-            StatementLineView(
-                movement_date=order.order_date,
-                document_number=order.order_number,
-                movement_type=(
-                    "مسودة بيع بالوزن" if order.billing_method == "weight" else "مسودة بيع عادية"
-                ),
-                debit=ZERO,
-                credit=ZERO,
-                running_balance=ZERO,
-                notes=f"للمراجعة فقط — لا تدخل في الرصيد — قيمة {_money(order.total)}",
-            )
-            for order in draft_rows
+    invoice_details = (
+        _statement_invoice_details(
+            db,
+            customer_id=customer_id,
+            start=start,
+            end=end,
         )
-        merged.sort(
-            key=lambda item: (
-                item.movement_date
-                if item.movement_date.tzinfo is not None
-                else item.movement_date.replace(tzinfo=UTC),
-                item.document_number,
-            )
-        )
-        running = statement.opening_balance
-        recalculated: list[StatementLineView] = []
-        for statement_line in merged:
-            running = money(running + statement_line.debit - statement_line.credit)
-            recalculated.append(statement_line.model_copy(update={"running_balance": running}))
-        statement = statement.model_copy(update={"lines": recalculated, "closing_balance": running})
-    invoice_details: dict[str, list[PrintDocumentLineView]] = {}
-    if detailed:
-        invoice_rows = db.execute(
-            select(CustomerInvoice, SalesOrderLine, Product)
-            .join(SalesOrder, SalesOrder.id == CustomerInvoice.sales_order_id)
-            .join(SalesOrderLine, SalesOrderLine.sales_order_id == SalesOrder.id)
-            .join(Product, Product.id == SalesOrderLine.product_id)
-            .where(
-                CustomerInvoice.customer_id == customer_id,
-                CustomerInvoice.status == "posted",
-                CustomerInvoice.invoice_date >= start,
-                CustomerInvoice.invoice_date < end,
-            )
-            .order_by(CustomerInvoice.invoice_date, SalesOrderLine.created_at)
-        )
-        for invoice, sales_line, product in invoice_rows:
-            invoice_details.setdefault(invoice.invoice_number, []).append(
-                PrintDocumentLineView(
-                    code=product.code,
-                    name=product.name_ar,
-                    quantity=sales_line.quantity,
-                    unit=sales_line.unit,
-                    unit_price=sales_line.unit_price,
-                    line_total=sales_line.line_total,
-                    notes=sales_line.notes,
-                )
-            )
-    invoice_totals: dict[str, Decimal] = {}
-    invoice_total_rows = db.execute(
-        select(
-            CustomerInvoice.invoice_type,
-            func.coalesce(func.sum(CustomerInvoice.total), 0),
-        )
-        .where(
-            CustomerInvoice.customer_id == customer_id,
-            CustomerInvoice.status == "posted",
-            CustomerInvoice.invoice_date >= start,
-            CustomerInvoice.invoice_date < end,
-        )
-        .group_by(CustomerInvoice.invoice_type)
+        if detailed
+        else {}
     )
-    for invoice_type, total in invoice_total_rows.tuples():
-        invoice_totals[invoice_type] = money(total)
-    returns_total = ZERO
-    receipts_total = ZERO
-    refunds_total = ZERO
-    adjustments_total = ZERO
-    for line in statement.lines:
-        if line.movement_type == "مرتجع مبيعات":
-            returns_total += line.credit
-        elif line.movement_type == "تحصيل عميل":
-            receipts_total += line.credit
-        elif line.movement_type == "رد مبلغ لعميل":
-            refunds_total += line.debit
-        elif line.movement_type == "تسوية حساب عميل":
-            adjustments_total += line.debit - line.credit
-    summary = CustomerStatementSummaryView(
-        opening_balance=statement.opening_balance,
-        standard_sales_total=money(invoice_totals.get("standard", ZERO)),
-        weight_sales_total=money(invoice_totals.get("weight", ZERO)),
-        returns_total=money(returns_total),
-        receipts_total=money(receipts_total),
-        customer_refunds_total=money(refunds_total),
-        adjustments_total=money(adjustments_total),
-        net_movement=money(sum((line.debit - line.credit for line in statement.lines), ZERO)),
-        closing_balance=statement.closing_balance,
+    invoice_totals = _statement_invoice_totals(
+        db,
+        customer_id=customer_id,
+        start=start,
+        end=end,
+    )
+    summary = _customer_statement_summary(
+        statement,
+        invoice_totals=invoice_totals,
     )
     return CustomerStatementPrintView(
         company=_company(db),
@@ -683,7 +746,7 @@ def _payments_report(
                     AMOUNT_LABEL: _money(payment.amount),
                     PAYMENT_METHOD_LABEL: payment.payment_method,
                     STATUS_LABEL: payment.status,
-                    "ملاحظات": payment.notes,
+                    NOTES_LABEL: payment.notes,
                 },
                 money(payment.amount),
             )
@@ -702,7 +765,7 @@ def _payments_report(
                     AMOUNT_LABEL: _money(refund.amount),
                     PAYMENT_METHOD_LABEL: refund.payment_method,
                     STATUS_LABEL: refund.status,
-                    "ملاحظات": refund.notes,
+                    NOTES_LABEL: refund.notes,
                 },
                 money(refund.amount),
             )
@@ -717,7 +780,7 @@ def _payments_report(
         AMOUNT_LABEL,
         PAYMENT_METHOD_LABEL,
         STATUS_LABEL,
-        "ملاحظات",
+        NOTES_LABEL,
     ]
     return (
         columns,

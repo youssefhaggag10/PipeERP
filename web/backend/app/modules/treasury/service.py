@@ -803,6 +803,84 @@ def apply_order_advances_to_invoice(
     db.flush()
 
 
+def _payment_links(
+    *,
+    payload: PostPaymentRequest,
+    invoice_map: dict[UUID, CustomerInvoice | SupplierInvoice],
+    allocated_total: Decimal,
+    amount: Decimal,
+    order_invoice: CustomerInvoice | SupplierInvoice | None,
+    is_customer: bool,
+) -> tuple[str | None, UUID | None, UUID | None, UUID | None]:
+    only_invoice = invoice_map[payload.allocations[0].invoice_id] if len(invoice_map) == 1 else None
+    fully_linked = only_invoice is not None and allocated_total == amount
+    reference_type, reference_id = _payment_reference(
+        payload, only_invoice, fully_linked, is_customer
+    )
+    customer_invoice_id = _linked_invoice_id(order_invoice, only_invoice, fully_linked, True)
+    supplier_invoice_id = _linked_invoice_id(order_invoice, only_invoice, fully_linked, False)
+    return reference_type, reference_id, customer_invoice_id, supplier_invoice_id
+
+
+def _payment_reference(
+    payload: PostPaymentRequest,
+    only_invoice: CustomerInvoice | SupplierInvoice | None,
+    fully_linked: bool,
+    is_customer: bool,
+) -> tuple[str | None, UUID | None]:
+    reference_type = payload.reference_type if payload.reference_id is not None else None
+    if payload.reference_id is None and fully_linked:
+        reference_type = "sale" if is_customer else "purchase"
+    reference_id = payload.reference_id
+    if reference_id is None and isinstance(only_invoice, CustomerInvoice):
+        reference_id = only_invoice.sales_order_id
+    elif reference_id is None and isinstance(only_invoice, SupplierInvoice):
+        reference_id = only_invoice.purchase_order_id
+    return reference_type, reference_id
+
+
+def _linked_invoice_id(
+    order_invoice: CustomerInvoice | SupplierInvoice | None,
+    only_invoice: CustomerInvoice | SupplierInvoice | None,
+    fully_linked: bool,
+    customer: bool,
+) -> UUID | None:
+    invoice_type = CustomerInvoice if customer else SupplierInvoice
+    if isinstance(order_invoice, invoice_type):
+        return order_invoice.id
+    if isinstance(only_invoice, invoice_type) and fully_linked:
+        return only_invoice.id
+    return None
+
+
+def _store_payment_allocations(
+    db: Session,
+    *,
+    payment: PaymentTransaction,
+    payload: PostPaymentRequest,
+    order_invoice: CustomerInvoice | SupplierInvoice | None,
+    is_customer: bool,
+) -> None:
+    for allocation in payload.allocations:
+        db.add(
+            PaymentAllocation(
+                payment_transaction_id=payment.id,
+                customer_invoice_id=allocation.invoice_id if is_customer else None,
+                supplier_invoice_id=allocation.invoice_id if not is_customer else None,
+                amount=money(allocation.amount),
+            )
+        )
+    if order_invoice is not None:
+        db.add(
+            PaymentAllocation(
+                payment_transaction_id=payment.id,
+                customer_invoice_id=order_invoice.id if is_customer else None,
+                supplier_invoice_id=order_invoice.id if not is_customer else None,
+                amount=payment.amount,
+            )
+        )
+
+
 def post_payment(
     db: Session,
     *,
@@ -851,31 +929,14 @@ def post_payment(
         reference_id=payload.reference_id,
         amount=amount,
     )
-    only_invoice = invoice_map[payload.allocations[0].invoice_id] if len(invoice_map) == 1 else None
-    fully_linked = only_invoice is not None and allocated_total == amount
-
-    reference_type = payload.reference_type if payload.reference_id is not None else None
-    if payload.reference_id is None and fully_linked:
-        reference_type = "sale" if is_customer else "purchase"
-
-    reference_id = payload.reference_id
-    if reference_id is None:
-        if isinstance(only_invoice, CustomerInvoice):
-            reference_id = only_invoice.sales_order_id
-        elif isinstance(only_invoice, SupplierInvoice):
-            reference_id = only_invoice.purchase_order_id
-
-    customer_invoice_id = None
-    if isinstance(order_invoice, CustomerInvoice):
-        customer_invoice_id = order_invoice.id
-    elif isinstance(only_invoice, CustomerInvoice) and fully_linked:
-        customer_invoice_id = only_invoice.id
-
-    supplier_invoice_id = None
-    if isinstance(order_invoice, SupplierInvoice):
-        supplier_invoice_id = order_invoice.id
-    elif isinstance(only_invoice, SupplierInvoice) and fully_linked:
-        supplier_invoice_id = only_invoice.id
+    reference_type, reference_id, customer_invoice_id, supplier_invoice_id = _payment_links(
+        payload=payload,
+        invoice_map=invoice_map,
+        allocated_total=allocated_total,
+        amount=amount,
+        order_invoice=order_invoice,
+        is_customer=is_customer,
+    )
 
     payment = PaymentTransaction(
         transaction_number=allocate_document_number(
@@ -899,24 +960,13 @@ def post_payment(
     )
     db.add(payment)
     db.flush()
-    for allocation in payload.allocations:
-        db.add(
-            PaymentAllocation(
-                payment_transaction_id=payment.id,
-                customer_invoice_id=(allocation.invoice_id if is_customer else None),
-                supplier_invoice_id=(allocation.invoice_id if not is_customer else None),
-                amount=money(allocation.amount),
-            )
-        )
-    if order_invoice is not None:
-        db.add(
-            PaymentAllocation(
-                payment_transaction_id=payment.id,
-                customer_invoice_id=(order_invoice.id if is_customer else None),
-                supplier_invoice_id=(order_invoice.id if not is_customer else None),
-                amount=amount,
-            )
-        )
+    _store_payment_allocations(
+        db,
+        payment=payment,
+        payload=payload,
+        order_invoice=order_invoice,
+        is_customer=is_customer,
+    )
     db.flush()
     add_audit(
         db,

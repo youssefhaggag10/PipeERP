@@ -31,6 +31,10 @@ type Partner = {
   is_active: boolean;
   version: number;
 };
+
+function OptionalLinkedMovements({ data }: Readonly<{ data: LinkedMovements | null }>) {
+  return data ? <LinkedMovementsPanel data={data} /> : null;
+}
 type LinkedMovements = {
   partner_name_ar: string;
   closing_balance: string;
@@ -469,7 +473,7 @@ export function PartnersPage() {
           </article>
         ) : null}
       </section>
-      {linkedMovements ? <LinkedMovementsPanel data={linkedMovements} /> : null}
+      <OptionalLinkedMovements data={linkedMovements} />
     </AppShell>
   );
 }

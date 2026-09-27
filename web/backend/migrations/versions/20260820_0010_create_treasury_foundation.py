@@ -19,6 +19,7 @@ depends_on: str | Sequence[str] | None = None
 PARTNERS_ID = "partners.id"
 POSITIVE_AMOUNT = "amount > 0"
 USERS_ID = "users.id"
+POSTED_OR_REVERSED_STATUS = "status IN ('posted','reversed')"
 
 
 def _timestamps() -> list[sa.Column]:
@@ -107,7 +108,7 @@ def upgrade() -> None:
             name=op.f("ck_payment_transactions_reference_type_valid"),
         ),
         sa.CheckConstraint(
-            "status IN ('posted','reversed')",
+            POSTED_OR_REVERSED_STATUS,
             name=op.f("ck_payment_transactions_status_valid"),
         ),
         sa.CheckConstraint(
@@ -222,7 +223,7 @@ def upgrade() -> None:
             name=op.f("ck_financial_account_transfers_different_accounts"),
         ),
         sa.CheckConstraint(
-            "status IN ('posted','reversed')",
+            POSTED_OR_REVERSED_STATUS,
             name=op.f("ck_financial_account_transfers_status_valid"),
         ),
         sa.ForeignKeyConstraint(
@@ -273,7 +274,7 @@ def upgrade() -> None:
             "amount <> 0", name=op.f("ck_financial_account_adjustments_amount_nonzero")
         ),
         sa.CheckConstraint(
-            "status IN ('posted','reversed')",
+            POSTED_OR_REVERSED_STATUS,
             name=op.f("ck_financial_account_adjustments_status_valid"),
         ),
         sa.ForeignKeyConstraint(
@@ -357,7 +358,7 @@ def upgrade() -> None:
             POSITIVE_AMOUNT, name=op.f("ck_customer_account_adjustments_amount_positive")
         ),
         sa.CheckConstraint(
-            "status IN ('posted','reversed')",
+            POSTED_OR_REVERSED_STATUS,
             name=op.f("ck_customer_account_adjustments_status_valid"),
         ),
         sa.ForeignKeyConstraint(["created_by_id"], ["users.id"], ondelete="RESTRICT"),

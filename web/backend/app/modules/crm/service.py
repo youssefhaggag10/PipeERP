@@ -561,6 +561,14 @@ def pipeline(db: Session, principal: Principal) -> list[PipelineItem]:
     ]
 
 
+def _report_label(lead: CrmLead, *, mode: str, owner_names: dict[UUID, str]) -> str:
+    if mode == "source":
+        return SOURCE_NAMES.get(lead.source_code, "غير محدد")
+    if mode == "owner":
+        return owner_names.get(lead.assigned_user_id, "غير مسند")
+    return lead.lost_reason.strip() or "غير محدد"
+
+
 def reports(db: Session, principal: Principal, mode: str) -> list[CrmReportItem]:
     if mode not in {"source", "owner", "lost"}:
         raise ValueError("نوع تقرير CRM غير صحيح")
@@ -573,12 +581,7 @@ def reports(db: Session, principal: Principal, mode: str) -> list[CrmReportItem]
     for lead in leads:
         if mode == "lost" and lead.stage_code not in LOST_STAGES:
             continue
-        if mode == "source":
-            label = SOURCE_NAMES.get(lead.source_code, "غير محدد")
-        elif mode == "owner":
-            label = owner_names.get(lead.assigned_user_id, "غير مسند")
-        else:
-            label = lead.lost_reason.strip() or "غير محدد"
+        label = _report_label(lead, mode=mode, owner_names=owner_names)
         item = grouped.setdefault(
             label,
             CrmReportItem(label=label, total=0, won=0, value=Decimal("0")),

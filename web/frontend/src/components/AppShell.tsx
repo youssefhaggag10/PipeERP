@@ -31,7 +31,7 @@ function readHeaderLogo(): HeaderLogoSettings {
   }
 }
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({ children }: Readonly<{ children: ReactNode }>) {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();

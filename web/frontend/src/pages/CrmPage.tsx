@@ -746,7 +746,7 @@ export function CrmPage() {
                 onChange={(e) => setNotes(e.target.value)}
               />
             </label>
-            <button className="primary-button">
+            <button type="submit" className="primary-button">
               <Plus size={17} />{" "}
               {editingId ? "حفظ التعديل" : "حفظ العميل المحتمل"}
             </button>

@@ -12,10 +12,12 @@ RUN apt-get update \
     && adduser --system --ingroup pipeerp pipeerp
 
 COPY pyproject.toml ./
+COPY requirements.lock ./
 COPY app ./app
 COPY alembic.ini ./
 COPY migrations ./migrations
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir --only-binary=:all: --require-hashes -r requirements.lock \
+    && pip install --no-cache-dir --no-deps .
 
 USER pipeerp
 EXPOSE 8000
