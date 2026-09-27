@@ -53,6 +53,7 @@ from app.modules.treasury.schemas import (
 )
 
 ZERO = Decimal("0.00")
+PARTNER_NOT_FOUND = "العميل أو المورد غير موجود"
 PAYMENT_ACCOUNT_TYPES = {
     "cash": "cash",
     "bank_transfer": "bank",
@@ -432,7 +433,7 @@ def list_open_invoices(
 ) -> list[OpenInvoiceView]:
     partner = db.get(Partner, partner_id)
     if partner is None:
-        raise TreasuryNotFound("العميل أو المورد غير موجود")
+        raise TreasuryNotFound(PARTNER_NOT_FOUND)
     result: list[OpenInvoiceView] = []
     if transaction_type == "customer_receipt":
         invoices = db.scalars(
@@ -574,7 +575,7 @@ def list_open_orders(
 ) -> list[OpenOrderView]:
     partner = db.get(Partner, partner_id)
     if partner is None:
-        raise TreasuryNotFound("العميل أو المورد غير موجود")
+        raise TreasuryNotFound(PARTNER_NOT_FOUND)
     orders, reference_type = _orders_for_payment_type(
         db, transaction_type=transaction_type, partner_id=partner_id
     )
@@ -1263,7 +1264,11 @@ def _opening_view(db: Session, item: PartnerOpeningBalance) -> OpeningBalanceVie
     reversed_entry = db.scalar(
         select(PartnerOpeningBalance.id).where(PartnerOpeningBalance.reversal_of_id == item.id)
     )
-    status = "reversal" if item.reversal_of_id else "reversed" if reversed_entry else "posted"
+    status = "posted"
+    if item.reversal_of_id:
+        status = "reversal"
+    elif reversed_entry:
+        status = "reversed"
     return OpeningBalanceView(
         id=item.id,
         entry_number=item.entry_number,
@@ -1922,7 +1927,7 @@ def partner_statement(
         raise ValueError("تاريخ البداية يجب ألا يكون بعد تاريخ النهاية")
     partner = db.get(Partner, partner_id)
     if partner is None:
-        raise TreasuryNotFound("العميل أو المورد غير موجود")
+        raise TreasuryNotFound(PARTNER_NOT_FOUND)
     resolved_type = _resolve_statement_partner_type(partner, partner_type)
     start = datetime.combine(date_from, time.min, tzinfo=UTC)
     end = datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=UTC)

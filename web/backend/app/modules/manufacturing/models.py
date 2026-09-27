@@ -22,6 +22,8 @@ from app.infrastructure.database.base import Base, TimestampMixin
 PRODUCTS_ID = "products.id"
 MANUFACTURING_RECIPES_ID = "manufacturing_recipes.id"
 INVENTORY_TRANSACTIONS_ID = "inventory_transactions.id"
+USERS_ID = "users.id"
+MANUFACTURING_ORDERS_ID = "manufacturing_orders.id"
 
 
 class ManufacturingRecipe(TimestampMixin, Base):
@@ -50,7 +52,7 @@ class ManufacturingRecipe(TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_by_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT"), nullable=False
     )
 
 
@@ -145,16 +147,16 @@ class ManufacturingOrder(TimestampMixin, Base):
     cancellation_idempotency_key: Mapped[str | None] = mapped_column(String(120))
     cancellation_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_by_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT"), nullable=False
     )
     started_by_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT")
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT")
     )
     completed_by_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT")
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT")
     )
     cancelled_by_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT")
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT")
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -178,7 +180,7 @@ class ManufacturingOrderOutput(TimestampMixin, Base):
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     manufacturing_order_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("manufacturing_orders.id", ondelete="CASCADE"), nullable=False
+        Uuid, ForeignKey(MANUFACTURING_ORDERS_ID, ondelete="CASCADE"), nullable=False
     )
     product_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey(PRODUCTS_ID, ondelete="RESTRICT"), nullable=False
@@ -212,7 +214,7 @@ class ManufacturingOrderMaterial(TimestampMixin, Base):
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     manufacturing_order_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("manufacturing_orders.id", ondelete="CASCADE"), nullable=False
+        Uuid, ForeignKey(MANUFACTURING_ORDERS_ID, ondelete="CASCADE"), nullable=False
     )
     product_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey(PRODUCTS_ID, ondelete="RESTRICT"), nullable=False
@@ -282,7 +284,7 @@ class ManufacturingCompletion(TimestampMixin, Base):
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     manufacturing_order_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("manufacturing_orders.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(MANUFACTURING_ORDERS_ID, ondelete="RESTRICT"), nullable=False
     )
     idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -307,7 +309,7 @@ class ManufacturingCompletion(TimestampMixin, Base):
     )
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
     completed_by_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT"), nullable=False
     )
 
 

@@ -131,18 +131,21 @@ def test_completion_rejects_output_and_scrap_above_used_inputs() -> None:
 
 
 def test_modified_batches_cannot_exceed_actual_batches() -> None:
+    materials = [material("BASE", "100", "100", "1")]
+    outputs = [output("PIPE", "10", "0", "90")]
+    adjustments = [
+        MixAdjustment(
+            excluded_product_id="BASE",
+            batch_count=2,
+            reason="اختبار",
+            actual_material_quantities={},
+        )
+    ]
     with pytest.raises(ValueError, match="مجموع الخلطات المعدلة"):
         calculate_completion_plan(
             actual_batches=1,
             issued_batches=1,
-            materials=[material("BASE", "100", "100", "1")],
-            outputs=[output("PIPE", "10", "0", "90")],
-            adjustments=[
-                MixAdjustment(
-                    excluded_product_id="BASE",
-                    batch_count=2,
-                    reason="اختبار",
-                    actual_material_quantities={},
-                )
-            ],
+            materials=materials,
+            outputs=outputs,
+            adjustments=adjustments,
         )

@@ -19,6 +19,7 @@ import {
   useMemo,
   useState,
   type Dispatch,
+  type ChangeEvent,
   type FormEvent,
   type ReactNode,
   type SetStateAction,
@@ -334,7 +335,7 @@ export function ManufacturingPage() {
     );
   }, [activeRecipe]);
   useEffect(() => {
-    if (!selected || selected.status !== "in_progress") return;
+    if (selected?.status !== "in_progress") return;
     setCompletion({
       actual_batches: String(
         selected.issued_batches || selected.planned_batches,
@@ -689,6 +690,52 @@ export function ManufacturingPage() {
     );
   }
 
+  function recipeOutputChange(productId: string) {
+    return (event: ChangeEvent<HTMLInputElement>) => {
+      setRecipeOutputs((current) =>
+        event.target.checked
+          ? [...current, productId]
+          : current.filter((id) => id !== productId),
+      );
+    };
+  }
+
+  function removeOrderOutput(index: number) {
+    setOrderOutputs((current) =>
+      current.filter((_, lineIndex) => lineIndex !== index),
+    );
+  }
+
+  function removeScrapInput(index: number) {
+    setScrapInputs((current) =>
+      current.filter((_, lineIndex) => lineIndex !== index),
+    );
+  }
+
+  function updateCompletionOutput(
+    productId: string,
+    field: "good" | "defective" | "weight",
+    value: string,
+  ) {
+    setCompletionOutputs((current) => {
+      const existing = current[productId] ?? {
+        good: "0",
+        defective: "0",
+        weight: "",
+      };
+      return {
+        ...current,
+        [productId]: { ...existing, [field]: value },
+      };
+    });
+  }
+
+  function adjustmentQuantityChange(index: number, productId: string) {
+    return (event: ChangeEvent<HTMLInputElement>) => {
+      updateAdjustmentQuantity(index, productId, event.target.value);
+    };
+  }
+
   return (
     <AppShell>
       <section className="page-heading manufacturing-heading">
@@ -828,13 +875,7 @@ export function ManufacturingPage() {
                         <input
                           type="checkbox"
                           checked={recipeOutputs.includes(item.id)}
-                          onChange={(event) =>
-                            setRecipeOutputs((current) =>
-                              event.target.checked
-                                ? [...current, item.id]
-                                : current.filter((id) => id !== item.id),
-                            )
-                          }
+                          onChange={recipeOutputChange(item.id)}
                         />
                         {item.name_ar}{" "}
                         <small>{item.standard_weight_kg} كجم</small>
@@ -1078,13 +1119,7 @@ export function ManufacturingPage() {
                           <button
                             type="button"
                             className="mini-action"
-                            onClick={() =>
-                              setOrderOutputs((current) =>
-                                current.filter(
-                                  (_, lineIndex) => lineIndex !== index,
-                                ),
-                              )
-                            }
+                            onClick={() => removeOrderOutput(index)}
                           >
                             <X size={15} />
                           </button>
@@ -1143,13 +1178,7 @@ export function ManufacturingPage() {
                         <button
                           type="button"
                           className="mini-action"
-                          onClick={() =>
-                            setScrapInputs((current) =>
-                              current.filter(
-                                (_, lineIndex) => lineIndex !== index,
-                              ),
-                            )
-                          }
+                          onClick={() => removeScrapInput(index)}
                         >
                           <X size={15} />
                         </button>
@@ -1383,13 +1412,11 @@ export function ManufacturingPage() {
                               inputMode="decimal"
                               value={values.good}
                               onChange={(event) =>
-                                setCompletionOutputs((current) => ({
-                                  ...current,
-                                  [item.product_id]: {
-                                    ...values,
-                                    good: event.target.value,
-                                  },
-                                }))
+                                updateCompletionOutput(
+                                  item.product_id,
+                                  "good",
+                                  event.target.value,
+                                )
                               }
                             />
                           </label>
@@ -1400,13 +1427,11 @@ export function ManufacturingPage() {
                               inputMode="decimal"
                               value={values.defective}
                               onChange={(event) =>
-                                setCompletionOutputs((current) => ({
-                                  ...current,
-                                  [item.product_id]: {
-                                    ...values,
-                                    defective: event.target.value,
-                                  },
-                                }))
+                                updateCompletionOutput(
+                                  item.product_id,
+                                  "defective",
+                                  event.target.value,
+                                )
                               }
                             />
                           </label>
@@ -1417,13 +1442,11 @@ export function ManufacturingPage() {
                               inputMode="decimal"
                               value={values.weight}
                               onChange={(event) =>
-                                setCompletionOutputs((current) => ({
-                                  ...current,
-                                  [item.product_id]: {
-                                    ...values,
-                                    weight: event.target.value,
-                                  },
-                                }))
+                                updateCompletionOutput(
+                                  item.product_id,
+                                  "weight",
+                                  event.target.value,
+                                )
                               }
                             />
                           </label>
@@ -1503,13 +1526,10 @@ export function ManufacturingPage() {
                                   value={
                                     item.quantities[material.product_id] || ""
                                   }
-                                  onChange={(event) =>
-                                    updateAdjustmentQuantity(
-                                      index,
-                                      material.product_id,
-                                      event.target.value,
-                                    )
-                                  }
+                                  onChange={adjustmentQuantityChange(
+                                    index,
+                                    material.product_id,
+                                  )}
                                 />
                               </label>
                             ))}
@@ -1618,7 +1638,7 @@ export function ManufacturingPage() {
         </>
       ))}
       {availability ? (
-        <div className="availability-backdrop" role="presentation">
+        <div className="availability-backdrop">
           <dialog
             open
             className="availability-dialog"

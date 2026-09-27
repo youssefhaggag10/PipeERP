@@ -162,7 +162,7 @@ function PartnerList({
   );
 }
 
-function LinkedMovementsPanel({ data }: { data: LinkedMovements }) {
+function LinkedMovementsPanel({ data }: Readonly<{ data: LinkedMovements }>) {
   return (
     <section className="panel partner-linked-movements">
       <header className="panel__head">

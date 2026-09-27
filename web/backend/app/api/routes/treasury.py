@@ -68,6 +68,14 @@ from app.modules.treasury.service import (
 )
 
 router = APIRouter(prefix="/accounts")
+
+
+def _payment_status(*, remaining: Decimal, net_total: Decimal, effective_paid: Decimal) -> str:
+    if remaining == 0 and net_total > 0:
+        return "paid"
+    if effective_paid > 0:
+        return "partial"
+    return "unpaid"
 IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", min_length=12, max_length=120)]
 
 
@@ -288,12 +296,10 @@ def all_invoices(
     for row in rows:
         partner = db.get(Partner, row.partner_id)
         effective_paid = max(Decimal("0"), row.paid - row.refunded)
-        payment_status = (
-            "paid"
-            if row.remaining == 0 and row.net_total > 0
-            else "partial"
-            if effective_paid > 0
-            else "unpaid"
+        payment_status = _payment_status(
+            remaining=row.remaining,
+            net_total=row.net_total,
+            effective_paid=effective_paid,
         )
         result.append(
             AccountInvoiceView(

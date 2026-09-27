@@ -3,7 +3,7 @@ type BrandMarkProps = {
   inverse?: boolean;
 };
 
-export function BrandMark({ compact = false, inverse = false }: BrandMarkProps) {
+export function BrandMark({ compact = false, inverse = false }: Readonly<BrandMarkProps>) {
   return (
     <div className={`brand ${inverse ? "brand--inverse" : ""}`} aria-label="PipeERP">
       <span className="brand__symbol" aria-hidden="true">

@@ -20,6 +20,7 @@ PARTNERS_ID = "partners.id"
 POSITIVE_AMOUNT = "amount > 0"
 USERS_ID = "users.id"
 POSTED_OR_REVERSED_STATUS = "status IN ('posted','reversed')"
+FINANCIAL_ACCOUNTS_ID = "financial_accounts.id"
 
 
 def _timestamps() -> list[sa.Column]:
@@ -124,7 +125,7 @@ def upgrade() -> None:
             ["customer_invoice_id"], ["customer_invoices.id"], ondelete="RESTRICT"
         ),
         sa.ForeignKeyConstraint(
-            ["financial_account_id"], ["financial_accounts.id"], ondelete="RESTRICT"
+            ["financial_account_id"], [FINANCIAL_ACCOUNTS_ID], ondelete="RESTRICT"
         ),
         sa.ForeignKeyConstraint(["partner_id"], [PARTNERS_ID], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["posted_by_id"], [USERS_ID], ondelete="RESTRICT"),
@@ -227,11 +228,11 @@ def upgrade() -> None:
             name=op.f("ck_financial_account_transfers_status_valid"),
         ),
         sa.ForeignKeyConstraint(
-            ["from_account_id"], ["financial_accounts.id"], ondelete="RESTRICT"
+            ["from_account_id"], [FINANCIAL_ACCOUNTS_ID], ondelete="RESTRICT"
         ),
         sa.ForeignKeyConstraint(["posted_by_id"], [USERS_ID], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["reversed_by_id"], [USERS_ID], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["to_account_id"], ["financial_accounts.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["to_account_id"], [FINANCIAL_ACCOUNTS_ID], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("idempotency_key"),
         sa.UniqueConstraint("reversal_idempotency_key"),
@@ -278,7 +279,7 @@ def upgrade() -> None:
             name=op.f("ck_financial_account_adjustments_status_valid"),
         ),
         sa.ForeignKeyConstraint(
-            ["financial_account_id"], ["financial_accounts.id"], ondelete="RESTRICT"
+            ["financial_account_id"], [FINANCIAL_ACCOUNTS_ID], ondelete="RESTRICT"
         ),
         sa.ForeignKeyConstraint(["posted_by_id"], [USERS_ID], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["reversed_by_id"], [USERS_ID], ondelete="RESTRICT"),

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { api } from "../lib/api";
 import type { Permission } from "./permissions";
@@ -29,14 +29,14 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  async function reload() {
+  const reload = useCallback(async () => {
     try {
       const result = await api<{ user: AuthUser }>("/auth/me");
       setUser(result.user);
     } catch {
       setUser(null);
     }
-  }
+  }, []);
 
   useEffect(() => {
     void api<{ user: AuthUser }>("/auth/me")
@@ -45,7 +45,7 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
       .finally(() => setLoading(false));
   }, []);
 
-  async function login(username: string, password: string) {
+  const login = useCallback(async (username: string, password: string) => {
     const result = await api<{ user: AuthUser }>(
       "/auth/login",
       { method: "POST", body: JSON.stringify({ username, password }) },
@@ -53,17 +53,20 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     );
     setUser(result.user);
     return result.user;
-  }
+  }, []);
 
-  async function logout() {
+  const logout = useCallback(async () => {
     try {
       await api("/auth/logout", { method: "POST" }, false);
     } finally {
       setUser(null);
     }
-  }
+  }, []);
 
-  const value = { user, loading, login, logout, reload };
+  const value = useMemo(
+    () => ({ user, loading, login, logout, reload }),
+    [user, loading, login, logout, reload],
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

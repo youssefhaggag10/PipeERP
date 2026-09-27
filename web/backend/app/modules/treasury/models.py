@@ -23,6 +23,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.infrastructure.database.base import Base, TimestampMixin
 
 FINANCIAL_ACCOUNTS_ID = "financial_accounts.id"
+PARTNERS_ID = "partners.id"
+USERS_ID = "users.id"
 POSITIVE_AMOUNT = "amount > 0"
 POSTED_OR_REVERSED_STATUS = "status IN ('posted','reversed')"
 
@@ -92,7 +94,7 @@ class PaymentTransaction(TimestampMixin, Base):
     )
     transaction_type: Mapped[str] = mapped_column(String(24), nullable=False)
     partner_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("partners.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PARTNERS_ID, ondelete="RESTRICT"), nullable=False
     )
     financial_account_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey(FINANCIAL_ACCOUNTS_ID, ondelete="RESTRICT"), nullable=False
@@ -112,11 +114,11 @@ class PaymentTransaction(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="posted")
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
     posted_by_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT"), nullable=False
     )
     reversal_idempotency_key: Mapped[str | None] = mapped_column(String(120))
     reversed_by_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT")
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT")
     )
     reversed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     reversal_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -188,11 +190,11 @@ class FinancialTransfer(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="posted")
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
     posted_by_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT"), nullable=False
     )
     reversal_idempotency_key: Mapped[str | None] = mapped_column(String(120))
     reversed_by_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT")
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT")
     )
     reversed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     reversal_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -224,11 +226,11 @@ class FinancialAdjustment(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="posted")
     notes: Mapped[str] = mapped_column(Text, nullable=False)
     posted_by_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT"), nullable=False
     )
     reversal_idempotency_key: Mapped[str | None] = mapped_column(String(120))
     reversed_by_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT")
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT")
     )
     reversed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     reversal_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -249,7 +251,7 @@ class PartnerOpeningBalance(TimestampMixin, Base):
     entry_number: Mapped[str] = mapped_column(String(40), nullable=False)
     entry_date: Mapped[date] = mapped_column(Date, nullable=False)
     partner_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("partners.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PARTNERS_ID, ondelete="RESTRICT"), nullable=False
     )
     nature: Mapped[str] = mapped_column(String(12), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False)
@@ -259,7 +261,7 @@ class PartnerOpeningBalance(TimestampMixin, Base):
     )
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_by_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT"), nullable=False
     )
 
 
@@ -279,17 +281,17 @@ class CustomerAccountAdjustment(TimestampMixin, Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     customer_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("partners.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(PARTNERS_ID, ondelete="RESTRICT"), nullable=False
     )
     adjustment_type: Mapped[str] = mapped_column(String(12), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="posted")
     notes: Mapped[str] = mapped_column(Text, nullable=False)
     created_by_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT"), nullable=False
     )
     reversed_by_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="RESTRICT")
+        Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT")
     )
     reversed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     reversal_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")

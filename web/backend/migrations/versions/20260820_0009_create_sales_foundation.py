@@ -22,6 +22,8 @@ SUBTOTAL_NONNEGATIVE = "subtotal >= 0"
 VERSION_POSITIVE = "version > 0"
 PRODUCTS_ID = "products.id"
 QUANTITY_POSITIVE = "quantity > 0"
+NOW_SQL = "now()"
+LINE_TOTAL_NONNEGATIVE = "line_total >= 0"
 
 
 def _timestamps() -> list[sa.Column]:
@@ -29,13 +31,13 @@ def _timestamps() -> list[sa.Column]:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
     ]
@@ -53,7 +55,7 @@ def upgrade() -> None:
         sa.Column(
             "order_date",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
         sa.Column("notes", sa.Text(), nullable=False),
@@ -109,7 +111,7 @@ def upgrade() -> None:
             "unit_price >= 0", name=op.f("ck_sales_order_lines_unit_price_nonnegative")
         ),
         sa.CheckConstraint(
-            "line_total >= 0", name=op.f("ck_sales_order_lines_line_total_nonnegative")
+            LINE_TOTAL_NONNEGATIVE, name=op.f("ck_sales_order_lines_line_total_nonnegative")
         ),
         sa.CheckConstraint(
             "standard_weight_kg >= 0", name=op.f("ck_sales_order_lines_standard_weight_nonnegative")
@@ -132,7 +134,7 @@ def upgrade() -> None:
         sa.Column("sales_order_id", sa.Uuid(), nullable=False),
         sa.Column("card_number", sa.String(40), nullable=False),
         sa.Column(
-            "card_date", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False
+            "card_date", sa.DateTime(timezone=True), server_default=sa.text(NOW_SQL), nullable=False
         ),
         sa.Column("vehicle_number", sa.String(80), nullable=False),
         sa.Column("gross_weight_kg", sa.Numeric(20, 6), nullable=False),
@@ -211,7 +213,7 @@ def upgrade() -> None:
             "price_per_kg >= 0", name=op.f("ck_sales_weight_card_lines_price_nonnegative")
         ),
         sa.CheckConstraint(
-            "line_total >= 0", name=op.f("ck_sales_weight_card_lines_line_total_nonnegative")
+            LINE_TOTAL_NONNEGATIVE, name=op.f("ck_sales_weight_card_lines_line_total_nonnegative")
         ),
         sa.ForeignKeyConstraint(["weight_card_id"], ["sales_weight_cards.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
@@ -234,7 +236,7 @@ def upgrade() -> None:
         sa.Column("status", sa.String(20), nullable=False),
         sa.Column("posted_by_id", sa.Uuid(), nullable=False),
         sa.Column(
-            "posted_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False
+            "posted_at", sa.DateTime(timezone=True), server_default=sa.text(NOW_SQL), nullable=False
         ),
         sa.Column("reversal_idempotency_key", sa.String(120), nullable=True),
         sa.Column("reversed_by_id", sa.Uuid(), nullable=True),
@@ -263,7 +265,7 @@ def upgrade() -> None:
         sa.Column(
             "invoice_date",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
         sa.Column("subtotal", sa.Numeric(20, 2), nullable=False),
@@ -273,7 +275,7 @@ def upgrade() -> None:
         sa.Column("total", sa.Numeric(20, 2), nullable=False),
         sa.Column("notes", sa.Text(), nullable=False),
         sa.Column(
-            "posted_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False
+            "posted_at", sa.DateTime(timezone=True), server_default=sa.text(NOW_SQL), nullable=False
         ),
         sa.Column("reversed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("reversal_reason", sa.Text(), nullable=False),
@@ -346,7 +348,7 @@ def upgrade() -> None:
         sa.Column(
             "quotation_date",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text(NOW_SQL),
             nullable=False,
         ),
         sa.Column("valid_until", sa.DateTime(timezone=True), nullable=True),
@@ -389,7 +391,7 @@ def upgrade() -> None:
             "unit_price >= 0", name=op.f("ck_sales_quotation_lines_unit_price_nonnegative")
         ),
         sa.CheckConstraint(
-            "line_total >= 0", name=op.f("ck_sales_quotation_lines_line_total_nonnegative")
+            LINE_TOTAL_NONNEGATIVE, name=op.f("ck_sales_quotation_lines_line_total_nonnegative")
         ),
         sa.ForeignKeyConstraint(["quotation_id"], ["sales_quotations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["product_id"], [PRODUCTS_ID], ondelete="RESTRICT"),

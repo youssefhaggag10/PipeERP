@@ -13,6 +13,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  type ChangeEvent,
   type FormEvent,
   type ReactNode,
 } from "react";
@@ -102,11 +103,11 @@ export function ReturnsWorkspace({
   embedded = false,
   initialType,
   initialInvoiceId,
-}: {
+}: Readonly<{
   embedded?: boolean;
   initialType?: ReturnType;
   initialInvoiceId?: string;
-}) {
+}>) {
   const { user } = useAuth();
   const canManage = user?.permissions.includes("returns.manage") ?? false;
   const [tab, setTab] = useState<"documents" | "refunds">("documents");
@@ -313,6 +314,14 @@ export function ReturnsWorkspace({
       item.refund_type ===
       (returnType === "sales" ? "customer_refund" : "supplier_refund"),
   );
+  function sourceAmountChange(sourceId: string) {
+    return (event: ChangeEvent<HTMLInputElement>) => {
+      setSourceAmounts((current) => ({
+        ...current,
+        [sourceId]: event.target.value,
+      }));
+    };
+  }
   const Shell = embedded ? Fragment : AppShell;
   return (
     <Shell>
@@ -578,12 +587,7 @@ export function ReturnsWorkspace({
                                       max={remaining}
                                       step="0.001"
                                       value={sourceAmounts[source.source_id] || ""}
-                                      onChange={(event) =>
-                                        setSourceAmounts((current) => ({
-                                          ...current,
-                                          [source.source_id]: event.target.value,
-                                        }))
-                                      }
+                                      onChange={sourceAmountChange(source.source_id)}
                                       placeholder="0"
                                     />
                                   </label>

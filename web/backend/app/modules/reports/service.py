@@ -60,6 +60,8 @@ STATUS_LABEL = "الحالة"
 PARTY_LABEL = "الطرف"
 ACCOUNT_LABEL = "الحساب"
 NOTES_LABEL = "ملاحظات"
+BALANCE_LABEL = "الرصيد"
+TRANSACTION_NUMBER_LABEL = "رقم الحركة"
 REPORT_TITLES: dict[str, str] = {
     "sales": "تقرير المبيعات",
     "purchases": "تقرير المشتريات",
@@ -521,7 +523,7 @@ def customer_statement_xlsx(view: CustomerStatementPrintView) -> BytesIO:
         ["رصيد أول المدة", statement.opening_balance, "الرصيد النهائي", statement.closing_balance]
     )
     sheet.append([])
-    headers = [DATE_LABEL, "المستند", "النوع / البيان", "مدين", "دائن", "الرصيد"]
+    headers = [DATE_LABEL, "المستند", "النوع / البيان", "مدين", "دائن", BALANCE_LABEL]
     sheet.append(headers)
     for cell in sheet[sheet.max_row]:
         cell.font = Font(bold=True)
@@ -692,7 +694,7 @@ def _balances_report(
             "الاستردادات": _money(item.refunds_total),
             "دفعات مقدمة": _money(item.advances),
             "التسويات": _money(item.adjustments_total),
-            "الرصيد": _money(item.balance),
+            BALANCE_LABEL: _money(item.balance),
         }
         for item in values
     ]
@@ -706,7 +708,7 @@ def _balances_report(
         "الاستردادات",
         "دفعات مقدمة",
         "التسويات",
-        "الرصيد",
+        BALANCE_LABEL,
     ]
     return columns, rows, {"balance": _money(total_balance)}
 
@@ -738,7 +740,7 @@ def _payments_report(
             (
                 payment.transaction_date,
                 {
-                    "رقم الحركة": payment.transaction_number,
+                    TRANSACTION_NUMBER_LABEL: payment.transaction_number,
                     DATE_LABEL: payment.transaction_date.isoformat(),
                     TYPE_LABEL: label,
                     PARTY_LABEL: partner.name_ar,
@@ -757,7 +759,7 @@ def _payments_report(
             (
                 refund.refund_date,
                 {
-                    "رقم الحركة": refund.refund_number,
+                    TRANSACTION_NUMBER_LABEL: refund.refund_number,
                     DATE_LABEL: refund.refund_date.isoformat(),
                     TYPE_LABEL: label,
                     PARTY_LABEL: partner.name_ar,
@@ -772,7 +774,7 @@ def _payments_report(
         )
     values.sort(key=lambda value: value[0], reverse=True)
     columns = [
-        "رقم الحركة",
+        TRANSACTION_NUMBER_LABEL,
         DATE_LABEL,
         TYPE_LABEL,
         PARTY_LABEL,

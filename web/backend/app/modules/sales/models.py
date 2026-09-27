@@ -28,6 +28,7 @@ SUBTOTAL_NONNEGATIVE = "subtotal >= 0"
 TOTAL_NONNEGATIVE = "total >= 0"
 VERSION_POSITIVE = "version > 0"
 QUANTITY_POSITIVE = "quantity > 0"
+LINE_TOTAL_NONNEGATIVE = "line_total >= 0"
 
 
 class SalesOrder(TimestampMixin, Base):
@@ -79,7 +80,7 @@ class SalesOrderLine(TimestampMixin, Base):
         UniqueConstraint("sales_order_id", "product_id"),
         CheckConstraint(QUANTITY_POSITIVE, name="quantity_positive"),
         CheckConstraint("unit_price >= 0", name="unit_price_nonnegative"),
-        CheckConstraint("line_total >= 0", name="line_total_nonnegative"),
+        CheckConstraint(LINE_TOTAL_NONNEGATIVE, name="line_total_nonnegative"),
         CheckConstraint("standard_weight_kg >= 0", name="standard_weight_nonnegative"),
         CheckConstraint("billing_weight_kg >= 0", name="billing_weight_nonnegative"),
         CheckConstraint("price_per_kg >= 0", name="price_per_kg_nonnegative"),
@@ -148,7 +149,7 @@ class SalesWeightCardLine(TimestampMixin, Base):
         CheckConstraint("theoretical_weight_kg >= 0", name="theoretical_weight_nonnegative"),
         CheckConstraint("actual_weight_kg > 0", name="actual_weight_positive"),
         CheckConstraint("price_per_kg >= 0", name="price_nonnegative"),
-        CheckConstraint("line_total >= 0", name="line_total_nonnegative"),
+        CheckConstraint(LINE_TOTAL_NONNEGATIVE, name="line_total_nonnegative"),
         Index("ix_sales_weight_card_lines_card", "weight_card_id", "id"),
     )
 
@@ -307,7 +308,7 @@ class SalesQuotationLine(TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint(QUANTITY_POSITIVE, name="quantity_positive"),
         CheckConstraint("unit_price >= 0", name="unit_price_nonnegative"),
-        CheckConstraint("line_total >= 0", name="line_total_nonnegative"),
+        CheckConstraint(LINE_TOTAL_NONNEGATIVE, name="line_total_nonnegative"),
         Index("ix_sales_quotation_lines_quotation", "quotation_id", "id"),
     )
 

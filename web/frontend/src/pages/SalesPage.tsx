@@ -19,6 +19,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type ReactNode,
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -34,20 +35,21 @@ import { printA4 } from "../lib/printA4";
 
 type SalesTab = "piece" | "weight" | "quotation";
 
-const SALES_TAB_COPY: Record<SalesTab, { heading: string; subtitle: string }> = {
-  piece: {
-    heading: "المبيعات",
-    subtitle: "أوامر البيع والتسليم وفاتورة العميل.",
-  },
-  weight: {
-    heading: "فاتورة مبيعات بالوزن / الكارتة",
-    subtitle: "إنشاء واعتماد فواتير الوزن الفعلي.",
-  },
-  quotation: {
-    heading: "عروض الأسعار",
-    subtitle: "عروض أسعار دون تأثير على المخزون أو الحسابات.",
-  },
-};
+const SALES_TAB_COPY: Record<SalesTab, { heading: string; subtitle: string }> =
+  {
+    piece: {
+      heading: "المبيعات",
+      subtitle: "أوامر البيع والتسليم وفاتورة العميل.",
+    },
+    weight: {
+      heading: "فاتورة مبيعات بالوزن / الكارتة",
+      subtitle: "إنشاء واعتماد فواتير الوزن الفعلي.",
+    },
+    quotation: {
+      heading: "عروض الأسعار",
+      subtitle: "عروض أسعار دون تأثير على المخزون أو الحسابات.",
+    },
+  };
 
 function orderStatusClass(status: Status): string {
   const classes: Record<Status, string> = {
@@ -207,6 +209,18 @@ const quoteLine = (productId = ""): QuoteDraft => ({
   unit_price: "",
 });
 
+function renderIf(condition: boolean, render: () => ReactNode): ReactNode {
+  return condition ? render() : null;
+}
+
+function renderIfElse(
+  condition: boolean,
+  whenTrue: () => ReactNode,
+  whenFalse: () => ReactNode,
+): ReactNode {
+  return condition ? whenTrue() : whenFalse();
+}
+
 export function SalesPage() {
   const { user } = useAuth();
   const location = useLocation();
@@ -256,7 +270,9 @@ export function SalesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [printDocument, setPrintDocument] = useState<PrintDocument | null>(null);
+  const [printDocument, setPrintDocument] = useState<PrintDocument | null>(
+    null,
+  );
   const createRef = useRef<HTMLElement>(null);
   const detailRef = useRef<HTMLElement>(null);
 
@@ -289,9 +305,7 @@ export function SalesPage() {
       setQuotations(quoteRows);
       setSelectedId((current) => current || orderRows[0]?.id || "");
       setCustomerId((current) => current || optionRows.customers[0]?.id || "");
-      setWarehouseId(
-        (current) => current || factoryWarehouse?.id || "",
-      );
+      setWarehouseId((current) => current || factoryWarehouse?.id || "");
       const firstProduct = optionRows.products[0]?.id || "";
       const defaultUnit = optionRows.products[0]?.unit_symbol || "قطعة";
       setPieceLines((current) =>
@@ -569,7 +583,7 @@ export function SalesPage() {
   }
 
   async function printSelectedInvoice() {
-    if (!selected?.invoice || selected.invoice.status !== "posted") return;
+    if (selected?.invoice?.status !== "posted") return;
     setSubmitting(true);
     setError("");
     try {
@@ -605,13 +619,16 @@ export function SalesPage() {
       setNotice("تم عكس التسليم والفاتورة وأثر المخزون.");
       await load();
     } catch (reason) {
-      setError(reason instanceof ApiError ? reason.message : "تعذر عكس التسليم");
+      setError(
+        reason instanceof ApiError ? reason.message : "تعذر عكس التسليم",
+      );
     } finally {
       setSubmitting(false);
     }
   }
 
   const canManageCurrent = tab === "weight" ? canWeightManage : canPieceManage;
+  const selectedWeightCard = selected?.weight_cards[0];
   const setupReady =
     options.customers.length > 0 &&
     options.warehouses.length > 0 &&
@@ -624,23 +641,26 @@ export function SalesPage() {
           <p>{SALES_TAB_COPY[tab].subtitle}</p>
         </div>
         <div className="page-heading__actions">
-          {canPiece && tab === "piece" ? (
+          {renderIf(canPiece && tab === "piece", () => (
             <button
+              type="button"
               className="secondary-button"
               onClick={() => switchTab("quotation")}
             >
               <FileText size={17} /> عروض الأسعار
             </button>
-          ) : null}
-          {tab === "quotation" ? (
+          ))}
+          {renderIf(tab === "quotation", () => (
             <button
+              type="button"
               className="secondary-button"
               onClick={() => switchTab("piece")}
             >
               <ShoppingCart size={17} /> العودة للمبيعات
             </button>
-          ) : null}
+          ))}
           <button
+            type="button"
             className="secondary-button"
             onClick={() => void load()}
             disabled={loading}
@@ -649,803 +669,840 @@ export function SalesPage() {
           </button>
         </div>
       </section>
-      {error ? (
+      {renderIf(Boolean(error), () => (
         <div className="alert alert--error" role="alert">
           {error}
         </div>
-      ) : null}
-      {notice ? (
+      ))}
+      {renderIf(Boolean(notice), () => (
         <div className="alert alert--success">
           <Check size={17} />
           {notice}
         </div>
-      ) : null}
-      {tab !== "quotation" ? (
-        <section
-          className={`master-layout sales-layout ${canManageCurrent ? "" : "master-layout--single"}`}
-        >
-          <article className="panel">
-            <header className="panel__head">
-              <div>
-                <h3>{tab === "weight" ? "فواتير الوزن" : "أوامر البيع"}</h3>
-                <p>اختر المستند للمراجعة أو التسليم</p>
-              </div>
-              <span className="status-badge status-badge--active">
-                {visibleOrders.length}
-              </span>
-            </header>
-            <div className="purchase-order-list">
-              {visibleOrders.map((order) => (
-                <button
-                  className={`purchase-order-card ${selectedId === order.id ? "purchase-order-card--selected" : ""}`}
-                  key={order.id}
-                  onClick={() => selectOrder(order.id)}
-                >
-                  <span className="purchase-order-card__icon">
-                    {order.billing_method === "weight" ? (
-                      <Scale size={18} />
-                    ) : (
-                      <ShoppingCart size={18} />
-                    )}
-                  </span>
-                  <span>
-                    <strong dir="ltr">{order.order_number}</strong>
-                    <small>
-                      {order.customer_name_ar} · {order.lines.length} بند
-                    </small>
-                  </span>
-                  <span
-                    className={`purchase-status purchase-status--${orderStatusClass(order.status)}`}
+      ))}
+      {renderIfElse(
+        tab !== "quotation",
+        () => (
+          <section
+            className={`master-layout sales-layout ${canManageCurrent ? "" : "master-layout--single"}`}
+          >
+            <article className="panel">
+              <header className="panel__head">
+                <div>
+                  <h3>{tab === "weight" ? "فواتير الوزن" : "أوامر البيع"}</h3>
+                  <p>اختر المستند للمراجعة أو التسليم</p>
+                </div>
+                <span className="status-badge status-badge--active">
+                  {visibleOrders.length}
+                </span>
+              </header>
+              <div className="purchase-order-list">
+                {visibleOrders.map((order) => (
+                  <button
+                    className={`purchase-order-card ${selectedId === order.id ? "purchase-order-card--selected" : ""}`}
+                    key={order.id}
+                    onClick={() => selectOrder(order.id)}
                   >
-                    {statusLabels[order.status]}
-                  </span>
-                  <span className="purchase-order-card__value">
-                    {currency.format(Number(order.total))} ج.م
-                  </span>
-                </button>
-              ))}
-            </div>
-          </article>
-          {canManageCurrent && showCreate && !setupReady ? (
-            <article
-              ref={createRef}
-              className="panel master-form-card sales-create-card"
-            >
-              <header className="panel__head">
-                <div>
-                  <h3>
-                    {tab === "weight" ? "كارتة وزن جديدة" : "أمر بيع جديد"}
-                  </h3>
-                  <p>المستند يبقى مسودة حتى الاعتماد والتسليم</p>
-                </div>
-              </header>
-              <div className="setup-note">
-                <PackageCheck size={20} />
-                <div>
-                  <strong>أكمل البيانات الأساسية أولًا</strong>
-                  <p>يلزم وجود عميل وصنف ومخزن نشط قبل إنشاء أمر بيع.</p>
-                </div>
-              </div>
-            </article>
-          ) : null}
-          {canManageCurrent && setupReady && showCreate ? (
-            <article
-              ref={createRef}
-              className="panel master-form-card sales-create-card"
-            >
-              <header className="panel__head">
-                <div>
-                  <h3>
-                    {tab === "weight" ? "كارتة وزن جديدة" : "أمر بيع جديد"}
-                  </h3>
-                  <p>المستند يبقى مسودة حتى الاعتماد والتسليم</p>
-                </div>
-              </header>
-              <form
-                className="compact-form sales-form"
-                onSubmit={tab === "weight" ? submitWeight : submitPiece}
-              >
-                <div className="form-pair">
-                  <label>
-                    العميل
-                    {" "}
-                    <select
-                      value={customerId}
-                      onChange={(e) => setCustomerId(e.target.value)}
+                    <span className="purchase-order-card__icon">
+                      {order.billing_method === "weight" ? (
+                        <Scale size={18} />
+                      ) : (
+                        <ShoppingCart size={18} />
+                      )}
+                    </span>
+                    <span>
+                      <strong dir="ltr">{order.order_number}</strong>
+                      <small>
+                        {order.customer_name_ar} · {order.lines.length} بند
+                      </small>
+                    </span>
+                    <span
+                      className={`purchase-status purchase-status--${orderStatusClass(order.status)}`}
                     >
-                      {options.customers.map((x) => (
-                        <option key={x.id} value={x.id}>
-                          {x.name_ar} · {x.code}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    المخزن
-                    {" "}
-                    <select value={warehouseId} disabled>
-                      {options.warehouses.map((x) => (
-                        <option key={x.id} value={x.id}>
-                          {x.name_ar}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                {tab === "weight" ? (
-                  <>
-                    <div className="form-pair">
-                      <label>
-                        طريقة الوزن
-                        {" "}
-                        <select
-                          value={weightMode}
-                          onChange={(e) =>
-                            setWeightMode(e.target.value as typeof weightMode)
-                          }
-                        >
-                          <option value="total_card">وزن إجمالي للكارتة</option>
-                          <option value="per_line">وزن لكل بند</option>
-                        </select>
-                      </label>
-                      <label>
-                        طريقة التسعير
-                        {" "}
-                        <select
-                          value={pricingMode}
-                          onChange={(e) =>
-                            setPricingMode(e.target.value as typeof pricingMode)
-                          }
-                        >
-                          <option value="uniform">سعر كيلو موحد</option>
-                          <option value="per_line">سعر لكل بند</option>
-                        </select>
-                      </label>
-                    </div>
-                    <label className="check-row">
-                      <input
-                        type="checkbox"
-                        checked={vehicleScale}
-                        onChange={(e) => setVehicleScale(e.target.checked)}
-                      />{" "}
-                      حساب الصافي من ميزان السيارة
-                    </label>
-                    {vehicleScale ? (
-                      <div className="form-pair">
-                        <label>
-                          الوزن القائم
-                          {" "}
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.001"
-                            value={grossWeight}
-                            onChange={(e) => setGrossWeight(e.target.value)}
-                            required
-                          />
-                        </label>
-                        <label>
-                          وزن السيارة الفارغ
-                          {" "}
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.001"
-                            value={tareWeight}
-                            onChange={(e) => setTareWeight(e.target.value)}
-                            required
-                          />
-                        </label>
-                      </div>
-                    ) : weightMode === "total_card" ? (
-                      <label>
-                        الوزن الصافي الفعلي
-                        {" "}
-                        <input
-                          type="number"
-                          min="0.001"
-                          step="0.001"
-                          value={netWeight}
-                          onChange={(e) => setNetWeight(e.target.value)}
-                          required
-                        />
-                      </label>
-                    ) : null}
-                    {pricingMode === "uniform" ? (
-                      <label>
-                        سعر الكيلو الموحد
-                        {" "}
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={uniformPrice}
-                          onChange={(e) => setUniformPrice(e.target.value)}
-                          required
-                        />
-                      </label>
-                    ) : null}
-                    <label>
-                      رقم السيارة
-                      {" "}
-                      <input
-                        value={vehicleNumber}
-                        onChange={(e) => setVehicleNumber(e.target.value)}
-                      />
-                    </label>
-                  </>
-                ) : null}
-                <div className="purchase-lines-head">
-                  <strong>البنود</strong>
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() =>
-                      tab === "weight"
-                        ? setWeightLines((x) => [
-                            ...x,
-                            {
-                              ...weightLine(options.products[0]?.id),
-                              unit:
-                                options.products[0]?.unit_symbol || "ماسورة",
-                            },
-                          ])
-                        : setPieceLines((x) => [
-                            ...x,
-                            pieceLine(
-                              options.products[0]?.id,
-                              options.products[0]?.unit_symbol || "قطعة",
-                            ),
-                          ])
-                    }
-                  >
-                    <Plus size={15} /> إضافة بند
+                      {statusLabels[order.status]}
+                    </span>
+                    <span className="purchase-order-card__value">
+                      {currency.format(Number(order.total))} ج.م
+                    </span>
                   </button>
-                </div>
-                <div className="sales-draft-lines">
-                  {(tab === "weight" ? weightLines : pieceLines).map(
-                    (line, index) => (
-                      <div className="sales-draft-line" key={line.key}>
-                        <span className="purchase-line-number">
-                          {index + 1}
-                        </span>
-                        <label>
-                          الصنف
-                          {" "}
-                          <select
-                            value={line.product_id}
-                            onChange={(e) =>
-                              tab === "weight"
-                                ? updateWeight(line.key, {
-                                    product_id: e.target.value,
-                                    unit: productUnit(e.target.value),
-                                  })
-                                : updatePiece(line.key, {
-                                    product_id: e.target.value,
-                                    unit: productUnit(e.target.value),
-                                  })
-                            }
-                          >
-                            {options.products.map((x) => (
-                              <option key={x.id} value={x.id}>
-                                {x.name_ar} · {x.code}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label>
-                          العدد
-                          {" "}
-                          <input
-                            type="number"
-                            min="0.001"
-                            step="0.001"
-                            value={line.quantity}
-                            onChange={(e) =>
-                              tab === "weight"
-                                ? updateWeight(line.key, {
-                                    quantity: e.target.value,
-                                  })
-                                : updatePiece(line.key, {
-                                    quantity: e.target.value,
-                                  })
-                            }
-                            required
-                          />
-                        </label>
-                        <label>
-                          الوحدة
-                          {" "}
-                          <input
-                            value={line.unit}
-                            maxLength={40}
-                            onChange={(e) =>
-                              tab === "weight"
-                                ? updateWeight(line.key, {
-                                    unit: e.target.value,
-                                  })
-                                : updatePiece(line.key, {
-                                    unit: e.target.value,
-                                  })
-                            }
-                            required
-                          />
-                        </label>
-                        {tab === "piece" ? (
-                          <label>
-                            سعر الوحدة
-                            {" "}
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={line.unit_price}
-                              onChange={(e) =>
-                                updatePiece(line.key, {
-                                  unit_price: e.target.value,
-                                })
-                              }
-                              required
-                            />
-                          </label>
-                        ) : (
-                          <>
-                            {weightMode === "per_line" ? (
-                              <label>
-                                الوزن الفعلي
-                                {" "}
-                                <input
-                                  type="number"
-                                  min="0.001"
-                                  step="0.001"
-                                  value={(line as WeightDraft).actual_weight_kg}
-                                  onChange={(e) =>
-                                    updateWeight(line.key, {
-                                      actual_weight_kg: e.target.value,
-                                    })
-                                  }
-                                  required
-                                />
-                              </label>
-                            ) : null}
-                            {pricingMode === "per_line" ? (
-                              <label>
-                                سعر الكيلو
-                                {" "}
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={(line as WeightDraft).price_per_kg}
-                                  onChange={(e) =>
-                                    updateWeight(line.key, {
-                                      price_per_kg: e.target.value,
-                                    })
-                                  }
-                                  required
-                                />
-                              </label>
-                            ) : null}
-                          </>
-                        )}
-                        <button
-                          type="button"
-                          className="mini-action"
-                          aria-label="حذف"
-                          onClick={() =>
-                            tab === "weight"
-                              ? setWeightLines((x) =>
-                                  x.length > 1
-                                    ? x.filter((y) => y.key !== line.key)
-                                    : x,
-                                )
-                              : setPieceLines((x) =>
-                                  x.length > 1
-                                    ? x.filter((y) => y.key !== line.key)
-                                    : x,
-                                )
-                          }
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    ),
-                  )}
-                </div>
-                {tab === "weight" ? (
-                  <div className="sales-adjustments">
-                    <label>
-                      خصم
-                      {" "}
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={discount}
-                        onChange={(e) => setDiscount(e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      نقل
-                      {" "}
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={transport}
-                        onChange={(e) => setTransport(e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      ضريبة
-                      {" "}
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={tax}
-                        onChange={(e) => setTax(e.target.value)}
-                      />
-                    </label>
-                  </div>
-                ) : null}
-                <label>
-                  ملاحظات
-                  {" "}
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                  />
-                </label>
-                <button type="submit" className="primary-button" disabled={submitting}>
-                  {tab === "weight" ? (
-                    <Scale size={17} />
-                  ) : (
-                    <ShoppingCart size={17} />
-                  )}{" "}
-                  حفظ كمسودة
-                </button>
-              </form>
-            </article>
-          ) : null}
-        </section>
-      ) : (
-        <section className="master-layout sales-layout">
-          <article className="panel">
-            <header className="panel__head">
-              <div>
-                <h3>عروض الأسعار</h3>
-                <p>مستند تجاري بلا تأثير على المخزون أو حساب العميل</p>
+                ))}
               </div>
-              <span className="status-badge status-badge--active">
-                {quotations.length}
-              </span>
-            </header>
-            <div className="quotation-list">
-              {quotations.map((q) => (
-                <div className="quotation-card" key={q.id}>
-                  <span>
-                    <strong dir="ltr">{q.quotation_number}</strong>
-                    <small>
-                      {q.customer_name_ar} ·{" "}
-                      {new Date(q.quotation_date).toLocaleDateString("ar-EG")}
-                    </small>
-                  </span>
-                  <span>{q.lines.length} بند</span>
-                  <strong>{currency.format(Number(q.total))} ج.م</strong>
-                </div>
-              ))}
-            </div>
-          </article>
-          {canPieceManage && setupReady ? (
-            <article className="panel master-form-card">
-              <header className="panel__head">
-                <div>
-                  <h3>عرض سعر جديد</h3>
-                  <p>يسمح ببنود حرة غير مسجلة كمنتج</p>
-                </div>
-                <FileText size={20} />
-              </header>
-              <form
-                className="compact-form sales-form"
-                onSubmit={submitQuotation}
+            </article>
+            {renderIf(canManageCurrent && showCreate && !setupReady, () => (
+              <article
+                ref={createRef}
+                className="panel master-form-card sales-create-card"
               >
-                <label>
-                  العميل
-                  {" "}
-                  <select
-                    value={customerId}
-                    onChange={(e) => setCustomerId(e.target.value)}
-                  >
-                    {options.customers.map((x) => (
-                      <option key={x.id} value={x.id}>
-                        {x.name_ar}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  صالح حتى
-                  {" "}
-                  <input
-                    type="date"
-                    value={validUntil}
-                    onChange={(e) => setValidUntil(e.target.value)}
-                  />
-                </label>
-                <div className="purchase-lines-head">
-                  <strong>البنود</strong>
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() =>
-                      setQuoteLines((x) => [
-                        ...x,
-                        quoteLine(options.products[0]?.id),
-                      ])
-                    }
-                  >
-                    <Plus size={15} /> إضافة
-                  </button>
+                <header className="panel__head">
+                  <div>
+                    <h3>
+                      {tab === "weight" ? "كارتة وزن جديدة" : "أمر بيع جديد"}
+                    </h3>
+                    <p>المستند يبقى مسودة حتى الاعتماد والتسليم</p>
+                  </div>
+                </header>
+                <div className="setup-note">
+                  <PackageCheck size={20} />
+                  <div>
+                    <strong>أكمل البيانات الأساسية أولًا</strong>
+                    <p>يلزم وجود عميل وصنف ومخزن نشط قبل إنشاء أمر بيع.</p>
+                  </div>
                 </div>
-                {quoteLines.map((line) => (
-                  <div className="quote-draft-line" key={line.key}>
+              </article>
+            ))}
+            {renderIf(canManageCurrent && setupReady && showCreate, () => (
+              <article
+                ref={createRef}
+                className="panel master-form-card sales-create-card"
+              >
+                <header className="panel__head">
+                  <div>
+                    <h3>
+                      {tab === "weight" ? "كارتة وزن جديدة" : "أمر بيع جديد"}
+                    </h3>
+                    <p>المستند يبقى مسودة حتى الاعتماد والتسليم</p>
+                  </div>
+                </header>
+                <form
+                  className="compact-form sales-form"
+                  onSubmit={tab === "weight" ? submitWeight : submitPiece}
+                >
+                  <div className="form-pair">
                     <label>
-                      منتج اختياري
-                      {" "}
+                      العميل{" "}
                       <select
-                        value={line.product_id}
-                        onChange={(e) =>
-                          updateQuote(line.key, {
-                            product_id: e.target.value,
-                            item_name: productName(e.target.value),
-                          })
-                        }
+                        value={customerId}
+                        onChange={(e) => setCustomerId(e.target.value)}
                       >
-                        <option value="">بند حر</option>
-                        {options.products.map((x) => (
+                        {options.customers.map((x) => (
+                          <option key={x.id} value={x.id}>
+                            {x.name_ar} · {x.code}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      المخزن{" "}
+                      <select value={warehouseId} disabled>
+                        {options.warehouses.map((x) => (
                           <option key={x.id} value={x.id}>
                             {x.name_ar}
                           </option>
                         ))}
                       </select>
                     </label>
-                    <label>
-                      اسم البند
-                      {" "}
-                      <input
-                        value={line.item_name || productName(line.product_id)}
-                        onChange={(e) =>
-                          updateQuote(line.key, { item_name: e.target.value })
-                        }
-                        required
-                      />
-                    </label>
-                    <div className="form-pair">
-                      <label>
-                        الكمية
-                        {" "}
+                  </div>
+                  {renderIf(tab === "weight", () => (
+                    <>
+                      <div className="form-pair">
+                        <label>
+                          طريقة الوزن{" "}
+                          <select
+                            value={weightMode}
+                            onChange={(e) =>
+                              setWeightMode(e.target.value as typeof weightMode)
+                            }
+                          >
+                            <option value="total_card">
+                              وزن إجمالي للكارتة
+                            </option>
+                            <option value="per_line">وزن لكل بند</option>
+                          </select>
+                        </label>
+                        <label>
+                          طريقة التسعير{" "}
+                          <select
+                            value={pricingMode}
+                            onChange={(e) =>
+                              setPricingMode(
+                                e.target.value as typeof pricingMode,
+                              )
+                            }
+                          >
+                            <option value="uniform">سعر كيلو موحد</option>
+                            <option value="per_line">سعر لكل بند</option>
+                          </select>
+                        </label>
+                      </div>
+                      <label className="check-row">
                         <input
-                          type="number"
-                          min="0.001"
-                          step="0.001"
-                          value={line.quantity}
-                          onChange={(e) =>
-                            updateQuote(line.key, { quantity: e.target.value })
-                          }
-                          required
+                          type="checkbox"
+                          checked={vehicleScale}
+                          onChange={(e) => setVehicleScale(e.target.checked)}
+                        />{" "}
+                        حساب الصافي من ميزان السيارة
+                      </label>
+                      {renderIfElse(
+                        vehicleScale,
+                        () => (
+                          <div className="form-pair">
+                            <label>
+                              الوزن القائم{" "}
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.001"
+                                value={grossWeight}
+                                onChange={(e) => setGrossWeight(e.target.value)}
+                                required
+                              />
+                            </label>
+                            <label>
+                              وزن السيارة الفارغ{" "}
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.001"
+                                value={tareWeight}
+                                onChange={(e) => setTareWeight(e.target.value)}
+                                required
+                              />
+                            </label>
+                          </div>
+                        ),
+                        () =>
+                          renderIf(weightMode === "total_card", () => (
+                            <label>
+                              الوزن الصافي الفعلي{" "}
+                              <input
+                                type="number"
+                                min="0.001"
+                                step="0.001"
+                                value={netWeight}
+                                onChange={(e) => setNetWeight(e.target.value)}
+                                required
+                              />
+                            </label>
+                          )),
+                      )}
+                      {renderIf(pricingMode === "uniform", () => (
+                        <label>
+                          سعر الكيلو الموحد{" "}
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={uniformPrice}
+                            onChange={(e) => setUniformPrice(e.target.value)}
+                            required
+                          />
+                        </label>
+                      ))}
+                      <label>
+                        رقم السيارة{" "}
+                        <input
+                          value={vehicleNumber}
+                          onChange={(e) => setVehicleNumber(e.target.value)}
                         />
                       </label>
+                    </>
+                  ))}
+                  <div className="purchase-lines-head">
+                    <strong>البنود</strong>
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() =>
+                        tab === "weight"
+                          ? setWeightLines((x) => [
+                              ...x,
+                              {
+                                ...weightLine(options.products[0]?.id),
+                                unit:
+                                  options.products[0]?.unit_symbol || "ماسورة",
+                              },
+                            ])
+                          : setPieceLines((x) => [
+                              ...x,
+                              pieceLine(
+                                options.products[0]?.id,
+                                options.products[0]?.unit_symbol || "قطعة",
+                              ),
+                            ])
+                      }
+                    >
+                      <Plus size={15} /> إضافة بند
+                    </button>
+                  </div>
+                  <div className="sales-draft-lines">
+                    {(tab === "weight" ? weightLines : pieceLines).map(
+                      (line, index) => (
+                        <div className="sales-draft-line" key={line.key}>
+                          <span className="purchase-line-number">
+                            {index + 1}
+                          </span>
+                          <label>
+                            الصنف{" "}
+                            <select
+                              value={line.product_id}
+                              onChange={(e) =>
+                                tab === "weight"
+                                  ? updateWeight(line.key, {
+                                      product_id: e.target.value,
+                                      unit: productUnit(e.target.value),
+                                    })
+                                  : updatePiece(line.key, {
+                                      product_id: e.target.value,
+                                      unit: productUnit(e.target.value),
+                                    })
+                              }
+                            >
+                              {options.products.map((x) => (
+                                <option key={x.id} value={x.id}>
+                                  {x.name_ar} · {x.code}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            العدد{" "}
+                            <input
+                              type="number"
+                              min="0.001"
+                              step="0.001"
+                              value={line.quantity}
+                              onChange={(e) =>
+                                tab === "weight"
+                                  ? updateWeight(line.key, {
+                                      quantity: e.target.value,
+                                    })
+                                  : updatePiece(line.key, {
+                                      quantity: e.target.value,
+                                    })
+                              }
+                              required
+                            />
+                          </label>
+                          <label>
+                            الوحدة{" "}
+                            <input
+                              value={line.unit}
+                              maxLength={40}
+                              onChange={(e) =>
+                                tab === "weight"
+                                  ? updateWeight(line.key, {
+                                      unit: e.target.value,
+                                    })
+                                  : updatePiece(line.key, {
+                                      unit: e.target.value,
+                                    })
+                              }
+                              required
+                            />
+                          </label>
+                          {renderIfElse(
+                            tab === "piece",
+                            () => (
+                              <label>
+                                سعر الوحدة{" "}
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={line.unit_price}
+                                  onChange={(e) =>
+                                    updatePiece(line.key, {
+                                      unit_price: e.target.value,
+                                    })
+                                  }
+                                  required
+                                />
+                              </label>
+                            ),
+                            () => (
+                              <>
+                                {renderIf(weightMode === "per_line", () => (
+                                  <label>
+                                    الوزن الفعلي{" "}
+                                    <input
+                                      type="number"
+                                      min="0.001"
+                                      step="0.001"
+                                      value={
+                                        (line as WeightDraft).actual_weight_kg
+                                      }
+                                      onChange={(e) =>
+                                        updateWeight(line.key, {
+                                          actual_weight_kg: e.target.value,
+                                        })
+                                      }
+                                      required
+                                    />
+                                  </label>
+                                ))}
+                                {renderIf(pricingMode === "per_line", () => (
+                                  <label>
+                                    سعر الكيلو{" "}
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={(line as WeightDraft).price_per_kg}
+                                      onChange={(e) =>
+                                        updateWeight(line.key, {
+                                          price_per_kg: e.target.value,
+                                        })
+                                      }
+                                      required
+                                    />
+                                  </label>
+                                ))}
+                              </>
+                            ),
+                          )}
+                          <button
+                            type="button"
+                            className="mini-action"
+                            aria-label="حذف"
+                            onClick={() =>
+                              tab === "weight"
+                                ? setWeightLines((x) =>
+                                    x.length > 1
+                                      ? x.filter((y) => y.key !== line.key)
+                                      : x,
+                                  )
+                                : setPieceLines((x) =>
+                                    x.length > 1
+                                      ? x.filter((y) => y.key !== line.key)
+                                      : x,
+                                  )
+                            }
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                  {renderIf(tab === "weight", () => (
+                    <div className="sales-adjustments">
                       <label>
-                        السعر
-                        {" "}
+                        خصم{" "}
                         <input
                           type="number"
                           min="0"
                           step="0.01"
-                          value={line.unit_price}
+                          value={discount}
+                          onChange={(e) => setDiscount(e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        نقل{" "}
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={transport}
+                          onChange={(e) => setTransport(e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        ضريبة{" "}
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={tax}
+                          onChange={(e) => setTax(e.target.value)}
+                        />
+                      </label>
+                    </div>
+                  ))}
+                  <label>
+                    ملاحظات{" "}
+                    <textarea
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    className="primary-button"
+                    disabled={submitting}
+                  >
+                    {renderIfElse(
+                      tab === "weight",
+                      () => (
+                        <Scale size={17} />
+                      ),
+                      () => (
+                        <ShoppingCart size={17} />
+                      ),
+                    )}{" "}
+                    حفظ كمسودة
+                  </button>
+                </form>
+              </article>
+            ))}
+          </section>
+        ),
+        () => (
+          <section className="master-layout sales-layout">
+            <article className="panel">
+              <header className="panel__head">
+                <div>
+                  <h3>عروض الأسعار</h3>
+                  <p>مستند تجاري بلا تأثير على المخزون أو حساب العميل</p>
+                </div>
+                <span className="status-badge status-badge--active">
+                  {quotations.length}
+                </span>
+              </header>
+              <div className="quotation-list">
+                {quotations.map((q) => (
+                  <div className="quotation-card" key={q.id}>
+                    <span>
+                      <strong dir="ltr">{q.quotation_number}</strong>
+                      <small>
+                        {q.customer_name_ar} ·{" "}
+                        {new Date(q.quotation_date).toLocaleDateString("ar-EG")}
+                      </small>
+                    </span>
+                    <span>{q.lines.length} بند</span>
+                    <strong>{currency.format(Number(q.total))} ج.م</strong>
+                  </div>
+                ))}
+              </div>
+            </article>
+            {canPieceManage && setupReady ? (
+              <article className="panel master-form-card">
+                <header className="panel__head">
+                  <div>
+                    <h3>عرض سعر جديد</h3>
+                    <p>يسمح ببنود حرة غير مسجلة كمنتج</p>
+                  </div>
+                  <FileText size={20} />
+                </header>
+                <form
+                  className="compact-form sales-form"
+                  onSubmit={submitQuotation}
+                >
+                  <label>
+                    العميل{" "}
+                    <select
+                      value={customerId}
+                      onChange={(e) => setCustomerId(e.target.value)}
+                    >
+                      {options.customers.map((x) => (
+                        <option key={x.id} value={x.id}>
+                          {x.name_ar}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    صالح حتى{" "}
+                    <input
+                      type="date"
+                      value={validUntil}
+                      onChange={(e) => setValidUntil(e.target.value)}
+                    />
+                  </label>
+                  <div className="purchase-lines-head">
+                    <strong>البنود</strong>
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() =>
+                        setQuoteLines((x) => [
+                          ...x,
+                          quoteLine(options.products[0]?.id),
+                        ])
+                      }
+                    >
+                      <Plus size={15} /> إضافة
+                    </button>
+                  </div>
+                  {quoteLines.map((line) => (
+                    <div className="quote-draft-line" key={line.key}>
+                      <label>
+                        منتج اختياري{" "}
+                        <select
+                          value={line.product_id}
                           onChange={(e) =>
                             updateQuote(line.key, {
-                              unit_price: e.target.value,
+                              product_id: e.target.value,
+                              item_name: productName(e.target.value),
                             })
+                          }
+                        >
+                          <option value="">بند حر</option>
+                          {options.products.map((x) => (
+                            <option key={x.id} value={x.id}>
+                              {x.name_ar}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        اسم البند{" "}
+                        <input
+                          value={line.item_name || productName(line.product_id)}
+                          onChange={(e) =>
+                            updateQuote(line.key, { item_name: e.target.value })
                           }
                           required
                         />
                       </label>
+                      <div className="form-pair">
+                        <label>
+                          الكمية{" "}
+                          <input
+                            type="number"
+                            min="0.001"
+                            step="0.001"
+                            value={line.quantity}
+                            onChange={(e) =>
+                              updateQuote(line.key, {
+                                quantity: e.target.value,
+                              })
+                            }
+                            required
+                          />
+                        </label>
+                        <label>
+                          السعر{" "}
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={line.unit_price}
+                            onChange={(e) =>
+                              updateQuote(line.key, {
+                                unit_price: e.target.value,
+                              })
+                            }
+                            required
+                          />
+                        </label>
+                      </div>
                     </div>
-                  </div>
-                ))}
-                <label>
-                  ملاحظات
-                  {" "}
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                  />
-                </label>
-                <button className="primary-button" disabled={submitting}>
-                  <FileText size={17} /> حفظ عرض السعر
-                </button>
-              </form>
-            </article>
-          ) : null}
-        </section>
-      )}
-      {selected && tab !== "quotation" && selected.billing_method === tab ? (
-        <section ref={detailRef} className="panel sales-detail">
-          <header className="panel__head">
-            <div>
-              <h3>تفاصيل {selected.order_number}</h3>
-              <p>
-                {selected.customer_name_ar} · {selected.warehouse_name_ar} ·{" "}
-                {new Date(selected.order_date).toLocaleString("ar-EG")}
-              </p>
-            </div>
-            <span
-              className={`purchase-status purchase-status--${orderStatusClass(selected.status)}`}
-            >
-              {statusLabels[selected.status]}
-            </span>
-          </header>
-          {selected.weight_cards[0] ? (
-            <div className="weight-card-summary">
-              <span>
-                <Scale size={18} />
-                <strong>{selected.weight_cards[0].card_number}</strong>
-              </span>
-              <span>
-                الوزن:{" "}
-                <strong>
-                  {quantityFormat.format(
-                    Number(selected.weight_cards[0].net_weight_kg),
-                  )}{" "}
-                  كجم
-                </strong>
-              </span>
-              <span>
-                السيارة:{" "}
-                <strong>
-                  {selected.weight_cards[0].vehicle_number || "—"}
-                </strong>
-              </span>
-            </div>
-          ) : null}
-          <div className="data-table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>الصنف</th>
-                  <th>العدد</th>
-                  <th>الوحدة</th>
-                  {selected.billing_method === "weight" ? (
-                    <>
-                      <th>الوزن الفعلي</th>
-                      <th>سعر الكيلو</th>
-                    </>
-                  ) : (
-                    <th>سعر الوحدة</th>
-                  )}
-                  <th>الإجمالي</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selected.lines.map((line) => (
-                  <tr key={line.id}>
-                    <td>
-                      <strong>{line.product_name_ar}</strong>
-                      <small dir="ltr">{line.product_code}</small>
-                    </td>
-                    <td>{quantityFormat.format(Number(line.quantity))}</td>
-                    <td>{line.unit}</td>
-                    {selected.billing_method === "weight" ? (
-                      <>
-                        <td>
-                          {quantityFormat.format(
-                            Number(line.billing_weight_kg),
-                          )}{" "}
-                          كجم
-                        </td>
-                        <td>{currency.format(Number(line.price_per_kg))}</td>
-                      </>
-                    ) : (
-                      <td>{currency.format(Number(line.unit_price))}</td>
-                    )}
-                    <td>
-                      <strong>
-                        {currency.format(Number(line.line_total))}
-                      </strong>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="sales-total-strip">
-            <span>
-              الإجمالي الفرعي {currency.format(Number(selected.subtotal))}
-            </span>
-            {selected.billing_method === "weight" ? (
-              <span>
-                خصم {currency.format(Number(selected.discount_amount))} · نقل{" "}
-                {currency.format(Number(selected.transport_amount))} · ضريبة{" "}
-                {currency.format(Number(selected.tax_amount))}
-              </span>
+                  ))}
+                  <label>
+                    ملاحظات{" "}
+                    <textarea
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    className="primary-button"
+                    disabled={submitting}
+                  >
+                    <FileText size={17} /> حفظ عرض السعر
+                  </button>
+                </form>
+              </article>
             ) : null}
-            <strong>{currency.format(Number(selected.total))} ج.م</strong>
-          </div>
-          {selected.status === "draft" && canManageCurrent ? (
-            <div className="sales-delivery-action">
-              <div>
-                <PackageCheck size={22} />
-                <span>
-                  <strong>جاهز للتسليم</strong>
-                  <small>
-                    سيُصرف المخزون وتُنشأ فاتورة العميل داخل معاملة واحدة.
-                  </small>
-                </span>
-              </div>
-              <button
-                className="primary-button"
-                onClick={() => void deliver()}
-                disabled={submitting}
-              >
-                <Truck size={17} /> تسليم الأمر المحدد
-              </button>
-            </div>
-          ) : null}
-          {selected.invoice ? (
-            <div className="invoice-chip">
-              <BadgeDollarSign size={18} />
-              <span>
-                <strong>{selected.invoice.invoice_number}</strong>
-                <small>
-                  {selected.invoice.invoice_type === "weight"
-                    ? "فاتورة وزن"
-                    : "فاتورة عادية"}{" "}
-                  · {selected.invoice.status === "posted" ? "مرحّلة" : "معكوسة"}
-                </small>
-              </span>
-              <strong>
-                {currency.format(Number(selected.invoice.total))} ج.م
-              </strong>
-              {selected.invoice.status === "posted" ? (
-                <button
-                  className="secondary-button invoice-print-button"
-                  onClick={() => void printSelectedInvoice()}
-                  disabled={submitting}
+          </section>
+        ),
+      )}
+      {renderIf(
+        Boolean(
+          selected && tab !== "quotation" && selected.billing_method === tab,
+        ),
+        () =>
+          selected ? (
+            <section ref={detailRef} className="panel sales-detail">
+              <header className="panel__head">
+                <div>
+                  <h3>تفاصيل {selected.order_number}</h3>
+                  <p>
+                    {selected.customer_name_ar} · {selected.warehouse_name_ar} ·{" "}
+                    {new Date(selected.order_date).toLocaleString("ar-EG")}
+                  </p>
+                </div>
+                <span
+                  className={`purchase-status purchase-status--${orderStatusClass(selected.status)}`}
                 >
-                  <Printer size={17} /> طباعة فاتورة A4
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-          {selected.status === "delivered" &&
-          selected.delivery?.status === "posted" &&
-          canManageCurrent ? (
-            <div className="sales-delivery-action">
-              <div>
-                <RotateCcw size={22} />
-                <span>
-                  <strong>عكس التسليم</strong>
-                  <small>استثناء معتمد: يعيد المخزون ويعكس الفاتورة.</small>
+                  {statusLabels[selected.status]}
                 </span>
+              </header>
+              {renderIf(Boolean(selectedWeightCard), () =>
+                selectedWeightCard ? (
+                  <div className="weight-card-summary">
+                    <span>
+                      <Scale size={18} />
+                      <strong>{selectedWeightCard.card_number}</strong>
+                    </span>
+                    <span>
+                      الوزن:{" "}
+                      <strong>
+                        {quantityFormat.format(
+                          Number(selectedWeightCard.net_weight_kg),
+                        )}{" "}
+                        كجم
+                      </strong>
+                    </span>
+                    <span>
+                      السيارة:{" "}
+                      <strong>
+                        {selectedWeightCard.vehicle_number || "—"}
+                      </strong>
+                    </span>
+                  </div>
+                ) : null,
+              )}
+              <div className="data-table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>الصنف</th>
+                      <th>العدد</th>
+                      <th>الوحدة</th>
+                      {renderIfElse(
+                        selected.billing_method === "weight",
+                        () => (
+                          <>
+                            <th>الوزن الفعلي</th>
+                            <th>سعر الكيلو</th>
+                          </>
+                        ),
+                        () => (
+                          <th>سعر الوحدة</th>
+                        ),
+                      )}
+                      <th>الإجمالي</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selected.lines.map((line) => (
+                      <tr key={line.id}>
+                        <td>
+                          <strong>{line.product_name_ar}</strong>
+                          <small dir="ltr">{line.product_code}</small>
+                        </td>
+                        <td>{quantityFormat.format(Number(line.quantity))}</td>
+                        <td>{line.unit}</td>
+                        {renderIfElse(
+                          selected.billing_method === "weight",
+                          () => (
+                            <>
+                              <td>
+                                {quantityFormat.format(
+                                  Number(line.billing_weight_kg),
+                                )}{" "}
+                                كجم
+                              </td>
+                              <td>
+                                {currency.format(Number(line.price_per_kg))}
+                              </td>
+                            </>
+                          ),
+                          () => (
+                            <td>{currency.format(Number(line.unit_price))}</td>
+                          ),
+                        )}
+                        <td>
+                          <strong>
+                            {currency.format(Number(line.line_total))}
+                          </strong>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <button
-                className="danger-button"
-                onClick={() => void reverseDelivery()}
-                disabled={submitting}
-              >
-                <RotateCcw size={17} /> عكس التسليم
-              </button>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-      {printDocument ? (
-        <div className="sales-print-preview">
-          <BrandedDocumentPreview document={printDocument} />
-        </div>
-      ) : null}
+              <div className="sales-total-strip">
+                <span>
+                  الإجمالي الفرعي {currency.format(Number(selected.subtotal))}
+                </span>
+                {renderIf(selected.billing_method === "weight", () => (
+                  <span>
+                    خصم {currency.format(Number(selected.discount_amount))} ·
+                    نقل {currency.format(Number(selected.transport_amount))} ·
+                    ضريبة {currency.format(Number(selected.tax_amount))}
+                  </span>
+                ))}
+                <strong>{currency.format(Number(selected.total))} ج.م</strong>
+              </div>
+              {renderIf(selected.status === "draft" && canManageCurrent, () => (
+                <div className="sales-delivery-action">
+                  <div>
+                    <PackageCheck size={22} />
+                    <span>
+                      <strong>جاهز للتسليم</strong>
+                      <small>
+                        سيُصرف المخزون وتُنشأ فاتورة العميل داخل معاملة واحدة.
+                      </small>
+                    </span>
+                  </div>
+                  <button
+                    className="primary-button"
+                    onClick={() => void deliver()}
+                    disabled={submitting}
+                  >
+                    <Truck size={17} /> تسليم الأمر المحدد
+                  </button>
+                </div>
+              ))}
+              {renderIf(Boolean(selected.invoice), () =>
+                selected.invoice ? (
+                  <div className="invoice-chip">
+                    <BadgeDollarSign size={18} />
+                    <span>
+                      <strong>{selected.invoice.invoice_number}</strong>
+                      <small>
+                        {selected.invoice.invoice_type === "weight"
+                          ? "فاتورة وزن"
+                          : "فاتورة عادية"}{" "}
+                        ·{" "}
+                        {selected.invoice.status === "posted"
+                          ? "مرحّلة"
+                          : "معكوسة"}
+                      </small>
+                    </span>
+                    <strong>
+                      {currency.format(Number(selected.invoice.total))} ج.م
+                    </strong>
+                    {renderIf(selected.invoice.status === "posted", () => (
+                      <button
+                        className="secondary-button invoice-print-button"
+                        onClick={() => void printSelectedInvoice()}
+                        disabled={submitting}
+                      >
+                        <Printer size={17} /> طباعة فاتورة A4
+                      </button>
+                    ))}
+                  </div>
+                ) : null,
+              )}
+              {renderIf(
+                selected.status === "delivered" &&
+                  selected.delivery?.status === "posted" &&
+                  canManageCurrent,
+                () => (
+                  <div className="sales-delivery-action">
+                    <div>
+                      <RotateCcw size={22} />
+                      <span>
+                        <strong>عكس التسليم</strong>
+                        <small>
+                          استثناء معتمد: يعيد المخزون ويعكس الفاتورة.
+                        </small>
+                      </span>
+                    </div>
+                    <button
+                      className="danger-button"
+                      onClick={() => void reverseDelivery()}
+                      disabled={submitting}
+                    >
+                      <RotateCcw size={17} /> عكس التسليم
+                    </button>
+                  </div>
+                ),
+              )}
+            </section>
+          ) : null,
+      )}
+      {renderIf(Boolean(printDocument), () =>
+        printDocument ? (
+          <div className="sales-print-preview">
+            <BrandedDocumentPreview document={printDocument} />
+          </div>
+        ) : null,
+      )}
     </AppShell>
   );
 }

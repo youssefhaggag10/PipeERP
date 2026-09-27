@@ -870,7 +870,7 @@ export function CrmPage() {
                       placeholder="ملاحظة متابعة"
                       required
                     />
-                    <button className="secondary-button">إضافة</button>
+                    <button type="submit" className="secondary-button">إضافة</button>
                   </form>
                   {canSchedule ? (
                     <form

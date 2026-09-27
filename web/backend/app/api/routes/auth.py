@@ -1,4 +1,5 @@
 import hmac
+from http.cookies import SimpleCookie
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
@@ -33,6 +34,26 @@ from app.modules.identity.service import (
 router = APIRouter(prefix="/auth")
 
 
+def _set_readable_csrf_cookie(
+    response: Response,
+    *,
+    csrf_token: str,
+    settings: Settings,
+) -> None:
+    """Set the non-secret double-submit token that the SPA mirrors in a header."""
+    cookie = SimpleCookie()
+    cookie[CSRF_COOKIE] = csrf_token
+    morsel = cookie[CSRF_COOKIE]
+    morsel["max-age"] = settings.refresh_session_hours * 3600
+    morsel["path"] = "/"
+    morsel["samesite"] = "strict"
+    if settings.secure_cookies:
+        morsel["secure"] = True
+    # Deliberately no HttpOnly: JavaScript must read this non-secret token for
+    # the double-submit comparison. Authentication cookies remain HttpOnly.
+    response.headers.append("set-cookie", morsel.OutputString())
+
+
 def _set_auth_cookies(
     response: Response,
     *,
@@ -59,16 +80,7 @@ def _set_auth_cookies(
         secure=settings.secure_cookies,
         samesite="strict",
     )
-    response.set_cookie(
-        CSRF_COOKIE,
-        csrf_token,
-        max_age=settings.refresh_session_hours * 3600,
-        # The double-submit CSRF token must be readable by the SPA; it is not an auth secret.
-        httponly=False,  # NOSONAR
-        path="/",
-        secure=settings.secure_cookies,
-        samesite="strict",
-    )
+    _set_readable_csrf_cookie(response, csrf_token=csrf_token, settings=settings)
 
 
 def _clear_auth_cookies(response: Response, settings: Settings) -> None:

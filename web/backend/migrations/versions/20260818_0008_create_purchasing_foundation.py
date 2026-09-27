@@ -18,6 +18,7 @@ depends_on: str | Sequence[str] | None = None
 NOW_SQL = "now()"
 VERSION_POSITIVE = "version > 0"
 PURCHASE_ORDERS_ID = "purchase_orders.id"
+USERS_ID = "users.id"
 
 
 def upgrade() -> None:
@@ -59,7 +60,7 @@ def upgrade() -> None:
         sa.CheckConstraint(VERSION_POSITIVE, name=op.f("ck_purchase_orders_version_positive")),
         sa.ForeignKeyConstraint(
             ["created_by_id"],
-            ["users.id"],
+            [USERS_ID],
             name=op.f("fk_purchase_orders_created_by_id_users"),
             ondelete="RESTRICT",
         ),
@@ -195,13 +196,13 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["posted_by_id"],
-            ["users.id"],
+            [USERS_ID],
             name=op.f("fk_purchase_receipts_posted_by_id_users"),
             ondelete="RESTRICT",
         ),
         sa.ForeignKeyConstraint(
             ["reversed_by_id"],
-            ["users.id"],
+            [USERS_ID],
             name=op.f("fk_purchase_receipts_reversed_by_id_users"),
             ondelete="RESTRICT",
         ),

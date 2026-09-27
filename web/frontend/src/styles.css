@@ -81,7 +81,7 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .sidebar__nav { padding: 20px 14px; display: grid; gap: 4px; }
 .sidebar__eyebrow { color: #71889e; margin: 0 10px 8px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .8px; }
 .nav-item { position: relative; width: 100%; border: 0; border-radius: 9px; background: transparent; color: #aebdca; display: flex; align-items: center; gap: 12px; min-height: 43px; padding: 0 12px; text-align: right; font-size: 13px; text-decoration: none; transition: .16s ease; }
-.nav-item:hover { color: #fff; background: rgba(255,255,255,.055); }
+.nav-item:hover { color: #fff; background: #263a4e; }
 .nav-item--active { color: #fff; background: #174b48; }
 .nav-item--active svg { color: #57d5be; }
 .nav-item__marker { position: absolute; right: -14px; width: 3px; height: 24px; border-radius: 3px 0 0 3px; background: #35c7ad; }
@@ -89,7 +89,7 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .nav-group__row { position: relative; display: flex; align-items: center; }
 .nav-group__row .nav-item { padding-left: 38px; }
 .nav-group__toggle { position: absolute; left: 8px; width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: #aebdca; }
-.nav-group__toggle:hover { color: #fff; background: rgba(255,255,255,.08); }
+.nav-group__toggle:hover { color: #fff; background: #263a4e; }
 .nav-group__toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
 .nav-group__children { display: grid; padding-right: 18px; }
 .nav-item--child { min-height: 36px; font-size: 11px; }
@@ -338,7 +338,7 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .settings-form label { display: grid; gap: 7px; color: #425468; font-size: 10px; font-weight: 750; }
 .settings-form input, .reference-form input, .reference-form select { min-width: 0; min-height: 43px; padding: 0 11px; border: 1px solid #d5dfe5; border-radius: 9px; background: #fff; color: var(--ink); outline: 0; }
 .settings-form input:focus, .reference-form input:focus, .reference-form select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(15,139,120,.08); }
-.settings-form input:disabled { background: #f3f6f7; color: #667587; }
+.settings-form input:disabled { background: #f3f6f7; color: #4a5a6a; }
 .settings-form__wide { grid-column: span 2; }
 .settings-form .settings-form__check { align-self: end; min-height: 43px; display: flex; align-items: center; padding: 0 12px; border: 1px solid #dbe4e8; border-radius: 9px; background: #f7fafb; }
 .settings-form__submit { grid-column: 1 / -1; justify-self: start; }
@@ -467,7 +467,7 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .purchase-receipt-line input:focus, .purchase-receipt-foot input:focus, .purchase-invoice-form input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(15,139,120,.08); }
 .purchase-receipt-foot { padding: 13px; display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 10px; border-top: 1px solid #e7edef; background: #f7fafb; }
 .purchase-invoice-form { padding: 13px; display: grid; grid-template-columns: 42px minmax(150px,1fr) minmax(190px,.8fr) auto; align-items: center; gap: 11px; border: 1px solid #e5ddca; border-radius: 13px; background: #fffaf0; }
-.purchase-invoice-form > span { color: #9b6715; background: #fff0d4; }
+.purchase-invoice-form > span { color: #76500f; background: #fff0d4; }
 .purchase-invoice-form strong, .purchase-invoice-form small { display: block; }
 .purchase-invoice-form strong { font-size: 11px; }
 .purchase-invoice-form small { margin-top: 4px; color: #8d7a60; font-size: 8px; }
@@ -656,8 +656,8 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .manufacturing-order-card strong { font-size: 11px; }
 .manufacturing-order-card small { margin-top: 4px; color: var(--muted); font-size: 8px; }
 .manufacturing-order-card b { color: var(--navy-900); font-size: 10px; white-space: nowrap; }
-.manufacturing-status { padding: 5px 8px; border-radius: 999px; background: #eef1f3; color: #6d7a87; font-size: 8px; font-style: normal; font-weight: 850; white-space: nowrap; }
-.manufacturing-status--in_progress { color: #9b6715; background: #fff0d4; }
+.manufacturing-status { padding: 5px 8px; border-radius: 999px; background: #eef1f3; color: #4e5c69; font-size: 8px; font-style: normal; font-weight: 850; white-space: nowrap; }
+.manufacturing-status--in_progress { color: #76500f; background: #fff0d4; }
 .manufacturing-status--completed { color: #087060; background: #e5f6f1; }
 .manufacturing-status--cancelled { color: #a24740; background: #fff0ee; }
 .manufacturing-detail { margin-top: 16px; }

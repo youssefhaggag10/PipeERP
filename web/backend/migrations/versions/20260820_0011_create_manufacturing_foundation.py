@@ -487,7 +487,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["manufacturing_order_id"],
-            ["manufacturing_orders.id"],
+            [MANUFACTURING_ORDERS_ID],
             name=op.f(
                 "fk_manufacturing_order_materials_manufacturing_order_id_manufacturing_orders"
             ),
@@ -585,7 +585,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["manufacturing_order_id"],
-            ["manufacturing_orders.id"],
+            [MANUFACTURING_ORDERS_ID],
             name=op.f("fk_manufacturing_order_outputs_manufacturing_order_id_manufacturing_orders"),
             ondelete="CASCADE",
         ),

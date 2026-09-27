@@ -10,6 +10,7 @@ down_revision: str | None = "20260818_0005"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 PRODUCTS_ID = "products.id"
+UNIT_COST_NONNEGATIVE = "unit_cost >= 0"
 
 
 def timestamps() -> tuple[sa.Column[object], sa.Column[object]]:
@@ -115,7 +116,7 @@ def upgrade() -> None:
             name=op.f("ck_inventory_layers_weight_remaining_within_received"),
         ),
         sa.CheckConstraint(
-            "unit_cost >= 0", name=op.f("ck_inventory_layers_unit_cost_nonnegative")
+            UNIT_COST_NONNEGATIVE, name=op.f("ck_inventory_layers_unit_cost_nonnegative")
         ),
         sa.CheckConstraint(
             "quantity_received > 0 OR weight_received_kg > 0",
@@ -174,7 +175,7 @@ def upgrade() -> None:
             name=op.f("ck_inventory_transactions_movement_amount_nonzero"),
         ),
         sa.CheckConstraint(
-            "unit_cost >= 0", name=op.f("ck_inventory_transactions_unit_cost_nonnegative")
+            UNIT_COST_NONNEGATIVE, name=op.f("ck_inventory_transactions_unit_cost_nonnegative")
         ),
         sa.CheckConstraint(
             "total_cost >= 0", name=op.f("ck_inventory_transactions_total_cost_nonnegative")
@@ -250,7 +251,7 @@ def upgrade() -> None:
             "weight_kg >= 0", name=op.f("ck_inventory_allocations_weight_nonnegative")
         ),
         sa.CheckConstraint(
-            "unit_cost >= 0", name=op.f("ck_inventory_allocations_unit_cost_nonnegative")
+            UNIT_COST_NONNEGATIVE, name=op.f("ck_inventory_allocations_unit_cost_nonnegative")
         ),
         sa.CheckConstraint(
             "total_cost >= 0", name=op.f("ck_inventory_allocations_total_cost_nonnegative")

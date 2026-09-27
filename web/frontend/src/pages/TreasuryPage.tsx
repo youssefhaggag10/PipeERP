@@ -1350,7 +1350,7 @@ export function TreasuryPage() {
                       required
                     />
                   </label>
-                  <button className="primary-button">
+                  <button type="submit" className="primary-button">
                     <Scale size={17} /> تسجيل التسوية
                   </button>
                 </form>

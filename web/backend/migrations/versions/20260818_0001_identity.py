@@ -11,6 +11,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 NOW_SQL = "now()"
+USERS_ID = "users.id"
 
 
 def upgrade() -> None:
@@ -105,7 +106,7 @@ def upgrade() -> None:
         sa.Column("assigned_by_user_id", sa.Uuid()),
         sa.ForeignKeyConstraint(
             ["assigned_by_user_id"],
-            ["users.id"],
+            [USERS_ID],
             name=op.f("fk_user_roles_assigned_by_user_id_users"),
             ondelete="SET NULL",
         ),
@@ -113,7 +114,7 @@ def upgrade() -> None:
             ["role_id"], ["roles.id"], name=op.f("fk_user_roles_role_id_roles"), ondelete="CASCADE"
         ),
         sa.ForeignKeyConstraint(
-            ["user_id"], ["users.id"], name=op.f("fk_user_roles_user_id_users"), ondelete="CASCADE"
+            ["user_id"], [USERS_ID], name=op.f("fk_user_roles_user_id_users"), ondelete="CASCADE"
         ),
         sa.PrimaryKeyConstraint("user_id", "role_id", name=op.f("pk_user_roles")),
     )
@@ -131,7 +132,7 @@ def upgrade() -> None:
         sa.Column("user_agent", sa.String(length=512)),
         sa.ForeignKeyConstraint(
             ["user_id"],
-            ["users.id"],
+            [USERS_ID],
             name=op.f("fk_auth_sessions_user_id_users"),
             ondelete="CASCADE",
         ),
@@ -165,7 +166,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["actor_user_id"],
-            ["users.id"],
+            [USERS_ID],
             name=op.f("fk_audit_logs_actor_user_id_users"),
             ondelete="SET NULL",
         ),

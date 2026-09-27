@@ -21,6 +21,7 @@ MARKER = "[PIPEERP-DEMO-V1]"
 UNITS_PATH = "/master-data/units"
 PARTNERS_PATH = "/master-data/partners"
 CATEGORIES_WITH_INACTIVE_PATH = "/master-data/categories?include_inactive=true"
+CATEGORIES_PATH = "/master-data/categories"
 PARTNERS_WITH_INACTIVE_PATH = "/master-data/partners?include_inactive=true"
 
 
@@ -135,7 +136,7 @@ def seed_master_data(api: Api) -> dict[str, dict[str, Any]]:
         "raw": ensure(
             api,
             CATEGORIES_WITH_INACTIVE_PATH,
-            "/master-data/categories",
+            CATEGORIES_PATH,
             "code",
             "DEMO-RAW",
             {"code": "DEMO-RAW", "name_ar": "خامات ديمو"},
@@ -143,7 +144,7 @@ def seed_master_data(api: Api) -> dict[str, dict[str, Any]]:
         "finished": ensure(
             api,
             CATEGORIES_WITH_INACTIVE_PATH,
-            "/master-data/categories",
+            CATEGORIES_PATH,
             "code",
             "DEMO-FG",
             {"code": "DEMO-FG", "name_ar": "منتجات تامة ديمو"},
@@ -151,7 +152,7 @@ def seed_master_data(api: Api) -> dict[str, dict[str, Any]]:
         "other": ensure(
             api,
             CATEGORIES_WITH_INACTIVE_PATH,
-            "/master-data/categories",
+            CATEGORIES_PATH,
             "code",
             "DEMO-OTHER",
             {"code": "DEMO-OTHER", "name_ar": "أصناف متنوعة ديمو"},
