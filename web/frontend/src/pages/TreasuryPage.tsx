@@ -233,7 +233,8 @@ function returnStatusTone(status: AccountInvoice["return_status"]): string {
 }
 
 function renderIf(condition: boolean, render: () => ReactNode): ReactNode {
-  return condition ? render() : null;
+  if (!condition) return null;
+  return render();
 }
 
 export function TreasuryPage() {

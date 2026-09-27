@@ -33,7 +33,8 @@ import { clientId } from "../lib/clientId";
 type Tab = "orders" | "recipes";
 
 function renderIf(condition: boolean, render: () => ReactNode): ReactNode {
-  return condition ? render() : null;
+  if (!condition) return null;
+  return render();
 }
 
 function renderIfElse(
@@ -41,7 +42,8 @@ function renderIfElse(
   whenTrue: () => ReactNode,
   whenFalse: () => ReactNode,
 ): ReactNode {
-  return condition ? whenTrue() : whenFalse();
+  if (condition) return whenTrue();
+  return whenFalse();
 }
 
 function renderOptional<T>(value: T | null, render: (value: T) => ReactNode): ReactNode {

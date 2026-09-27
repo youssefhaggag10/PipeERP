@@ -211,7 +211,8 @@ const quoteLine = (productId = ""): QuoteDraft => ({
 });
 
 function renderIf(condition: boolean, render: () => ReactNode): ReactNode {
-  return condition ? render() : null;
+  if (!condition) return null;
+  return render();
 }
 
 function renderIfElse(
@@ -219,7 +220,8 @@ function renderIfElse(
   whenTrue: () => ReactNode,
   whenFalse: () => ReactNode,
 ): ReactNode {
-  return condition ? whenTrue() : whenFalse();
+  if (condition) return whenTrue();
+  return whenFalse();
 }
 
 export function SalesPage() {

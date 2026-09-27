@@ -91,7 +91,8 @@ const methodLabel: Record<PaymentMethod, string> = {
 };
 
 function renderIf(condition: boolean, render: () => ReactNode): ReactNode {
-  return condition ? render() : null;
+  if (!condition) return null;
+  return render();
 }
 
 function returnLineSummary(line: ReturnDocument["lines"][number]): string {

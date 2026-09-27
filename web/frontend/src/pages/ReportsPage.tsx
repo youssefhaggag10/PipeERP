@@ -136,7 +136,8 @@ function renderIfElse(
   whenTrue: () => ReactNode,
   whenFalse: () => ReactNode,
 ): ReactNode {
-  return condition ? whenTrue() : whenFalse();
+  if (condition) return whenTrue();
+  return whenFalse();
 }
 
 export function ReportsPage() {
