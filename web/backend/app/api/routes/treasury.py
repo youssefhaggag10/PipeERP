@@ -470,11 +470,16 @@ def add_opening_balance(
     request: Request,
     principal: CurrentPrincipal,
     db: DatabaseSession,
+    idempotency_key: IdempotencyKey,
 ) -> OpeningBalanceView:
     _manage(request, db, principal)
     try:
         result = post_opening_balance(
-            db, payload=payload, actor=principal, client=client_context(request)
+            db,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            actor=principal,
+            client=client_context(request),
         )
         db.commit()
         return result
@@ -490,6 +495,7 @@ def undo_opening_balance(
     request: Request,
     principal: CurrentPrincipal,
     db: DatabaseSession,
+    idempotency_key: IdempotencyKey,
 ) -> OpeningBalanceView:
     _manage(request, db, principal)
     try:
@@ -497,6 +503,7 @@ def undo_opening_balance(
             db,
             entry_id=entry_id,
             reason=payload.reason,
+            idempotency_key=idempotency_key,
             actor=principal,
             client=client_context(request),
         )
@@ -526,6 +533,7 @@ def undo_customer_adjustment(
     request: Request,
     principal: CurrentPrincipal,
     db: DatabaseSession,
+    idempotency_key: IdempotencyKey,
 ) -> CustomerAdjustmentView:
     _manage(request, db, principal)
     try:
@@ -533,6 +541,7 @@ def undo_customer_adjustment(
             db,
             adjustment_id=adjustment_id,
             reason=payload.reason,
+            idempotency_key=idempotency_key,
             actor=principal,
             client=client_context(request),
         )

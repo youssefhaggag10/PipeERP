@@ -241,6 +241,7 @@ class PartnerOpeningBalance(TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("entry_number"),
         UniqueConstraint("reversal_of_id"),
+        UniqueConstraint("idempotency_key"),
         CheckConstraint("nature IN ('debit','credit')", name="nature_valid"),
         CheckConstraint("source IN ('manual','reversal')", name="source_valid"),
         CheckConstraint(POSITIVE_AMOUNT, name="amount_positive"),
@@ -259,6 +260,8 @@ class PartnerOpeningBalance(TimestampMixin, Base):
     reversal_of_id: Mapped[UUID | None] = mapped_column(
         Uuid, ForeignKey("partner_opening_balance_entries.id", ondelete="RESTRICT")
     )
+    idempotency_key: Mapped[str | None] = mapped_column(String(120))
+    request_hash: Mapped[str | None] = mapped_column(String(64))
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_by_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey(USERS_ID, ondelete="RESTRICT"), nullable=False
@@ -269,6 +272,7 @@ class CustomerAccountAdjustment(TimestampMixin, Base):
     __tablename__ = "customer_account_adjustments"
     __table_args__ = (
         UniqueConstraint("adjustment_number"),
+        UniqueConstraint("reversal_idempotency_key"),
         CheckConstraint("adjustment_type IN ('debit','credit')", name="type_valid"),
         CheckConstraint(POSITIVE_AMOUNT, name="amount_positive"),
         CheckConstraint(POSTED_OR_REVERSED_STATUS, name="status_valid"),
@@ -295,3 +299,4 @@ class CustomerAccountAdjustment(TimestampMixin, Base):
     )
     reversed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     reversal_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    reversal_idempotency_key: Mapped[str | None] = mapped_column(String(120))

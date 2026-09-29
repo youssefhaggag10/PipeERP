@@ -80,6 +80,11 @@ def _hash_payload(payload: BaseModel) -> str:
     return sha256(payload.model_dump_json().encode()).hexdigest()
 
 
+def _hash_idempotent_operation(operation: str, *values: object) -> str:
+    serialized = ":".join(str(value) for value in values)
+    return sha256(f"{operation}:{serialized}".encode()).hexdigest()
+
+
 def _as_utc(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
@@ -1297,12 +1302,32 @@ def post_opening_balance(
     db: Session,
     *,
     payload: OpeningBalanceRequest,
+    idempotency_key: str,
     actor: Principal,
     client: ClientContext,
 ) -> OpeningBalanceView:
+    request_hash = _hash_idempotent_operation("opening-balance", payload.model_dump_json())
+    previous = db.scalar(
+        select(PartnerOpeningBalance).where(
+            PartnerOpeningBalance.idempotency_key == idempotency_key
+        )
+    )
+    if previous is not None:
+        if previous.source != "manual" or previous.request_hash != request_hash:
+            raise TreasuryConflict("مفتاح تكرار الرصيد الافتتاحي مستخدم بطلب مختلف")
+        return _opening_view(db, previous)
     partner = db.scalar(select(Partner).where(Partner.id == payload.partner_id).with_for_update())
     if partner is None or not partner.is_active:
         raise TreasuryNotFound("العميل أو المورد غير موجود أو غير نشط")
+    previous = db.scalar(
+        select(PartnerOpeningBalance).where(
+            PartnerOpeningBalance.idempotency_key == idempotency_key
+        )
+    )
+    if previous is not None:
+        if previous.source != "manual" or previous.request_hash != request_hash:
+            raise TreasuryConflict("مفتاح تكرار الرصيد الافتتاحي مستخدم بطلب مختلف")
+        return _opening_view(db, previous)
     originals = list(
         db.scalars(
             select(PartnerOpeningBalance).where(
@@ -1326,6 +1351,8 @@ def post_opening_balance(
         nature=payload.nature,
         amount=money(payload.amount),
         source="manual",
+        idempotency_key=idempotency_key,
+        request_hash=request_hash,
         notes=payload.notes.strip(),
         created_by_id=actor.user.id,
     )
@@ -1348,9 +1375,23 @@ def reverse_opening_balance(
     *,
     entry_id: UUID,
     reason: str,
+    idempotency_key: str,
     actor: Principal,
     client: ClientContext,
 ) -> OpeningBalanceView:
+    normalized_reason = reason.strip()
+    request_hash = _hash_idempotent_operation(
+        "opening-balance-reversal", entry_id, normalized_reason
+    )
+    previous = db.scalar(
+        select(PartnerOpeningBalance).where(
+            PartnerOpeningBalance.idempotency_key == idempotency_key
+        )
+    )
+    if previous is not None:
+        if previous.reversal_of_id != entry_id or previous.request_hash != request_hash:
+            raise TreasuryConflict("مفتاح تكرار عكس الرصيد مستخدم بطلب مختلف")
+        return _opening_view(db, previous)
     original = db.scalar(
         select(PartnerOpeningBalance)
         .where(
@@ -1361,9 +1402,17 @@ def reverse_opening_balance(
     )
     if original is None:
         raise TreasuryNotFound("قيد الرصيد الافتتاحي غير موجود أو هو قيد عكسي")
-    if db.scalar(
-        select(PartnerOpeningBalance.id).where(PartnerOpeningBalance.reversal_of_id == original.id)
-    ):
+    existing_reversal = db.scalar(
+        select(PartnerOpeningBalance).where(
+            PartnerOpeningBalance.reversal_of_id == original.id
+        )
+    )
+    if existing_reversal is not None:
+        if (
+            existing_reversal.idempotency_key == idempotency_key
+            and existing_reversal.request_hash == request_hash
+        ):
+            return _opening_view(db, existing_reversal)
         raise TreasuryConflict("تم عكس هذا القيد بالفعل")
     reversal = PartnerOpeningBalance(
         entry_number=allocate_document_number(db, "opening_balance_reversal"),
@@ -1373,7 +1422,9 @@ def reverse_opening_balance(
         amount=original.amount,
         source="reversal",
         reversal_of_id=original.id,
-        notes=f"عكس القيد {original.entry_number} — {reason.strip()}",
+        idempotency_key=idempotency_key,
+        request_hash=request_hash,
+        notes=f"عكس القيد {original.entry_number} — {normalized_reason}",
         created_by_id=actor.user.id,
     )
     db.add(reversal)
@@ -1461,6 +1512,7 @@ def reverse_customer_adjustment(
     *,
     adjustment_id: UUID,
     reason: str,
+    idempotency_key: str,
     actor: Principal,
     client: ClientContext,
 ) -> CustomerAdjustmentView:
@@ -1472,11 +1524,14 @@ def reverse_customer_adjustment(
     if item is None:
         raise TreasuryNotFound("تسوية حساب العميل غير موجودة")
     if item.status == "reversed":
+        if item.reversal_idempotency_key == idempotency_key:
+            return _customer_adjustment_view(db, item)
         raise TreasuryConflict("تم عكس تسوية حساب العميل بالفعل")
     item.status = "reversed"
     item.reversed_by_id = actor.user.id
     item.reversed_at = datetime.now(UTC)
     item.reversal_reason = reason.strip()
+    item.reversal_idempotency_key = idempotency_key
     db.flush()
     add_audit(
         db,

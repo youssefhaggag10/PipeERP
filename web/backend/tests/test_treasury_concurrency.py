@@ -1,5 +1,6 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 from decimal import Decimal
 from secrets import token_urlsafe
 from threading import Barrier
@@ -16,9 +17,18 @@ from app.modules.identity.models import User
 from app.modules.identity.service import ClientContext, Principal, create_initial_admin
 from app.modules.master_data.models import Partner, Warehouse
 from app.modules.sales.models import CustomerInvoice, SalesOrder
-from app.modules.treasury.models import FinancialAccount, PaymentAllocation, PaymentTransaction
-from app.modules.treasury.schemas import InvoiceAllocationRequest, PostPaymentRequest
-from app.modules.treasury.service import TreasuryConflict, post_payment
+from app.modules.treasury.models import (
+    FinancialAccount,
+    PartnerOpeningBalance,
+    PaymentAllocation,
+    PaymentTransaction,
+)
+from app.modules.treasury.schemas import (
+    InvoiceAllocationRequest,
+    OpeningBalanceRequest,
+    PostPaymentRequest,
+)
+from app.modules.treasury.service import TreasuryConflict, post_opening_balance, post_payment
 
 
 @pytest.mark.skipif(
@@ -157,4 +167,74 @@ def test_five_concurrent_receipts_cannot_allocate_the_same_invoice_twice() -> No
                 )
             )
             == Decimal("100.00")
+        )
+
+
+@pytest.mark.skipif(
+    not os.environ.get("DATABASE_URL", "").startswith("postgresql"),
+    reason="PostgreSQL opening-balance idempotency row-lock test",
+)
+def test_concurrent_opening_balance_retries_create_one_entry() -> None:
+    engine = create_engine(os.environ["DATABASE_URL"], pool_size=6)
+    suffix = uuid4().hex[:10].upper()
+    with Session(engine) as db, db.begin():
+        actor = db.scalar(select(User).order_by(User.created_at))
+        assert actor is not None
+        customer = Partner(
+            code=f"CUS-OB-{suffix}",
+            normalized_code=f"CUS-OB-{suffix}",
+            name_ar="عميل اختبار رصيد افتتاحي متزامن",
+            phone="",
+            address="",
+            tax_number="",
+            is_customer=True,
+            is_supplier=False,
+            is_active=True,
+            version=1,
+        )
+        db.add(customer)
+        db.flush()
+        actor_id = actor.id
+        customer_id = customer.id
+
+    barrier = Barrier(5)
+    idempotency_key = f"opening-concurrency-{suffix}"
+
+    def create_opening(index: int) -> str:
+        try:
+            with Session(engine) as db, db.begin():
+                actor = db.get(User, actor_id)
+                assert actor is not None
+                barrier.wait()
+                entry = post_opening_balance(
+                    db,
+                    payload=OpeningBalanceRequest(
+                        partner_id=customer_id,
+                        nature="debit",
+                        amount=Decimal("100"),
+                        entry_date=date(2026, 1, 1),
+                        notes="اختبار إعادة المحاولة المتزامنة",
+                    ),
+                    idempotency_key=idempotency_key,
+                    actor=cast(Principal, SimpleNamespace(user=actor)),
+                    client=ClientContext("127.0.0.1", "test", f"opening-{index}"),
+                )
+                return str(entry.id)
+        except (TreasuryConflict, IntegrityError):
+            return "rejected"
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        results = list(executor.map(create_opening, range(5)))
+
+    assert "rejected" not in results
+    assert len(set(results)) == 1
+    with Session(engine) as db:
+        assert (
+            db.scalar(
+                select(func.count(PartnerOpeningBalance.id)).where(
+                    PartnerOpeningBalance.partner_id == customer_id,
+                    PartnerOpeningBalance.source == "manual",
+                )
+            )
+            == 1
         )

@@ -625,6 +625,7 @@ export function TreasuryPage() {
       () =>
         api("/accounts/opening-balances", {
           method: "POST",
+          headers: { "Idempotency-Key": clientId("opening-balance") },
           body: JSON.stringify(openingForm),
         }),
       "تم تسجيل الرصيد الافتتاحي دون التأثير على الخزينة.",
@@ -635,7 +636,6 @@ export function TreasuryPage() {
     path: string,
     id: string,
     label: string,
-    needsKey = true,
   ) {
     const reason = window.prompt(`اكتب سبب عكس ${label}`)?.trim();
     if (!reason) return;
@@ -643,9 +643,7 @@ export function TreasuryPage() {
       () =>
         api(`${path}/${id}/reversal`, {
           method: "POST",
-          headers: needsKey
-            ? { "Idempotency-Key": clientId("reversal") }
-            : undefined,
+          headers: { "Idempotency-Key": clientId("reversal") },
           body: JSON.stringify({ reason }),
         }),
       `تم عكس ${label} مع الاحتفاظ بالسجل.`,
@@ -1685,7 +1683,6 @@ export function TreasuryPage() {
                                 "/accounts/opening-balances",
                                 item.id,
                                 "الرصيد الافتتاحي",
-                                false,
                               )
                             }
                           >
@@ -1721,7 +1718,6 @@ export function TreasuryPage() {
                                 "/accounts/customer-adjustments",
                                 item.id,
                                 "تسوية العميل",
-                                false,
                               )
                             }
                           >

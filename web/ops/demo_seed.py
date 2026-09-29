@@ -630,6 +630,7 @@ def seed_treasury(
                 "entry_date": date.today().isoformat(),
                 "notes": f"{MARKER} customer-opening",
             },
+            "pipeerp-demo-v1-customer-opening",
         )
     progress("تحصيل وسداد وتوزيع فواتير ورصيد افتتاحي")
 

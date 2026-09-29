@@ -5,7 +5,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -15,7 +15,7 @@ os.environ.setdefault("APP_ENV", "test")
 from app.infrastructure.database.base import Base  # noqa: E402
 from app.infrastructure.database.session import get_database_session  # noqa: E402
 from app.main import app  # noqa: E402
-from app.modules.identity.models import User  # noqa: E402
+from app.modules.identity.models import AuditLog, User  # noqa: E402
 from app.modules.identity.service import ClientContext, create_initial_admin  # noqa: E402
 from app.modules.master_data.models import (  # noqa: E402
     DocumentSequence,
@@ -24,7 +24,9 @@ from app.modules.master_data.models import (  # noqa: E402
 )
 from app.modules.sales.models import CustomerInvoice, SalesOrder  # noqa: E402
 from app.modules.treasury.models import (  # noqa: E402
+    CustomerAccountAdjustment,
     FinancialAccount,
+    PartnerOpeningBalance,
     PaymentAllocation,
     PaymentTransaction,
 )
@@ -310,7 +312,7 @@ def test_receipt_allocations_advances_reversal_and_opening_balance() -> None:
 
         opening = client.post(
             "/api/v1/accounts/opening-balances",
-            headers=_headers(client),
+            headers=_headers(client, "opening-balance-0001"),
             json={
                 "partner_id": seeded["customer"],
                 "nature": "debit",
@@ -367,7 +369,7 @@ def test_receipt_allocations_advances_reversal_and_opening_balance() -> None:
 
         reversed_opening = client.post(
             f"/api/v1/accounts/opening-balances/{opening.json()['id']}/reversal",
-            headers=_headers(client),
+            headers=_headers(client, "opening-reversal-0001"),
             json={"reason": "تصحيح بداية التشغيل"},
         )
         assert reversed_opening.status_code == 200
@@ -392,6 +394,167 @@ def test_receipt_allocations_advances_reversal_and_opening_balance() -> None:
             row["invoice_number"]: row["remaining"] for row in open_invoices.json()
         }
         assert remaining_by_invoice == {"SI-TR-1": "500.00", "SI-TR-2": "700.00"}
+    app.dependency_overrides.clear()
+
+
+def test_opening_balance_creation_and_reversal_are_idempotent() -> None:
+    factory = _database()
+    seeded = _seed(factory)
+    payload = {
+        "partner_id": seeded["customer"],
+        "nature": "debit",
+        "amount": "125",
+        "entry_date": "2026-01-01",
+        "notes": "رصيد افتتاحي آمن",
+    }
+    with _client(factory) as client:
+        _login(client)
+        missing_key = client.post(
+            "/api/v1/accounts/opening-balances",
+            headers=_headers(client),
+            json=payload,
+        )
+        assert missing_key.status_code == 422
+
+        created = client.post(
+            "/api/v1/accounts/opening-balances",
+            headers=_headers(client, "opening-idempotency-0001"),
+            json=payload,
+        )
+        assert created.status_code == 201, created.text
+        replay = client.post(
+            "/api/v1/accounts/opening-balances",
+            headers=_headers(client, "opening-idempotency-0001"),
+            json=payload,
+        )
+        assert replay.status_code == 201, replay.text
+        assert replay.json()["id"] == created.json()["id"]
+
+        conflicting = client.post(
+            "/api/v1/accounts/opening-balances",
+            headers=_headers(client, "opening-idempotency-0001"),
+            json={**payload, "amount": "126"},
+        )
+        assert conflicting.status_code == 409
+
+        missing_reversal_key = client.post(
+            f"/api/v1/accounts/opening-balances/{created.json()['id']}/reversal",
+            headers=_headers(client),
+            json={"reason": "تصحيح الرصيد"},
+        )
+        assert missing_reversal_key.status_code == 422
+        reversed_entry = client.post(
+            f"/api/v1/accounts/opening-balances/{created.json()['id']}/reversal",
+            headers=_headers(client, "opening-reversal-idem-0001"),
+            json={"reason": "تصحيح الرصيد"},
+        )
+        assert reversed_entry.status_code == 200, reversed_entry.text
+        reversal_replay = client.post(
+            f"/api/v1/accounts/opening-balances/{created.json()['id']}/reversal",
+            headers=_headers(client, "opening-reversal-idem-0001"),
+            json={"reason": "تصحيح الرصيد"},
+        )
+        assert reversal_replay.status_code == 200, reversal_replay.text
+        assert reversal_replay.json()["id"] == reversed_entry.json()["id"]
+        second_reversal = client.post(
+            f"/api/v1/accounts/opening-balances/{created.json()['id']}/reversal",
+            headers=_headers(client, "opening-reversal-idem-0002"),
+            json={"reason": "محاولة عكس أخرى"},
+        )
+        assert second_reversal.status_code == 409
+
+    with factory() as db:
+        rows = list(
+            db.scalars(
+                select(PartnerOpeningBalance).where(
+                    PartnerOpeningBalance.partner_id == UUID(seeded["customer"])
+                )
+            )
+        )
+        assert len(rows) == 2
+        assert sum(row.source == "manual" for row in rows) == 1
+        assert sum(row.source == "reversal" for row in rows) == 1
+        assert (
+            db.scalar(
+                select(func.count(AuditLog.id)).where(
+                    AuditLog.event_type == "accounts.opening_balance.post"
+                )
+            )
+            == 1
+        )
+        assert (
+            db.scalar(
+                select(func.count(AuditLog.id)).where(
+                    AuditLog.event_type == "accounts.opening_balance.reverse"
+                )
+            )
+            == 1
+        )
+    app.dependency_overrides.clear()
+
+
+def test_legacy_customer_adjustment_reversal_is_idempotent() -> None:
+    factory = _database()
+    seeded = _seed(factory)
+    with factory.begin() as db:
+        admin_id = db.scalar(select(User.id).where(User.normalized_username == "admin"))
+        assert admin_id is not None
+        adjustment = CustomerAccountAdjustment(
+            adjustment_number="CA-LEGACY-1",
+            customer_id=UUID(seeded["customer"]),
+            adjustment_type="debit",
+            amount=Decimal("25"),
+            status="posted",
+            notes="تسوية قديمة",
+            created_by_id=admin_id,
+            reversal_reason="",
+        )
+        db.add(adjustment)
+        db.flush()
+        adjustment_id = adjustment.id
+
+    with _client(factory) as client:
+        _login(client)
+        path = f"/api/v1/accounts/customer-adjustments/{adjustment_id}/reversal"
+        missing_key = client.post(
+            path,
+            headers=_headers(client),
+            json={"reason": "تصحيح تسوية قديمة"},
+        )
+        assert missing_key.status_code == 422
+        reversed_adjustment = client.post(
+            path,
+            headers=_headers(client, "legacy-adjustment-reversal-0001"),
+            json={"reason": "تصحيح تسوية قديمة"},
+        )
+        assert reversed_adjustment.status_code == 200, reversed_adjustment.text
+        replay = client.post(
+            path,
+            headers=_headers(client, "legacy-adjustment-reversal-0001"),
+            json={"reason": "تصحيح تسوية قديمة"},
+        )
+        assert replay.status_code == 200, replay.text
+        assert replay.json()["id"] == reversed_adjustment.json()["id"]
+        different_key = client.post(
+            path,
+            headers=_headers(client, "legacy-adjustment-reversal-0002"),
+            json={"reason": "عكس ثان"},
+        )
+        assert different_key.status_code == 409
+
+    with factory() as db:
+        stored = db.get(CustomerAccountAdjustment, adjustment_id)
+        assert stored is not None
+        assert stored.status == "reversed"
+        assert stored.reversal_idempotency_key == "legacy-adjustment-reversal-0001"
+        assert (
+            db.scalar(
+                select(func.count(AuditLog.id)).where(
+                    AuditLog.event_type == "accounts.customer_adjustment.reverse"
+                )
+            )
+            == 1
+        )
     app.dependency_overrides.clear()
 
 

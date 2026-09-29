@@ -17,6 +17,7 @@ from app.modules.identity.models import AuditLog  # noqa: E402
 from app.modules.identity.service import ClientContext, create_initial_admin  # noqa: E402
 from app.modules.master_data.models import (  # noqa: E402
     CompanySettings,
+    Partner,
     UnitOfMeasure,
     Warehouse,
 )
@@ -252,6 +253,84 @@ def test_partner_must_have_one_desktop_type_and_writes_require_manage_permission
                 headers=_csrf(read_only),
             )
             assert denied_settings.status_code == 403
+    app.dependency_overrides.clear()
+
+
+def test_partner_tax_number_is_optional_and_legacy_value_survives_normal_edit() -> None:
+    factory = _database()
+    _seed(factory)
+    with _client(factory) as client:
+        _login(client)
+        customer = client.post(
+            "/api/v1/master-data/partners",
+            json={
+                "code": "CUS-NO-TAX",
+                "name_ar": "عميل بدون رقم ضريبي",
+                "phone": "01000000000",
+                "address": "القاهرة",
+                "is_customer": True,
+                "is_supplier": False,
+            },
+            headers=_csrf(client),
+        )
+        assert customer.status_code == 201, customer.text
+        assert customer.json()["tax_number"] == ""
+
+        supplier = client.post(
+            "/api/v1/master-data/partners",
+            json={
+                "code": "SUP-NO-TAX",
+                "name_ar": "مورد بدون رقم ضريبي",
+                "is_customer": False,
+                "is_supplier": True,
+            },
+            headers=_csrf(client),
+        )
+        assert supplier.status_code == 201, supplier.text
+        assert supplier.json()["tax_number"] == ""
+
+        legacy = client.post(
+            "/api/v1/master-data/partners",
+            json={
+                "code": "CUS-LEGACY-TAX",
+                "name_ar": "عميل تاريخي",
+                "tax_number": "LEGACY-TAX-123",
+                "is_customer": True,
+                "is_supplier": False,
+            },
+            headers=_csrf(client),
+        )
+        assert legacy.status_code == 201, legacy.text
+        updated = client.put(
+            f"/api/v1/master-data/partners/{legacy.json()['id']}",
+            json={
+                "version": legacy.json()["version"],
+                "code": "CUS-LEGACY-TAX",
+                "name_ar": "عميل تاريخي محدث",
+                "phone": "01111111111",
+                "address": "الجيزة",
+                "is_customer": True,
+                "is_supplier": False,
+                "is_active": True,
+            },
+            headers=_csrf(client),
+        )
+        assert updated.status_code == 200, updated.text
+        assert updated.json()["tax_number"] == "LEGACY-TAX-123"
+        assert updated.json()["name_ar"] == "عميل تاريخي محدث"
+
+        listed = client.get("/api/v1/master-data/partners?include_inactive=true")
+        assert listed.status_code == 200, listed.text
+        listed_legacy = next(row for row in listed.json() if row["id"] == legacy.json()["id"])
+        assert listed_legacy["tax_number"] == "LEGACY-TAX-123"
+
+    with factory() as db:
+        stored_customer = db.scalar(select(Partner).where(Partner.code == "CUS-NO-TAX"))
+        stored_supplier = db.scalar(select(Partner).where(Partner.code == "SUP-NO-TAX"))
+        assert stored_customer is not None and stored_customer.tax_number == ""
+        assert stored_customer.is_customer and not stored_customer.is_supplier
+        assert stored_supplier is not None and stored_supplier.tax_number == ""
+        assert stored_supplier.is_supplier and not stored_supplier.is_customer
     app.dependency_overrides.clear()
 
 

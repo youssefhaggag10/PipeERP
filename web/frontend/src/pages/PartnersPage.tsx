@@ -18,6 +18,7 @@ import { useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { AppShell } from "../components/AppShell";
 import { api, ApiError } from "../lib/api";
+import { buildPartnerPayload } from "./partnerPayload";
 
 type Partner = {
   id: string;
@@ -216,7 +217,6 @@ export function PartnersPage() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
-  const [taxNumber, setTaxNumber] = useState("");
   const [isCustomer, setIsCustomer] = useState(partnerType === "customer");
   const [isSupplier, setIsSupplier] = useState(partnerType === "supplier");
   const [isActive, setIsActive] = useState(true);
@@ -255,7 +255,6 @@ export function PartnersPage() {
     setName("");
     setPhone("");
     setAddress("");
-    setTaxNumber("");
     setIsCustomer(partnerType === "customer");
     setIsSupplier(partnerType === "supplier");
     setIsActive(true);
@@ -290,18 +289,19 @@ export function PartnersPage() {
           : "/master-data/partners",
         {
           method: editing ? "PUT" : "POST",
-          body: JSON.stringify({
-            ...(editing
-              ? { version: editing.version, is_active: isActive }
-              : {}),
-            code,
-            name_ar: name,
-            phone,
-            address,
-            tax_number: taxNumber,
-            is_customer: isCustomer,
-            is_supplier: isSupplier,
-          }),
+          body: JSON.stringify(
+            buildPartnerPayload({
+              code,
+              name_ar: name,
+              phone,
+              address,
+              is_customer: isCustomer,
+              is_supplier: isSupplier,
+              ...(editing
+                ? { version: editing.version, is_active: isActive }
+                : {}),
+            }),
+          ),
         },
       );
       resetForm();
@@ -322,7 +322,6 @@ export function PartnersPage() {
     setName("");
     setPhone("");
     setAddress("");
-    setTaxNumber("");
     setIsCustomer(partnerType === "customer");
     setIsSupplier(partnerType === "supplier");
     setIsActive(true);
@@ -334,7 +333,6 @@ export function PartnersPage() {
     setName(item.name_ar);
     setPhone(item.phone);
     setAddress(item.address);
-    setTaxNumber(item.tax_number);
     setIsCustomer(item.is_customer);
     setIsSupplier(item.is_supplier);
     setIsActive(item.is_active);
@@ -347,7 +345,7 @@ export function PartnersPage() {
     );
     if (!token) return matchingType;
     return matchingType.filter((item) =>
-      [item.code, item.name_ar, item.phone, item.address, item.tax_number]
+      [item.code, item.name_ar, item.phone, item.address]
         .join(" ")
         .toLocaleLowerCase("ar")
         .includes(token),

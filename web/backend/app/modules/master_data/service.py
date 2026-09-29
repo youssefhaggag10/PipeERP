@@ -461,7 +461,8 @@ def update_partner(
     partner.name_ar = payload.name_ar.strip()
     partner.phone = payload.phone.strip()
     partner.address = payload.address.strip()
-    partner.tax_number = payload.tax_number.strip()
+    if "tax_number" in payload.model_fields_set:
+        partner.tax_number = payload.tax_number.strip()
     partner.is_customer = payload.is_customer
     partner.is_supplier = payload.is_supplier
     partner.is_active = payload.is_active
