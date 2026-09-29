@@ -1,0 +1,1 @@
+"""Purchase receipt costing rules."""
